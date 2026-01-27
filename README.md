@@ -43,9 +43,23 @@ For complete implementation guide, scoring details, and code examples, see **[MI
 
 ## Documentation
 
-### Core Documentation
+### 📚 Complete Technical Documentation
+
+**NEW: [Comprehensive Documentation Suite →](./docs/)**
+
+We've created 200+ pages of in-depth technical documentation covering:
+- **System Architecture** - Complete component breakdown, data flows, and workflows
+- **Variable Mapping** - Every environment variable, database field, and configuration
+- **Data Flow Diagrams** - Visual mermaid diagrams of system interactions
+- **Frontend Integration** - Full API specs, WebSocket events, React examples
+
+**Start here:** [docs/README.md](./docs/README.md)
+
+### Core Project Documentation
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Complete system architecture, round flows, database design
 - **[MINER_GUIDE.md](./MINER_GUIDE.md)** - Comprehensive miner implementation guide with scoring details
+- **[spec.md](./spec.md)** - Technical specification and implementation details
+- **[LOCAL_SETUP_GUIDE.md](./LOCAL_SETUP_GUIDE.md)** - Local development environment setup
 
 ## Network Information
 
