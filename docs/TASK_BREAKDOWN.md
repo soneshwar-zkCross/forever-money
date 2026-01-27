@@ -1,954 +1,958 @@
-# Frontend Admin Panel - Task Breakdown
+# ForeverMoney – SN98 Admin Panel
+## Production Delivery Task Breakdown
 
-> **10-Day Sprint**: Jan 28 - Feb 6, 2026  
-> **Team**: 1 Backend + 2 Frontend + 1 Coordinator
+**By**: zkCross Network  
+**Dated**: 27/01/2026  
+**Sprint**: Jan 28 – Feb 6, 2026 (10 working days)  
+**Stabilisation & Deploy**: Feb 7 – Feb 13, 2026 (4 working days)
 
 ---
 
 ## Team Structure
 
-| Role | Name | Responsibilities |
-|------|------|------------------|
-| **Backend Developer** | BE1 | FastAPI, WebSocket, Database, Deployment |
-| **Frontend Developer 1** | FE1 | Dashboard, Rounds, Core Infrastructure |
-| **Frontend Developer 2** | FE2 | Leaderboard, Miners, Executions, Design System |
-| **Coordinator/PM** | PM | Planning, Integration, Testing, Documentation |
+| Role | Responsibility | Team Member |
+|------|---------------|-------------|
+| **Backend Engineer** | API, WebSocket, DB, Deployment | BE-1 |
+| **Frontend Engineer 1** | Dashboard, Jobs, Real-time | FE-1 |
+| **Frontend Engineer 2** | Leaderboard, Miners, Execution Feed | FE-2 |
+| **Coordinator / PM** | Spec lock, Integration, QA, Release | PM-1 |
 
 ---
 
-## Daily Breakdown
+## Delivery Scope
 
-### Day 1 (Jan 28) - Foundation
+### Core Views
+- [ ] Jobs overview (all active vaults/pools)
+- [ ] Live rounds and scoring
+- [ ] Real-time leaderboard (miners, ranks, win-rate, drift, APY)
+- [ ] Miner profiles (history, performance, participation)
+- [ ] Execution feed (on-chain actions, tx status, vault updates)
+- [ ] Emissions and reward visibility (per job, per miner)
 
-#### Backend Developer (BE1)
-- [ ] **Setup FastAPI project** (2h)
-  - Initialize project structure (`api/` directory)
-  - Set up virtual environment and dependencies
-  - Configure `main.py` with CORS
-- [ ] **Database connection** (2h)
-  - Import Tortoise ORM models from validator
-  - Test database connectivity
-  - Create connection pooling config
-- [ ] **Pydantic response models** (3h)
-  - Create `models/responses.py`
-  - Define Job, Round, MinerScore response schemas
-  - Add validation and serialization
-- [ ] **Jobs endpoint** (1h)
-  - Implement `GET /api/jobs` (list)
-  - Add filtering by `is_active`
-  - Test with Postman/curl
+### Real-Time Layer
+- WebSocket streaming for:
+  - Round start/end events
+  - Score updates
+  - Leaderboard rank changes
+  - Execution events
 
-**Deliverable**: Working API with database connection and jobs endpoint
-
----
-
-#### Frontend Developer 1 (FE1)
-- [ ] **Initialize Next.js project** (1h)
-  ```bash
-  npx create-next-app@latest frontend --typescript --tailwind --app
-  ```
-- [ ] **Install dependencies** (1h)
-  - TanStack Query, Axios, Socket.io-client
-  - shadcn/ui components (Button, Card, Table, etc.)
-  - Recharts, date-fns, clsx
-- [ ] **Project structure** (2h)
-  - Create folders: `components/`, `lib/`, `app/`
-  - Set up Tailwind config
-  - Configure path aliases (@/)
-- [ ] **Type definitions** (2h)
-  - Create `lib/types/job.ts`
-  - Create `lib/types/round.ts`
-  - Create `lib/types/miner.ts`
-  - Create `lib/types/execution.ts`
-- [ ] **API client** (2h)
-  - Create `lib/api/client.ts` (Axios instance)
-  - Create `lib/api/jobs.ts` (fetchJobs function)
-  - Configure base URL and headers
-
-**Deliverable**: Next.js project setup with API client ready
+### Operations & Safety
+- Cooldown states monitoring
+- Validator health tracking
+- Executor activity and failure states
+- Historical audit trail
 
 ---
 
-#### Frontend Developer 2 (FE2)
-- [ ] **Design tokens** (2h)
-  - Define color palette in `tailwind.config.ts`
-  - Set up typography scale
-  - Define spacing, border radius, shadows
-- [ ] **Install shadcn/ui components** (2h)
-  ```bash
-  npx shadcn-ui@latest init
-  npx shadcn-ui@latest add button card table badge
-  ```
-- [ ] **Create shared components** (4h)
-  - Build `LoadingSpinner.tsx`
-  - Build `ErrorBanner.tsx`
-  - Build `RankBadge.tsx` (1st, 2nd, 3rd with icons)
-  - Build `StatusBadge.tsx` (active, pending, completed)
-  - Build `CopyButton.tsx` (for hotkeys/addresses)
+## Week 1 – Foundation & Core Data Flow
 
-**Deliverable**: Design system and shared component library
+### **Day 1 (Jan 28) – System Backbone**
 
----
+#### Backend Engineer (BE-1)
+**Tasks**: 6-8 hours
+- [ ] FastAPI project setup with Tortoise ORM integration
+- [ ] Database connection to validator Jobs DB (read-only user)
+- [ ] Core Pydantic response models (Job, Round, MinerScore)
+- [ ] Jobs endpoints (`GET /api/jobs`, `GET /api/jobs/{id}`)
+- [ ] Health check endpoint (`GET /health`)
+- [ ] CORS middleware configuration
 
-#### Coordinator (PM)
-- [ ] **Project setup** (2h)
-  - Create GitHub repository
-  - Set up GitHub Projects board
-  - Create task cards for all team members
-- [ ] **Documentation** (2h)
-  - Create `DEVELOPMENT.md` guide
-  - Document environment variables needed
-  - Create API contract document
-- [ ] **Development environment** (2h)
-  - Set up staging database (if needed)
-  - Configure CORS for local development
-  - Test database access from local machine
-- [ ] **Daily standup** (30m)
-  - Review Day 1 progress
-  - Identify blockers
-  - Plan Day 2 tasks
-
-**Deliverable**: Project board with all tasks + development guide
+**Deliverables**:
+- [ ] API running on port 8000
+- [ ] OpenAPI docs at `/docs`
+- [ ] Jobs endpoint returning test data
 
 ---
 
-## Day 2 (Jan 29) - Core Features Part 1
+#### Frontend Engineer 1 (FE-1)
+**Tasks**: 6-8 hours
+- [ ] Next.js 14 project initialization (App Router, TypeScript)
+- [ ] Tailwind CSS + design system setup
+- [ ] Base layout with header and navigation
+- [ ] TypeScript types for API responses
+- [ ] Axios API client with typed endpoints
+- [ ] React Query (TanStack Query) setup
 
-#### Backend Developer (BE1)
-- [ ] **Jobs endpoints completion** (2h)
-  - Implement `GET /api/jobs/{job_id}` (details)
-  - Implement `GET /api/jobs/{job_id}/stats` (aggregated stats)
-  - Add error handling (404, 500)
-- [ ] **Leaderboard endpoint** (3h)
-  - Implement `GET /api/jobs/{job_id}/leaderboard`
-  - Add filtering: `eligible_only`, `sort_by`
-  - Add pagination: `limit`, `offset`
-  - Calculate win rate, avg response time
-- [ ] **Middleware setup** (2h)
-  - Add request logging middleware
-  - Add error handling middleware
-  - Add response time tracking
-- [ ] **Testing** (1h)
-  - Write tests for jobs endpoints
-  - Test leaderboard with sample data
-
-**Deliverable**: Jobs and leaderboard endpoints complete with tests
+**Deliverables**:
+- [ ] Frontend running on port 3000
+- [ ] Dark mode theme configured
+- [ ] API client with type safety
 
 ---
 
-#### Frontend Developer 1 (FE1)
-- [ ] **Layout structure** (2h)
-  - Create `app/layout.tsx` with Navbar
-  - Build `components/shared/Navbar.tsx`
-  - Build `components/shared/Sidebar.tsx`
-  - Add navigation links
-- [ ] **TanStack Query setup** (1h)
-  - Create `lib/query-client.ts`
-  - Wrap app in `QueryClientProvider`
-  - Configure default options
-- [ ] **Custom hooks** (3h)
-  - Create `lib/hooks/useJobs.ts`
-  - Create `lib/hooks/useJob.ts`
-  - Create `lib/hooks/useLeaderboard.ts`
-- [ ] **Main dashboard page** (2h)
-  - Create `app/dashboard/page.tsx`
-  - Fetch jobs with `useJobs` hook
-  - Display loading and error states
-  - Show job cards in grid
+#### Frontend Engineer 2 (FE-2)
+**Tasks**: 6-8 hours
+- [ ] Utility functions (formatters, helpers)
+- [ ] Shared components library foundation
+- [ ] Loading states and skeletons
+- [ ] Error boundaries
+- [ ] Chart.js / Recharts setup
+- [ ] Icon library integration (Lucide React)
 
-**Deliverable**: Dashboard layout with job listing
+**Deliverables**:
+- [ ] Component library initialized
+- [ ] Utility functions ready
+- [ ] Charts ready for use (Phase 2)
 
 ---
 
-#### Frontend Developer 2 (FE2)
-- [ ] **Table component** (3h)
-  - Create reusable `components/ui/DataTable.tsx`
-  - Add sorting functionality
-  - Add pagination controls
-  - Style with Tailwind
-- [ ] **Chart components** (3h)
-  - Create `components/charts/LineChart.tsx` (wrapper for Recharts)
-  - Create `components/charts/BarChart.tsx`
-  - Add responsive configuration
-  - Add tooltip formatting
-- [ ] **Modal component** (2h)
-  - Install Dialog component from shadcn/ui
-  - Create `components/ui/Modal.tsx` wrapper
-  - Add animations
+#### Coordinator (PM-1)
+**Tasks**: 4-6 hours
+- [ ] Schema validation (DB ↔ API ↔ Frontend)
+- [ ] Test data generation script
+- [ ] Daily standup: End-to-end connectivity check
+- [ ] Risk log: Note any schema mismatches
+- [ ] Integration checkpoint: API ↔ Frontend handshake
 
-**Deliverable**: Reusable table, chart, and modal components
+**Deliverables**:
+- [ ] Schema alignment verified
+- [ ] Test data available (~16,000 records)
+- [ ] Day 1 status report
 
 ---
 
-#### Coordinator (PM)
-- [ ] **Integration testing** (3h)
-  - Test API endpoints from frontend
-  - Verify CORS configuration
-  - Test with real database data
-- [ ] **Create test data** (2h)
-  - Add sample jobs to database
-  - Add sample rounds and predictions
-  - Add sample miner scores
-- [ ] **Code review** (2h)
-  - Review backend API code
-  - Review frontend setup
-  - Provide feedback
-- [ ] **Daily standup** (30m)
+### **Day 2 (Jan 29) – Core Data Endpoints**
 
-**Deliverable**: Test data ready + integration verified
+#### Backend Engineer (BE-1)
+**Tasks**: 7-8 hours
+- [ ] Leaderboard endpoint (`GET /api/jobs/{id}/leaderboard`)
+  - Pagination support
+  - Sorting (combined/evaluation/live score)
+  - Eligible-only filtering
+- [ ] Rounds endpoint (`GET /api/jobs/{id}/rounds`)
+  - Round type filtering (evaluation/live)
+  - Status filtering
+  - Pagination
+- [ ] Current round endpoint (`GET /api/jobs/{id}/rounds/current`)
+- [ ] Performance optimization (indexes, query tuning)
 
----
-
-## Day 3 (Jan 30) - Core Features Part 2
-
-#### Backend Developer (BE1)
-- [ ] **WebSocket manager** (3h)
-  - Create `api/websocket/manager.py`
-  - Implement connection/disconnection handling
-  - Implement room subscriptions (by job_id)
-  - Test with WebSocket client
-- [ ] **Round endpoints** (3h)
-  - Implement `GET /api/jobs/{job_id}/rounds`
-  - Implement `GET /api/jobs/{job_id}/rounds/current`
-  - Implement `GET /api/rounds/{round_id}`
-  - Add filtering by round_type, status
-- [ ] **Event broadcasting** (2h)
-  - Create `api/websocket/events.py`
-  - Implement `broadcast_round_started`
-  - Implement `broadcast_round_completed`
-  - Test event emission
-
-**Deliverable**: WebSocket server + round endpoints
+**Deliverables**:
+- [ ] Leaderboard API functional
+- [ ] Rounds API functional
+- [ ] Query response time < 200ms
 
 ---
 
-#### Frontend Developer 1 (FE1)
-- [ ] **Job dashboard page** (4h)
-  - Create `app/dashboard/[jobId]/page.tsx`
-  - Build `components/dashboard/JobHeader.tsx`
-  - Build `components/dashboard/StatsGrid.tsx`
-  - Display job stats (rounds, miners, participation)
-- [ ] **Current round card** (3h)
-  - Build `components/dashboard/CurrentRoundCard.tsx`
-  - Add countdown timer (using `setInterval`)
-  - Show round progress bar
-  - Add real-time status badge
-- [ ] **WebSocket hook** (1h)
-  - Create `lib/hooks/useWebSocket.ts`
-  - Connect to WebSocket server
-  - Handle reconnection logic
-  - Subscribe to job-specific events
+#### Frontend Engineer 1 (FE-1)
+**Tasks**: 7-8 hours
+- [ ] Homepage with jobs grid
+- [ ] Job card component with metadata
+- [ ] Quick stats dashboard (miners, rounds, executions)
+- [ ] Job details page routing
+- [ ] Loading states for all views
+- [ ] Empty states with helpful messages
 
-**Deliverable**: Job-specific dashboard with real-time round tracking
+**Deliverables**:
+- [ ] Homepage complete
+- [ ] Jobs list view functional
+- [ ] UX polish in progress
 
 ---
 
-#### Frontend Developer 2 (FE2)
-- [ ] **Leaderboard page** (4h)
-  - Create `app/dashboard/[jobId]/leaderboard/page.tsx`
-  - Build `components/leaderboard/LeaderboardTable.tsx`
-  - Use DataTable component
-  - Add columns: rank, UID, hotkey, scores, eligible
-- [ ] **Leaderboard filters** (2h)
-  - Build `components/leaderboard/LeaderboardFilters.tsx`
-  - Add filter by eligibility (checkbox)
-  - Add sort by dropdown (score type)
-  - Add search input (UID or hotkey)
-- [ ] **Pagination** (1h)
-  - Add pagination controls to table
-  - Implement page state
-  - Update API calls with offset
-- [ ] **Real-time updates** (1h)
-  - Listen to `score_updated` WebSocket event
-  - Update leaderboard optimistically
+#### Frontend Engineer 2 (FE-2)
+**Tasks**: 7-8 hours
+- [ ] Leaderboard table component
+  - Sortable columns
+  - Rank badges (1st, 2nd, 3rd visual treatment)
+  - Win rate visualization
+  - Eligibility indicators
+- [ ] Pagination controls
+- [ ] Filter panel (eligible-only, sort by score type)
+- [ ] Real-time rank movement indicators
 
-**Deliverable**: Complete leaderboard page with filters and real-time updates
+**Deliverables**:
+- [ ] Leaderboard component ready
+- [ ] Filters functional
+- [ ] Responsive table design
 
 ---
 
-#### Coordinator (PM)
-- [ ] **Testing** (3h)
-  - Test WebSocket connections
-  - Test leaderboard filtering
-  - Test real-time updates
-- [ ] **Documentation** (2h)
-  - Document WebSocket event schemas
-  - Update API documentation
-  - Create troubleshooting guide
-- [ ] **Code review** (2h)
-  - Review WebSocket implementation
-  - Review dashboard components
-  - Review leaderboard implementation
-- [ ] **Daily standup** (30m)
+#### Coordinator (PM-1)
+**Tasks**: 4-6 hours
+- [ ] Integration test: Jobs → Leaderboard → Rounds flow
+- [ ] Data accuracy validation
+- [ ] Performance baseline (page load, API response)
+- [ ] Day 2 status report
+- [ ] Risk assessment: Any blockers?
 
-**Deliverable**: Tested WebSocket + documented events
+**Deliverables**:
+- [ ] Integration test report
+- [ ] Performance benchmark
+- [ ] Day 2 checkpoint
 
 ---
 
-## Day 4 (Jan 31) - Advanced Features
+### **Day 3 (Jan 30) – Live Rounds & Real-Time Updates**
 
-#### Backend Developer (BE1)
-- [ ] **Miner endpoints** (4h)
-  - Implement `GET /api/miners/{uid}`
-  - Implement `GET /api/miners/{uid}/jobs/{job_id}`
-  - Implement `GET /api/miners/{uid}/jobs/{job_id}/history`
-  - Add score history aggregation
-- [ ] **Execution endpoints** (2h)
-  - Implement `GET /api/jobs/{job_id}/executions`
-  - Implement `GET /api/executions/{execution_id}`
-  - Add filtering by tx_status
-- [ ] **Performance optimization** (2h)
-  - Add database query optimization
-  - Add response caching (if needed)
-  - Test with large datasets
+#### Backend Engineer (BE-1)
+**Tasks**: 7-8 hours
+- [ ] Round details endpoint (`GET /api/rounds/{id}`)
+- [ ] WebSocket connection manager
+  - Connection lifecycle
+  - Authentication (if required)
+  - Heartbeat/ping-pong
+- [ ] WebSocket event broadcasting:
+  - `round_started`
+  - `round_completed`
+  - `score_updated`
+- [ ] Round status calculation (time remaining, progress %)
 
-**Deliverable**: All API endpoints complete
-
----
-
-#### Frontend Developer 1 (FE1)
-- [ ] **Recent activity feed** (3h)
-  - Build `components/dashboard/RecentActivity.tsx`
-  - Show recent rounds, scores, executions
-  - Add real-time updates via WebSocket
-  - Style as timeline
-- [ ] **Round hooks** (2h)
-  - Create `lib/hooks/useRounds.ts`
-  - Create `lib/hooks/useCurrentRound.ts`
-  - Add refetch on WebSocket events
-- [ ] **Round history page** (3h)
-  - Create `app/dashboard/[jobId]/rounds/page.tsx`
-  - Build `components/rounds/RoundTimeline.tsx`
-  - Display rounds in chronological order
-  - Add filter by round type
-
-**Deliverable**: Activity feed + round history page
+**Deliverables**:
+- [ ] WebSocket server running
+- [ ] Event broadcasting functional
+- [ ] Round lifecycle tracking
 
 ---
 
-#### Frontend Developer 2 (FE2)
-- [ ] **Miner profile page** (4h)
-  - Create `app/miners/[uid]/page.tsx`
-  - Build `components/miners/MinerHeader.tsx`
-  - Display miner stats across all jobs
-  - Add per-job performance cards
-- [ ] **Score chart** (2h)
-  - Build `components/miners/ScoreChart.tsx`
-  - Use LineChart component
-  - Show 3 series: eval, live, combined
-  - Add legend and tooltips
-- [ ] **Miner hooks** (2h)
-  - Create `lib/hooks/useMiner.ts`
-  - Create `lib/hooks/useMinerPerformance.ts`
+#### Frontend Engineer 1 (FE-1)
+**Tasks**: 7-8 hours
+- [ ] Job dashboard page layout
+  - Stats cards (miners, rounds, participation)
+  - Current round progress
+- [ ] Live round tracker component
+  - Countdown timer
+  - Progress bar
+  - Round type badge (evaluation/live)
+- [ ] WebSocket hook for real-time updates
+- [ ] Auto-refresh fallback (polling)
 
-**Deliverable**: Miner profile page with score chart
-
----
-
-#### Coordinator (PM)
-- [ ] **Integration testing** (3h)
-  - Test all API endpoints with frontend
-  - Test error scenarios
-  - Test loading states
-- [ ] **Performance testing** (2h)
-  - Run Lighthouse audits
-  - Check bundle size
-  - Identify optimization opportunities
-- [ ] **Code review** (2h)
-  - Review miner endpoints
-  - Review activity feed
-  - Review miner profile
-- [ ] **Daily standup** (30m)
-
-**Deliverable**: Performance audit results
+**Deliverables**:
+- [ ] Job dashboard layout
+- [ ] Live round tracking
+- [ ] WebSocket integration
 
 ---
 
-## Day 5 (Feb 1) - Polish & Testing Part 1
+#### Frontend Engineer 2 (FE-2)
+**Tasks**: 7-8 hours
+- [ ] Leaderboard page (full view)
+  - Server-side pagination
+  - Sort by combined/evaluation/live
+  - Eligible-only toggle
+- [ ] Rank movement animations
+- [ ] Miner hotkey display with copy button
+- [ ] Win rate and participation indicators
+- [ ] WebSocket listener for leaderboard updates
 
-#### Backend Developer (BE1)
-- [ ] **Write tests** (4h)
-  - pytest for all endpoints
-  - Test error cases (404, 500)
-  - Test pagination
-  - Test filtering
-- [ ] **API documentation** (2h)
-  - Auto-generate OpenAPI docs
-  - Add endpoint descriptions
-  - Add example requests/responses
-- [ ] **Error handling** (2h)
-  - Improve error messages
-  - Add validation error details
-  - Test edge cases
-
-**Deliverable**: Complete test suite + API docs
+**Deliverables**:
+- [ ] Full leaderboard page
+- [ ] Real-time rank updates
+- [ ] Smooth animations
 
 ---
 
-#### Frontend Developer 1 (FE1)
-- [ ] **Round details** (3h)
-  - Build `components/rounds/RoundCard.tsx`
-  - Make cards expandable to show full details
-  - Show all miner scores for round
-  - Show winner highlighting
-- [ ] **Loading states** (2h)
-  - Add skeleton loaders for all pages
-  - Create `components/ui/Skeleton.tsx`
-  - Replace loading spinners with skeletons
-- [ ] **Error boundaries** (2h)
-  - Create `components/ErrorBoundary.tsx`
-  - Add to layout
-  - Style error pages
-- [ ] **Responsive design** (1h)
-  - Test on mobile, tablet, desktop
-  - Fix layout issues
-  - Adjust breakpoints
+#### Coordinator (PM-1)
+**Tasks**: 5-6 hours
+- [ ] WebSocket connection stability test
+- [ ] Real-time event delivery validation
+- [ ] Latency measurement
+- [ ] Day 3 integration checkpoint
+- [ ] UX review: Is real-time feedback clear?
 
-**Deliverable**: Polished rounds page with proper loading/error states
+**Deliverables**:
+- [ ] WebSocket stability report
+- [ ] Real-time feature validated
+- [ ] Day 3 status report
 
 ---
 
-#### Frontend Developer 2 (FE2)
-- [ ] **Participation calendar** (3h)
-  - Build `components/miners/ParticipationCalendar.tsx`
-  - Create heatmap visualization
-  - Show last 30 days
-  - Add tooltips with details
-- [ ] **Prediction history** (2h)
-  - Build `components/miners/PredictionHistory.tsx`
-  - Show recent predictions as list
-  - Display performance metrics
-  - Add expand/collapse for details
-- [ ] **Executions page** (3h)
-  - Create `app/dashboard/[jobId]/executions/page.tsx`
-  - Build `components/executions/ExecutionFeed.tsx`
-  - Display live execution cards
-  - Add real-time updates
+### **Day 4 (Jan 31) – Miner Profiles & History**
 
-**Deliverable**: Enhanced miner profile + executions page
+#### Backend Engineer (BE-1)
+**Tasks**: 7-8 hours
+- [ ] Miner profile endpoint (`GET /api/miners/{uid}`)
+  - All jobs performance
+  - Global win rate
+- [ ] Miner performance detail endpoint (`GET /api/miners/{uid}/jobs/{job_id}`)
+  - Score history
+  - Recent predictions
+  - Participation calendar
+- [ ] Score trend calculation
+- [ ] Historical data aggregation
 
----
-
-#### Coordinator (PM)
-- [ ] **Manual QA** (4h)
-  - Test all features end-to-end
-  - Create bug reports
-  - Verify data accuracy
-  - Test on different browsers
-- [ ] **Create test scenarios** (2h)
-  - Document test cases
-  - Create QA checklist
-- [ ] **Code review** (1h)
-- [ ] **Daily standup** (30m)
-
-**Deliverable**: QA report with bug list
+**Deliverables**:
+- [ ] Miner profile API
+- [ ] Performance history API
+- [ ] Aggregate stats optimized
 
 ---
 
-## Day 6 (Feb 2) - Polish & Testing Part 2
+#### Frontend Engineer 1 (FE-1)
+**Tasks**: 7-8 hours
+- [ ] Rounds history page
+  - List view with pagination
+  - Round type filtering
+  - Winner highlights
+  - Participant count
+- [ ] Round details modal
+  - All participant scores
+  - Winner announcement
+  - Duration and timing
+- [ ] Recent rounds feed component (for dashboard)
 
-#### Backend Developer (BE1)
-- [ ] **Fix bugs from QA** (3h)
-  - Address bug reports from coordinator
-  - Fix any failing tests
-- [ ] **Performance optimization** (2h)
-  - Optimize slow queries
-  - Add indexes if needed
-  - Test with profiler
-- [ ] **Load testing** (2h)
-  - Use Locust or similar tool
-  - Test concurrent WebSocket connections
-  - Test API under load
-- [ ] **Documentation updates** (1h)
-  - Update README
-  - Document deployment steps
-
-**Deliverable**: Production-ready backend
+**Deliverables**:
+- [ ] Rounds history page
+- [ ] Round details view
+- [ ] Feed component
 
 ---
 
-#### Frontend Developer 1 (FE1)
-- [ ] **Component tests** (4h)
-  - Write Jest tests for key components
-  - Test StatsGrid, CurrentRoundCard
-  - Test hooks (useJobs, useLeaderboard)
-- [ ] **Fix bugs from QA** (2h)
-  - Address coordinator's bug reports
-- [ ] **Animations** (2h)
-  - Add Framer Motion to page transitions
-  - Add hover effects
-  - Add smooth scrolling
+#### Frontend Engineer 2 (FE-2)
+**Tasks**: 7-8 hours
+- [ ] Miner profile page
+  - Header with UID and hotkey
+  - Global stats (jobs, rounds, win rate)
+  - Per-job performance grid
+- [ ] Score history chart (line chart)
+  - Combined/evaluation/live scores
+  - Rank over time
+- [ ] Participation calendar heatmap
+- [ ] Recent predictions table
 
-**Deliverable**: Tested and polished dashboard
-
----
-
-#### Frontend Developer 2 (FE2)
-- [ ] **Position visualizer** (3h)
-  - Build `components/executions/PositionVisualizer.tsx`
-  - Draw tick ranges on price axis
-  - Show current price indicator
-  - Make responsive
-- [ ] **Transaction explorer** (2h)
-  - Build `components/executions/TransactionExplorer.tsx`
-  - Add link to Basescan
-  - Show tx status with icons
-- [ ] **Component tests** (2h)
-  - Write tests for leaderboard
-  - Write tests for miner components
-- [ ] **Fix bugs from QA** (1h)
-
-**Deliverable**: Complete executions features + tests
+**Deliverables**:
+- [ ] Miner profile page complete
+- [ ] Score history visualization
+- [ ] Activity calendar
 
 ---
 
-#### Coordinator (PM)
-- [ ] **Second QA round** (3h)
-  - Re-test fixed bugs
-  - Test new features
-  - Verify performance improvements
-- [ ] **Security review** (2h)
-  - Check for XSS vulnerabilities
-  - Verify API security
-  - Test CORS configuration
-- [ ] **Documentation** (2h)
-  - Write user guide
-  - Create deployment runbook
-- [ ] **Daily standup** (30m)
+#### Coordinator (PM-1)
+**Tasks**: 5-6 hours
+- [ ] Data pipeline validation: DB → API → UI
+- [ ] Historical data accuracy check
+- [ ] UX review: Miner journey clarity
+- [ ] Day 4 checkpoint
+- [ ] Mid-sprint review preparation
 
-**Deliverable**: Final QA report + deployment docs
+**Deliverables**:
+- [ ] Data accuracy report
+- [ ] Mid-sprint status
+- [ ] Blockers escalation (if any)
 
 ---
 
-## Day 7 (Feb 3) - Deployment Preparation
+### **Day 5 (Feb 1) – Execution Feed & Vault Activity**
 
-#### Backend Developer (BE1)
-- [ ] **Deployment setup** (4h)
-  - Set up Railway/DigitalOcean account
-  - Configure production database connection
-  - Set environment variables
-  - Test connection from local to prod DB
-- [ ] **Deployment script** (2h)
-  - Create `deploy.sh` script
-  - Set up CI/CD with GitHub Actions
-  - Test automated deployment
-- [ ] **Monitoring setup** (2h)
-  - Set up Sentry for error tracking
-  - Add logging configuration
-  - Set up health check endpoint
+#### Backend Engineer (BE-1)
+**Tasks**: 7-8 hours
+- [ ] Live executions endpoint (`GET /api/jobs/{id}/executions`)
+  - Transaction status filtering
+  - Pagination
+- [ ] Execution details endpoint (`GET /api/executions/{id}`)
+- [ ] Execution performance metrics
+- [ ] Transaction link generation (block explorer)
+- [ ] WebSocket event: `live_execution`
 
-**Deliverable**: Backend deployment ready
+**Deliverables**:
+- [ ] Executions API functional
+- [ ] Execution events streaming
+- [ ] Tx status tracking
 
 ---
 
-#### Frontend Developer 1 (FE1)
-- [ ] **Environment configuration** (2h)
-  - Create `.env.production` file
-  - Configure API base URL
-  - Configure WebSocket URL
-- [ ] **Build optimization** (3h)
-  - Run production build
-  - Analyze bundle size
-  - Code split large pages
-  - Lazy load components
-- [ ] **Vercel setup** (2h)
-  - Create Vercel project
-  - Configure build settings
-  - Set environment variables
-  - Test preview deployment
-- [ ] **Final polish** (1h)
-  - Fix any remaining UI issues
-  - Add meta tags for SEO
-  - Add favicon
+#### Frontend Engineer 1 (FE-1)
+**Tasks**: 7-8 hours
+- [ ] Execution feed page
+  - Real-time execution list
+  - Status badges (pending/success/failed)
+  - Tx hash with block explorer link
+- [ ] Execution card component
+  - Miner info
+  - Strategy summary
+  - Performance metrics
+  - Gas used
+- [ ] Filter by status
+- [ ] WebSocket listener for new executions
 
-**Deliverable**: Frontend deployment ready
+**Deliverables**:
+- [ ] Execution feed page
+- [ ] Real-time execution updates
+- [ ] Tx status visualization
 
 ---
 
-#### Frontend Developer 2 (FE2)
-- [ ] **Accessibility improvements** (3h)
-  - Add ARIA labels
-  - Test keyboard navigation
-  - Add focus indicators
-  - Test with screen reader
-- [ ] **Cross-browser testing** (2h)
-  - Test on Chrome, Firefox, Safari
-  - Fix browser-specific issues
-- [ ] **Mobile optimization** (2h)
-  - Test on actual mobile devices
-  - Optimize touch interactions
-  - Fix mobile layout issues
-- [ ] **Final touches** (1h)
-  - Add loading animations
-  - Polish micro-interactions
+#### Frontend Engineer 2 (FE-2)
+**Tasks**: 7-8 hours
+- [ ] Execution details modal
+  - Full strategy data
+  - Position details
+  - Actual vs simulated performance
+  - Timeline
+- [ ] Vault activity timeline component
+- [ ] Performance metrics visualization
+- [ ] Error state handling (failed executions)
 
-**Deliverable**: Accessible, cross-browser compatible UI
+**Deliverables**:
+- [ ] Execution details view
+- [ ] Vault timeline
+- [ ] Performance comparison
 
 ---
 
-#### Coordinator (PM)
-- [ ] **Deployment planning** (2h)
-  - Create deployment checklist
-  - Schedule deployment time
-  - Prepare rollback plan
-- [ ] **Final testing** (3h)
-  - Test production build locally
-  - Verify all features work
-  - Test with production-like data
-- [ ] **Documentation** (2h)
-  - Finalize user documentation
-  - Create onboarding guide
-  - Document known issues
-- [ ] **Daily standup** (30m)
+#### Coordinator (PM-1)
+**Tasks**: 5-6 hours
+- [ ] End-to-end flow test: Round → Winner → Execution
+- [ ] Execution data validation
+- [ ] Week 1 retrospective
+- [ ] Week 2 planning
+- [ ] Risk review and mitigation
 
-**Deliverable**: Deployment plan + final docs
+**Deliverables**:
+- [ ] Week 1 summary report
+- [ ] Week 2 task refinement
+- [ ] Risk mitigation plan
 
 ---
 
-## Day 8 (Feb 4) - Deployment Day 1
+## Week 2 – Reliability, QA, Production Readiness
 
-#### Backend Developer (BE1)
-- [ ] **Deploy backend** (2h)
-  - Deploy to Railway/DigitalOcean
-  - Verify database connection
-  - Test all endpoints in production
-- [ ] **Monitor deployment** (2h)
-  - Watch logs for errors
-  - Check response times
-  - Verify WebSocket connections
-- [ ] **Fix production issues** (4h)
-  - Address any deployment errors
-  - Fix configuration issues
-  - Optimize as needed
+### **Day 6 (Feb 3) – Backend Hardening & Performance**
 
-**Deliverable**: Backend live in production
+#### Backend Engineer (BE-1)
+**Tasks**: 8 hours
+- [ ] Database query optimization
+  - Add indexes (job_id, miner_uid, combined_score)
+  - Optimize JOIN queries
+  - Query plan analysis
+- [ ] API response caching strategy
+  - Redis setup (optional)
+  - HTTP caching headers
+- [ ] Rate limiting middleware
+- [ ] Load testing (Locust/K6)
+  - Target: 100 concurrent users
+  - API response time < 200ms
+- [ ] WebSocket connection pooling
+- [ ] Error logging (Sentry integration)
 
----
-
-#### Frontend Developer 1 (FE1)
-- [ ] **Deploy frontend** (1h)
-  - Deploy to Vercel
-  - Verify build succeeds
-  - Check domain configuration
-- [ ] **Integration testing** (3h)
-  - Test frontend with production backend
-  - Verify all features work
-  - Check WebSocket connection
-- [ ] **Fix production issues** (3h)
-  - Fix CORS issues
-  - Fix API connection issues
-  - Fix any runtime errors
-- [ ] **Performance monitoring** (1h)
-  - Check Vercel analytics
-  - Monitor page load times
-
-**Deliverable**: Frontend live in production
+**Deliverables**:
+- [ ] All queries optimized
+- [ ] Load test report
+- [ ] Rate limiting active
+- [ ] Error tracking configured
 
 ---
 
-#### Frontend Developer 2 (FE2)
-- [ ] **Final QA on production** (4h)
-  - Test all pages and features
-  - Test on multiple devices
-  - Create bug list
-- [ ] **Fix critical bugs** (3h)
-  - Address high-priority issues
-  - Test fixes in production
-- [ ] **Visual QA** (1h)
-  - Check design consistency
-  - Fix any styling issues
+#### Frontend Engineer 1 (FE-1)
+**Tasks**: 7-8 hours
+- [ ] Skeleton loaders for all pages
+- [ ] Error boundaries for all routes
+- [ ] Retry logic for failed requests
+- [ ] Offline state handling
+- [ ] Loading state polish
+- [ ] Toast notifications for events
 
-**Deliverable**: Production QA complete
-
----
-
-#### Coordinator (PM)
-- [ ] **Coordinate deployment** (2h)
-  - Oversee backend deployment
-  - Oversee frontend deployment
-  - Verify integration
-- [ ] **Monitor metrics** (2h)
-  - Watch error rates
-  - Monitor API performance
-  - Check user analytics
-- [ ] **Documentation updates** (2h)
-  - Update with production URLs
-  - Document any changes made
-  - Create incident log
-- [ ] **Stakeholder communication** (2h)
-  - Send launch announcement
-  - Provide access details
-  - Schedule demo
-
-**Deliverable**: Successful production launch
+**Deliverables**:
+- [ ] All loading states implemented
+- [ ] Error handling complete
+- [ ] UX polish pass 1
 
 ---
 
-## Day 9 (Feb 5) - Stabilization
+#### Frontend Engineer 2 (FE-2)
+**Tasks**: 7-8 hours
+- [ ] Responsive design audit
+  - Mobile (320px - 768px)
+  - Tablet (768px - 1024px)
+  - Desktop (1024px+)
+- [ ] Accessibility audit (WCAG 2.1 AA)
+  - Keyboard navigation
+  - Screen reader support
+  - Color contrast
+- [ ] Cross-browser testing
+  - Chrome, Firefox, Safari, Edge
+- [ ] Performance optimization
+  - Code splitting
+  - Lazy loading
+  - Image optimization
 
-#### Backend Developer (BE1)
-- [ ] **Monitor production** (3h)
-  - Watch error logs
-  - Check API performance
-  - Monitor database load
-- [ ] **Performance tuning** (3h)
-  - Optimize slow queries
-  - Adjust connection pooling
-  - Cache frequently accessed data
-- [ ] **Bug fixes** (2h)
-  - Fix any reported issues
-  - Deploy hotfixes
-
-**Deliverable**: Stable backend with no critical issues
-
----
-
-#### Frontend Developer 1 (FE1)
-- [ ] **Bug triage** (2h)
-  - Review reported issues
-  - Prioritize bugs
-  - Create fix plan
-- [ ] **Critical bug fixes** (4h)
-  - Fix high-priority bugs
-  - Test fixes thoroughly
-  - Deploy to production
-- [ ] **Performance optimization** (2h)
-  - Optimize slow pages
-  - Reduce bundle size further
-  - Add caching strategies
-
-**Deliverable**: Critical bugs fixed
+**Deliverables**:
+- [ ] Responsive design verified
+- [ ] Accessibility compliance
+- [ ] Cross-browser compatibility
 
 ---
 
-#### Frontend Developer 2 (FE2)
-- [ ] **UX improvements** (3h)
-  - Address user feedback
-  - Improve confusing UI elements
-  - Add helpful tooltips
-- [ ] **Bug fixes** (3h)
-  - Fix medium-priority bugs
-  - Polish existing features
-- [ ] **Analytics setup** (2h)
-  - Add Google Analytics (if needed)
-  - Track key user actions
-  - Set up conversion events
+#### Coordinator (PM-1)
+**Tasks**: 6-8 hours
+- [ ] Integration test suite
+- [ ] Performance baseline documentation
+- [ ] API documentation review
+- [ ] User guide draft (Phase 1)
+- [ ] Day 6 checkpoint
 
-**Deliverable**: Improved UX + analytics
+**Deliverables**:
+- [ ] Test suite results
+- [ ] Performance report
+- [ ] Documentation draft
 
 ---
 
-#### Coordinator (PM)
-- [ ] **User testing** (3h)
-  - Get feedback from stakeholders
-  - Document feature requests
-  - Create bug reports
-- [ ] **Metrics analysis** (2h)
-  - Analyze usage patterns
-  - Check error rates
-  - Review performance data
-- [ ] **Planning** (2h)
-  - Plan iteration 2 features
-  - Prioritize backlog
-  - Estimate next sprint
-- [ ] **Daily standup** (30m)
+### **Day 7 (Feb 4) – Frontend Polish & UX**
 
-**Deliverable**: User feedback + next iteration plan
+#### Backend Engineer (BE-1)
+**Tasks**: 6-8 hours
+- [ ] WebSocket stability improvements
+  - Reconnection logic
+  - Message queuing
+  - Connection timeout handling
+- [ ] API endpoint consolidation
+- [ ] Response payload optimization
+- [ ] Background job monitoring (if applicable)
 
----
-
-## Day 10 (Feb 6) - Final Polish & Handoff
-
-#### Backend Developer (BE1)
-- [ ] **Final optimization** (2h)
-  - Last round of performance tuning
-  - Clean up code
-  - Remove debug logging
-- [ ] **Documentation** (3h)
-  - Update API documentation
-  - Document deployment process
-  - Create troubleshooting guide
-- [ ] **Knowledge transfer** (2h)
-  - Document architecture decisions
-  - Create maintenance guide
-  - Handoff to ops team
-- [ ] **Retrospective prep** (1h)
-
-**Deliverable**: Complete backend documentation
+**Deliverables**:
+- [ ] WebSocket reconnection tested
+- [ ] API optimizations complete
+- [ ] Monitoring configured
 
 ---
 
-#### Frontend Developer 1 (FE1)
-- [ ] **Final polish** (3h)
-  - Last UI tweaks
-  - Fix minor bugs
-  - Improve loading states
-- [ ] **Documentation** (2h)
-  - Update README
-  - Document component usage
-  - Create style guide
-- [ ] **Code cleanup** (2h)
-  - Remove unused code
-  - Clean up comments
-  - Format code consistently
-- [ ] **Retrospective prep** (1h)
+#### Frontend Engineer 1 (FE-1)
+**Tasks**: 7-8 hours
+- [ ] Dashboard UX enhancements
+  - Micro-interactions
+  - Hover states
+  - Transitions
+- [ ] Navigation improvements
+- [ ] Search functionality (if needed)
+- [ ] Keyboard shortcuts
+- [ ] Performance monitoring (Web Vitals)
 
-**Deliverable**: Clean, documented codebase
-
----
-
-#### Frontend Developer 2 (FE2)
-- [ ] **Final testing** (3h)
-  - Complete test coverage
-  - E2E tests with Playwright
-  - Visual regression tests
-- [ ] **Documentation** (2h)
-  - Document components
-  - Create storybook (if time)
-  - Update design system docs
-- [ ] **Handoff materials** (2h)
-  - Create component catalog
-  - Document patterns used
-  - Create maintenance guide
-- [ ] **Retrospective prep** (1h)
-
-**Deliverable**: Complete test suite + docs
+**Deliverables**:
+- [ ] UX polish complete
+- [ ] Navigation fluid
+- [ ] Performance metrics green
 
 ---
 
-#### Coordinator (PM)
-- [ ] **Final QA** (2h)
-  - Complete QA checklist
-  - Verify all features
-  - Sign off on release
-- [ ] **Documentation** (3h)
-  - Finalize all documentation
-  - Create user guide
-  - Create admin guide
-- [ ] **Retrospective** (2h)
-  - Facilitate team retrospective
-  - Document lessons learned
-  - Create improvement plan
-- [ ] **Handoff meeting** (1h)
-  - Present to stakeholders
-  - Demo all features
-  - Transfer ownership
+#### Frontend Engineer 2 (FE-2)
+**Tasks**: 7-8 hours
+- [ ] Chart visualizations
+  - Score trends over time
+  - Win rate distribution
+  - Participation heatmaps
+  - Round type breakdown
+- [ ] Data export functionality (CSV)
+- [ ] Print-friendly views
+- [ ] Dark mode refinements
 
-**Deliverable**: Project complete + handoff
+**Deliverables**:
+- [ ] All charts implemented
+- [ ] Export functionality
+- [ ] Visual polish complete
 
 ---
 
-## Success Metrics
+#### Coordinator (PM-1)
+**Tasks**: 6-8 hours
+- [ ] End-to-end user journey testing
+- [ ] UX feedback collection
+- [ ] Bug triage and prioritization
+- [ ] Staging environment setup
+- [ ] Day 7 checkpoint
 
-### Day 10 Completion Criteria
+**Deliverables**:
+- [ ] UX test results
+- [ ] Bug priority list
+- [ ] Staging environment ready
 
-- [ ] **Backend**: All endpoints working, 95%+ uptime, <200ms response time
-- [ ] **Frontend**: All pages functional, Lighthouse score >90, no critical bugs
-- [ ] **Real-time**: WebSocket stable, <100ms latency, reconnection working
-- [ ] **Testing**: >80% code coverage, all E2E tests passing
-- [ ] **Documentation**: Complete user guide, API docs, deployment runbook
-- [ ] **Performance**: Page load <2s, API p95 <300ms
+---
+
+### **Day 8 (Feb 5) – Staging Deployment & Integration Test**
+
+#### Backend Engineer (BE-1)
+**Tasks**: 8 hours
+- [ ] Staging deployment
+  - Docker containerization
+  - Environment configuration
+  - Database migration
+- [ ] Production config review
+  - Security settings
+  - CORS whitelist
+  - Rate limits
+- [ ] Health check monitoring
+- [ ] Log aggregation (Datadog/CloudWatch)
+
+**Deliverables**:
+- [ ] Staging API live
+- [ ] Monitoring active
+- [ ] Logs searchable
+
+---
+
+#### Frontend Engineer 1 (FE-1)
+**Tasks**: 7-8 hours
+- [ ] Staging deployment
+  - Vercel/Netlify setup
+  - Environment variables
+  - Build optimization
+- [ ] WebSocket connection testing in staging
+- [ ] Cross-origin request validation
+- [ ] Performance testing in staging
+
+**Deliverables**:
+- [ ] Staging frontend live
+- [ ] WebSocket working
+- [ ] Performance validated
+
+---
+
+#### Frontend Engineer 2 (FE-2)
+**Tasks**: 7-8 hours
+- [ ] Full integration test in staging
+  - All pages functional
+  - All API calls working
+  - Real-time updates verified
+- [ ] Data correctness validation
+- [ ] Visual regression testing
+- [ ] Mobile device testing
+
+**Deliverables**:
+- [ ] Integration test complete
+- [ ] Visual regression report
+- [ ] Mobile compatibility verified
+
+---
+
+#### Coordinator (PM-1)
+**Tasks**: 8 hours
+- [ ] Full system integration test
+- [ ] Load simulation
+  - 50+ concurrent users
+  - WebSocket stress test
+- [ ] Failure scenario testing
+  - API down
+  - WebSocket disconnection
+  - Database timeout
+- [ ] Staging sign-off checklist
+- [ ] Production readiness review
+
+**Deliverables**:
+- [ ] Integration test report
+- [ ] Load test results
+- [ ] Production go/no-go decision
+
+---
+
+### **Day 9 (Feb 6) – Bug Fixing & Final Polish**
+
+#### Backend Engineer (BE-1)
+**Tasks**: 7-8 hours
+- [ ] Critical bug fixes from staging
+- [ ] Performance tuning
+- [ ] Security review
+  - SQL injection prevention
+  - CORS validation
+  - Rate limiting verification
+- [ ] Production deployment dry run
+
+**Deliverables**:
+- [ ] All P0/P1 bugs fixed
+- [ ] Security checklist complete
+- [ ] Deployment runbook ready
+
+---
+
+#### Frontend Engineer 1 (FE-1)
+**Tasks**: 7-8 hours
+- [ ] Critical UI bugs fixed
+- [ ] Data display accuracy verification
+- [ ] Real-time update stability
+- [ ] Final UX polish
+  - Animations smooth
+  - Transitions consistent
+  - Loading states clear
+
+**Deliverables**:
+- [ ] All P0/P1 UI bugs fixed
+- [ ] UX sign-off ready
+- [ ] Final build optimized
+
+---
+
+#### Frontend Engineer 2 (FE-2)
+**Tasks**: 7-8 hours
+- [ ] Chart accuracy validation
+- [ ] Export functionality testing
+- [ ] Accessibility final check
+- [ ] Browser compatibility final pass
+- [ ] Documentation screenshots
+
+**Deliverables**:
+- [ ] All features validated
+- [ ] Screenshots for docs
+- [ ] Final QA sign-off
+
+---
+
+#### Coordinator (PM-1)
+**Tasks**: 8 hours
+- [ ] Final integration test
+- [ ] User acceptance testing
+- [ ] Release notes draft
+- [ ] Deployment plan finalization
+- [ ] Team handover preparation
+- [ ] Go-live readiness assessment
+
+**Deliverables**:
+- [ ] UAT complete
+- [ ] Release notes ready
+- [ ] Deployment plan approved
+- [ ] Day 9 final report
+
+---
+
+### **Day 10 (Feb 7) – Production Deployment & Handover**
+
+#### Backend Engineer (BE-1)
+**Tasks**: 8 hours
+- [ ] Production deployment
+  - Database backup
+  - Rolling deployment
+  - Health check validation
+- [ ] Monitoring dashboard setup
+- [ ] Alert configuration
+  - API errors
+  - WebSocket failures
+  - High latency
+- [ ] Runbook documentation
+
+**Deliverables**:
+- [ ] Production API live
+- [ ] Monitoring active
+- [ ] Alerts configured
+- [ ] Runbook complete
+
+---
+
+#### Frontend Engineer 1 (FE-1)
+**Tasks**: 7-8 hours
+- [ ] Production frontend deployment
+- [ ] DNS configuration
+- [ ] SSL certificate verification
+- [ ] Production smoke test
+- [ ] Performance monitoring setup (Vercel Analytics)
+
+**Deliverables**:
+- [ ] Production frontend live
+- [ ] SSL active
+- [ ] Analytics tracking
+- [ ] Smoke test passed
+
+---
+
+#### Frontend Engineer 2 (FE-2)
+**Tasks**: 7-8 hours
+- [ ] Production validation
+  - All pages accessible
+  - All features functional
+  - Real-time updates working
+- [ ] Error tracking verification (Sentry)
+- [ ] User guide finalization
+- [ ] Video demo recording
+
+**Deliverables**:
+- [ ] Production validated
+- [ ] User guide complete
+- [ ] Demo video ready
+
+---
+
+#### Coordinator (PM-1)
+**Tasks**: 8 hours
+- [ ] Go-live coordination
+- [ ] Team demo to ForeverMoney
+- [ ] Admin user guide walkthrough
+- [ ] Support handover
+- [ ] Post-launch monitoring setup
+- [ ] Sprint retrospective
+- [ ] Success metrics baseline
+
+**Deliverables**:
+- [ ] Go-live complete
+- [ ] Demo delivered
+- [ ] Handover complete
+- [ ] Retrospective notes
+- [ ] Success metrics document
+
+---
+
+## Post-Launch (Feb 7-13) – Stabilisation & Support
+
+### Week 3 Activities
+
+#### Days 11-12 (Feb 8-9)
+- [ ] Monitor production stability
+- [ ] Address immediate feedback
+- [ ] Performance tuning based on real usage
+- [ ] User support and troubleshooting
+- [ ] Documentation updates
+
+#### Days 13-14 (Feb 10-11)
+- [ ] Bug fixes from production
+- [ ] Feature enhancement planning
+- [ ] Analytics review
+- [ ] User feedback incorporation
+- [ ] Phase 2 scoping
+
+---
+
+## Success Criteria
+
+### Functional Requirements ✅
+- [ ] All core views operational
+- [ ] Real-time updates working
+- [ ] Historical data accurate
+- [ ] Execution feed live
+- [ ] Leaderboard updates < 5s latency
+
+### Performance Requirements ✅
+- [ ] API response time < 200ms (p95)
+- [ ] Page load time < 2s (p95)
+- [ ] WebSocket connection stability > 99%
+- [ ] Support 100+ concurrent users
+
+### Quality Requirements ✅
+- [ ] 0 P0 bugs at launch
+- [ ] < 5 P1 bugs at launch
+- [ ] 95%+ uptime in first week
+- [ ] Accessibility WCAG 2.1 AA compliant
+
+### Operational Requirements ✅
+- [ ] Monitoring and alerts active
+- [ ] Runbook documented
+- [ ] Support team trained
+- [ ] Backup and recovery tested
 
 ---
 
 ## Risk Mitigation
 
-### High-Risk Items
+### High Risk
+| Risk | Impact | Mitigation | Owner |
+|------|--------|------------|-------|
+| Database schema changes | High | Schema freeze after Day 1 | BE-1, PM-1 |
+| WebSocket instability | High | Polling fallback implemented | BE-1 |
+| Scoring logic changes | Medium | Buffer days allocated | PM-1 |
 
-1. **WebSocket stability** (Day 3-4)
-   - *Mitigation*: Test early with real data, have fallback plan for polling
-2. **Database performance** (Day 5-6)
-   - *Mitigation*: Add indexes preemptively, monitor query times
-3. **Deployment issues** (Day 7-8)
-   - *Mitigation*: Test deployment to staging first, have rollback plan
-4. **Integration bugs** (Day 8-9)
-   - *Mitigation*: Daily integration testing from Day 2
+### Medium Risk
+| Risk | Impact | Mitigation | Owner |
+|------|--------|------------|-------|
+| Third-party API delays | Medium | Mock data for development | FE-1, FE-2 |
+| Browser compatibility | Medium | Cross-browser testing Day 6 | FE-2 |
+| Performance bottlenecks | Medium | Load testing Day 6 | BE-1 |
 
-### Critical Path
+### Low Risk
+| Risk | Impact | Mitigation | Owner |
+|------|--------|------------|-------|
+| Design changes | Low | Design freeze after Day 2 | PM-1 |
+| Team availability | Low | Cross-training planned | PM-1 |
 
-**Must complete by EOD for on-time delivery:**
-- Day 2: Backend API foundation + Frontend setup
-- Day 4: All API endpoints + Core frontend pages
-- Day 6: All tests passing + No critical bugs
-- Day 8: Successful production deployment
+---
+
+## Dependencies
+
+### External Dependencies
+- [ ] Validator database access (read-only user)
+- [ ] Executor bot event feed
+- [ ] Block explorer API (for tx links)
+- [ ] Production infrastructure (cloud provider)
+
+### Internal Dependencies
+- [ ] Schema stability confirmed
+- [ ] Test data available
+- [ ] Design system approved
+- [ ] API auth mechanism defined
 
 ---
 
 ## Communication Plan
 
 ### Daily Standups
-- **Time**: 9:00 AM (30 minutes)
-- **Format**: What I did, what I'm doing, blockers
-- **Tool**: Slack + Video call
+- **Time**: 10:00 AM (30 min)
+- **Format**: Async + sync for blockers
+- **Attendees**: All team members
 
-### Mid-day Sync
-- **Time**: 2:00 PM (15 minutes)
-- **Purpose**: Unblock issues, share progress
+### Integration Checkpoints
+- **Frequency**: End of Day 1, 3, 5, 7, 9
+- **Owner**: PM-1
+- **Deliverable**: Integration status report
 
-### End-of-day Updates
-- **Time**: 6:00 PM
-- **Format**: Written update in Slack
-- **Include**: Day's deliverables, blockers, tomorrow's plan
+### Status Reports
+- **Frequency**: Daily
+- **Owner**: PM-1
+- **Recipients**: ForeverMoney team
 
-### Integration Points
-- **Day 2**: Frontend connects to API
-- **Day 3**: WebSocket integration
-- **Day 4**: All endpoints integrated
-- **Day 7**: Pre-deployment integration test
-
----
-
-## Tools & Infrastructure
-
-### Development
-- **Version Control**: GitHub
-- **Project Management**: GitHub Projects or Linear
-- **Communication**: Slack
-- **API Testing**: Postman + pytest
-- **Frontend Testing**: Jest + Playwright
-
-### Deployment
-- **Backend**: Railway or DigitalOcean App Platform
-- **Frontend**: Vercel
-- **Database**: Existing PostgreSQL (Jobs DB)
-- **Monitoring**: Sentry
-- **CI/CD**: GitHub Actions
-
-### Collaboration
-- **Code Review**: GitHub Pull Requests (require 1 approval)
-- **Documentation**: Markdown in repo
-- **Screenshots**: Share in Slack for quick feedback
+### Sprint Review
+- **Date**: Feb 7 (Day 10)
+- **Format**: Live demo + Q&A
+- **Attendees**: All stakeholders
 
 ---
 
-## Handoff Deliverables (Day 10)
+## Handoff Deliverables
 
-1. **Codebase**
-   - Backend API (with tests)
-   - Frontend application (with tests)
-   - README with setup instructions
+### Code
+- [ ] Backend repository with deployment scripts
+- [ ] Frontend repository with build config
+- [ ] Database migration scripts
+- [ ] Environment configuration templates
 
-2. **Documentation**
-   - API documentation (OpenAPI/Swagger)
-   - User guide (how to use the admin panel)
-   - Deployment runbook (how to deploy)
-   - Troubleshooting guide (common issues)
-   - Architecture docs (system design)
+### Documentation
+- [ ] API documentation (OpenAPI/Swagger)
+- [ ] User guide with screenshots
+- [ ] Admin operations manual
+- [ ] Runbook for incidents
+- [ ] Architecture decision records
 
-3. **Access**
-   - GitHub repository access
-   - Production URLs
-   - Database credentials (secure storage)
-   - Deployment platform access
-
-4. **Monitoring**
-   - Sentry project setup
-   - Vercel analytics access
-   - API monitoring dashboard
+### Support Materials
+- [ ] Demo video (5-10 minutes)
+- [ ] FAQ document
+- [ ] Known issues list
+- [ ] Phase 2 feature roadmap
 
 ---
 
-**Start Date**: January 28, 2026  
-**Launch Date**: February 6, 2026  
-**Team**: 4 people (BE1, FE1, FE2, PM)  
-**Budget**: 10 days × 4 people = 40 person-days
+## Phase 2 Roadmap (Post-Launch)
+
+### Enhancements (Weeks 3-6)
+- [ ] Advanced analytics & reporting
+- [ ] Custom alerts and notifications
+- [ ] Multiple time range filters
+- [ ] Emissions dashboard
+- [ ] APY calculator
+- [ ] Strategy comparison tools
+
+### Institutional Features (Months 2-3)
+- [ ] Multi-chain vault views
+- [ ] Custom reporting exports
+- [ ] White-label dashboard options
+- [ ] API access for partners
+- [ ] Advanced RBAC
+
+---
+
+## Conclusion
+
+This is not just a dashboard.  
+**This is the operational control plane for SN98.**
+
+Where:
+- ✅ Validator performance is judged
+- ✅ Miners are ranked and rewarded
+- ✅ Execution safety is audited
+- ✅ The subnet proves production-grade quality
+
+**Delivery Confidence**: High  
+**Timeline**: Achievable in 10-14 days  
+**Team**: Right-sized and cross-functional  
+**Outcome**: Revenue-grade observability for SN98
+
+---
+
+**Status**: ✅ Foundation Complete (Days 1-2 in progress)  
+**Next Milestone**: Live rounds & real-time updates (Day 3)  
+**Go-Live Date**: Feb 7, 2026
+
+---
+
+*This is the fastest path to shipping something real, visible, and revenue-supporting for SN98.*
