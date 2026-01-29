@@ -19,7 +19,7 @@ from api.config import (
     CORS_ORIGINS,
     DATABASE_URL
 )
-from api.routers import jobs, leaderboard, rounds, miners, executions
+from api.routers import jobs, leaderboard, rounds, miners, executions, auth, admin
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -65,6 +65,24 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Rate Limiting Middleware
+from api.middleware import RateLimitMiddleware, AuthRateLimitMiddleware
+
+# General rate limit: 100 requests per minute
+app.add_middleware(
+    RateLimitMiddleware,
+    calls=100,
+    period=60,
+    exclude_paths=["/health", "/docs", "/openapi.json", "/redoc"]
+)
+
+# Strict auth rate limit: 10 requests per minute
+app.add_middleware(
+    AuthRateLimitMiddleware,
+    calls=10,
+    period=60
 )
 
 
@@ -117,7 +135,12 @@ async def health_check():
     }
 
 
-# Include routers
+# Register routers
+# Authentication routes (public, but rate-limited)
+app.include_router(auth.router)
+app.include_router(admin.router)
+
+# Data routes (protected - require authentication)
 app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
 app.include_router(leaderboard.router, prefix="/api/jobs", tags=["Leaderboard"])
 app.include_router(rounds.router, prefix="/api/jobs", tags=["Rounds"])

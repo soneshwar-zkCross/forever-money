@@ -1,0 +1,28 @@
+{
+  "admins": [
+    {
+      "wallet_address": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+      "name": "Primary Admin",
+      "added_by": "system",
+      "added_at": "2026-01-27T00:00:00Z",
+      "permissions": [
+        "read",
+        "write",
+        "manage_admins"
+      ]
+    },
+    {
+      "wallet_address": "5H3jijYX7QLt1LXtwwVb6SbhNZ81qJmiSPEEgqh9WfaNBbjm",
+      "name": "Primary Admin (Bootstrap)",
+      "added_by": "system",
+      "added_at": "2026-01-28T16:47:44.815492",
+      "permissions": [
+        "read",
+        "write",
+        "manage_admins"
+      ]
+    }
+  ],
+  "version": "1.0.0",
+  "last_updated": "2026-01-28T16:47:44.815507"
+}
