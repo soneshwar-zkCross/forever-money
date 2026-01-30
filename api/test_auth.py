@@ -34,7 +34,7 @@ def test_auth_flow():
     print("   ⚠️  This requires a configured Bittensor wallet\n")
     
     # Example with wallet (uncomment if you have wallet configured):
-    # wallet = bt.wallet(name="your_wallet", hotkey="your_hotkey")
+    # wallet = bt.Wallet(name="your_wallet", hotkey="your_hotkey")
     # signature = wallet.hotkey.sign(challenge_data['message']).hex()
     
     # For testing without wallet, you'd need to use a pre-signed message

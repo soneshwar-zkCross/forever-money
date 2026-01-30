@@ -47,13 +47,23 @@ async def create_test_data():
         RoundType, RoundStatus
     )
 
+    # Clear existing data
+    print("🧹 Clearing existing data...")
+    await Prediction.all().delete()
+    await LiveExecution.all().delete()
+    await MinerParticipation.all().delete()
+    await MinerScore.all().delete()
+    await Round.all().delete()
+    await Job.all().delete()
+    print("✅ Data cleared")
+
     # Create test jobs
     print("📋 Creating test jobs...")
     jobs_data = [
         {
             "job_id": "job_eth_usdc_001",
             "pair_address": "0x88A43bbDF9D098eEC7bCEda4e2494615dfD9bB9C",
-            "sn_liquditiy_manager_address": "0x1234567890123456789012345678901234567890",
+            "sn_liquidity_manager_address": "0x1234567890123456789012345678901234567890",
             "fee_rate": 0.03,
             "target": "PoL",
             "target_ratio": 0.5,
@@ -66,7 +76,7 @@ async def create_test_data():
         {
             "job_id": "job_weth_usdc_002",
             "pair_address": "0x99A43bbDF9D098eEC7bCEda4e2494615dfD9bB8B",
-            "sn_liquditiy_manager_address": "0x2345678901234567890123456789012345678901",
+            "sn_liquidity_manager_address": "0x2345678901234567890123456789012345678901",
             "fee_rate": 0.05,
             "target": "PoL",
             "target_ratio": 0.6,
@@ -82,7 +92,7 @@ async def create_test_data():
     for job_data in jobs_data:
         job = await Job.create(
             job_id=job_data["job_id"],
-            sn_liquditiy_manager_address=job_data["sn_liquditiy_manager_address"],
+            sn_liquidity_manager_address=job_data["sn_liquidity_manager_address"],
             pair_address=job_data["pair_address"],
             fee_rate=job_data["fee_rate"],
             target=job_data["target"],
@@ -113,7 +123,7 @@ async def create_test_data():
             is_eligible = participation_days >= 7
             
             # Generate scores with some correlation
-            base_score = random.uniform(5000, 15000)
+            base_score = random.uniform(500, 1500)
             noise = random.uniform(0.8, 1.2)
             
             eval_score = base_score * noise * random.uniform(0.7, 1.3)
@@ -169,6 +179,8 @@ async def create_test_data():
     rounds_created = 0
     base_time = datetime.utcnow() - timedelta(days=7)
     
+    import uuid
+
     for job in jobs:
         # Create 100 rounds per job
         for i in range(100):
@@ -206,11 +218,13 @@ async def create_test_data():
             
             round_obj = await Round.create(
                 job=job,
+                round_id=str(uuid.uuid4()),
                 round_type=round_type,
                 round_number=i + 1,
                 start_time=round_start,
                 round_deadline=round_deadline,
                 end_time=round_end,
+                start_block=random.randint(1000000, 2000000),
                 status=RoundStatus.COMPLETED,
                 winner_uid=winner_uid,
                 performance_data={"scores": scores_dict}
@@ -239,7 +253,9 @@ async def create_test_data():
                 await Prediction.create(
                     job=job,
                     round=round_obj,
+                    prediction_id=str(uuid.uuid4()),
                     miner_uid=uid,
+                    miner_hotkey=score_data.get("hotkey", f"5F{uid:02d}{'x' * 44}"),
                     accepted=score_data.get("accepted", True),
                     refusal_reason=None if score_data.get("accepted", True) else "test_refusal",
                     prediction_data=[
@@ -298,6 +314,7 @@ async def create_test_data():
                 job=job,
                 round=round_obj,
                 miner_uid=round_obj.winner_uid,
+                sn_liquidity_manager_address=job.sn_liquidity_manager_address,
                 strategy_data={
                     "positions": [
                         {

@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 class JobResponse(BaseModel):
     """Single job response"""
     job_id: str
-    sn_liquditiy_manager_address: str
+    sn_liquidity_manager_address: str
     pair_address: str
     fee_rate: float
     target: str
@@ -178,6 +178,7 @@ class LiveExecutionResponse(BaseModel):
     tx_status: Optional[str] = None
     block_number: Optional[int] = None
     actual_performance: Optional[Dict[str, Any]] = None
+    sn_liquidity_manager_address: str
     executed_at: datetime
     updated_at: datetime
 

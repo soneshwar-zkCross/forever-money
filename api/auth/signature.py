@@ -100,7 +100,7 @@ def verify_challenge_signature(
     return verify_any_signature(wallet_address, message, signature)
 
 
-def sign_message(wallet: bt.wallet, message: str) -> str:
+def sign_message(wallet: bt.Wallet, message: str) -> str:
     """
     Sign a message with Bittensor wallet
     

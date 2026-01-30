@@ -33,7 +33,7 @@ async def list_jobs(
     job_responses = [
         JobResponse(
             job_id=job.job_id,
-            sn_liquditiy_manager_address=job.sn_liquditiy_manager_address,
+            sn_liquidity_manager_address=job.sn_liquidity_manager_address,
             pair_address=job.pair_address,
             fee_rate=job.fee_rate,
             target=job.target,
@@ -74,7 +74,7 @@ async def get_job(job_id: str):
     
     return JobDetailResponse(
         job_id=job.job_id,
-        sn_liquditiy_manager_address=job.sn_liquditiy_manager_address,
+        sn_liquidity_manager_address=job.sn_liquidity_manager_address,
         pair_address=job.pair_address,
         fee_rate=job.fee_rate,
         target=job.target,

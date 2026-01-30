@@ -187,7 +187,7 @@ async def sign_internal(request: InternalSignRequest):
         )
     
     try:
-        wallet = bt.wallet(name=request.wallet_name, hotkey=request.hotkey)
+        wallet = bt.Wallet(name=request.wallet_name, hotkey=request.hotkey)
         if not wallet.hotkey_file.exists_on_device():
             raise HTTPException(
                 status_code=404,
