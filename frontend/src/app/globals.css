@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #0C2060;
+  --color-primary-light: #1A3485;
+  --color-accent: #1E40AF;
+  --color-cream: #F9F6F0;
+  --color-cream-dark: #F2EDE4;
+  --color-ink: #1A1A1A;
+  --color-ink-muted: #666666;
+}
+
+:root {
+  --font-inter: 'Inter', system-ui, sans-serif;
+  --glass: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.2);
+}
+
+body {
+  @apply bg-cream text-ink antialiased min-h-screen selection:bg-primary-light selection:text-white;
+  font-family: var(--font-inter);
+}
+
+.dragon-bg {
+  background-image: url('/images/bg_landscape.png');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+/* Glassmorphism Classes */
+.glass-panel {
+  @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-xl;
+}
+
+.glass-card {
+  @apply bg-white/50 backdrop-blur-sm border border-white/10 shadow-lg hover:shadow-xl transition-all duration-300;
+}
+
+.glass-nav {
+  @apply bg-white/60 backdrop-blur-lg border-b border-white/20;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-cream-dark;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-primary/20 rounded-full hover:bg-primary/40 transition-colors;
+}
+
+/* Animations */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.8s ease-out forwards;
+}
