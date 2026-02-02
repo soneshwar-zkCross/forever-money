@@ -54,11 +54,28 @@ def verify_evm_signature(
         True if valid
     """
     try:
+        print(f"DEBUG EVM VERIFY for {wallet_address}")
+        print(f"Message: {message!r}")
+        print(f"Signature: {signature}")
+
         # Standard EVM message formatting
         msg = encode_defunct(text=message)
         # Recover address from signature
         recovered_address = Account.recover_message(msg, signature=signature)
-        return recovered_address.lower() == wallet_address.lower()
+        print(f"Recovered Standard: {recovered_address}")
+        
+        if recovered_address.lower() == wallet_address.lower():
+            return True
+            
+        # Fallback: Try with <Bytes> wrapping (Polkadot JS style)
+        wrapped_message = f"<Bytes>{message}</Bytes>"
+        print(f"Wrapped Message: {wrapped_message!r}")
+        msg_wrapped = encode_defunct(text=wrapped_message)
+        recovered_address_wrapped = Account.recover_message(msg_wrapped, signature=signature)
+        print(f"Recovered Wrapped: {recovered_address_wrapped}")
+        
+        return recovered_address_wrapped.lower() == wallet_address.lower()
+
     except Exception as e:
         print(f"EVM Signature verification error: {e}")
         return False

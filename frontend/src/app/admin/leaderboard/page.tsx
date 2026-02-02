@@ -9,9 +9,10 @@ import {
     ChevronDown,
     ExternalLink,
     Search,
-    Filter
+    Filter,
+    DollarSign
 } from 'lucide-react';
-import { useJobs, useLeaderboard } from '@/lib/api';
+import { useJobs, useLeaderboard, useTopEarners } from '@/lib/api';
 
 export default function LeaderboardPage() {
     const { data: jobs, isLoading: jobsLoading } = useJobs();
@@ -25,6 +26,12 @@ export default function LeaderboardPage() {
     }, [jobs, selectedJobId]);
 
     const { data: leaderboard, isLoading: leaderboardLoading } = useLeaderboard(selectedJobId || '');
+    const { data: topEarners } = useTopEarners(100); // Get top 100 earners
+
+    // Helper function to get earnings for a miner UID
+    const getEarnings = (uid: number) => {
+        return topEarners?.find(e => e.miner_uid === uid);
+    };
 
     const headerActions = (
         <div className="relative">
@@ -116,6 +123,7 @@ export default function LeaderboardPage() {
                                     <th className="px-10 py-5">Rank</th>
                                     <th className="px-10 py-5">Miner Identity</th>
                                     <th className="px-10 py-5 text-center">Score</th>
+                                    <th className="px-10 py-5 text-center">Est. Earnings</th>
                                     <th className="px-10 py-5 text-center">Status</th>
                                     <th className="px-10 py-5 text-right">Actions</th>
                                 </tr>
@@ -140,6 +148,24 @@ export default function LeaderboardPage() {
                                                     <span className="text-[8px] font-black text-blue-500 uppercase tracking-tighter">Live: {miner.live_score.toFixed(2)}</span>
                                                 </div>
                                             </div>
+                                        </td>
+                                        <td className="px-10 py-6 text-center">
+                                            {(() => {
+                                                const earnings = getEarnings(miner.miner_uid);
+                                                return earnings ? (
+                                                    <div className="inline-flex flex-col items-center">
+                                                        <span className="text-sm font-black text-green-600 tracking-tighter flex items-center">
+                                                            <DollarSign size={12} />
+                                                            {earnings.estimated_earnings_usd.toFixed(2)}
+                                                        </span>
+                                                        <span className="text-[8px] font-black text-primary/40 uppercase tracking-tighter">
+                                                            {earnings.estimated_earnings_alpha.toFixed(4)} α
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs font-medium text-primary/20">-</span>
+                                                );
+                                            })()}
                                         </td>
                                         <td className="px-10 py-6 text-center">
                                             <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${miner.is_eligible_for_live ? 'bg-green-50 text-green-600' : 'bg-cream text-primary/20'}`}>

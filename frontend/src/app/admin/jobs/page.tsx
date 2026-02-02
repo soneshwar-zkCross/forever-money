@@ -15,9 +15,10 @@ import {
     Layers,
     ArrowUpRight,
     CheckCircle2,
-    AlertCircle
+    AlertCircle,
+    DollarSign
 } from 'lucide-react';
-import { useJobs, useNetworkStats, Job } from '@/lib/api';
+import { useJobs, useNetworkStats, useJobRevenue, Job } from '@/lib/api';
 import Link from 'next/link';
 
 export default function VaultsPage() {
@@ -27,8 +28,8 @@ export default function VaultsPage() {
     const displayJobs = (jobs && jobs.length > 0) ? jobs : MOCK_JOBS;
 
     const headerActions = (
-        <button className="px-5 py-2.5 bg-primary text-white rounded-xl text-[10px] font-black shadow-lg shadow-primary/20 hover:-translate-y-0.5 transition-all flex items-center space-x-2 uppercase tracking-widest active:scale-95">
-            <RefreshCw size={12} className="animate-spin-slow" />
+        <button className="px-4 py-2 bg-primary text-white rounded-xl text-[9px] font-black shadow-lg shadow-primary/20 hover:-translate-y-0.5 transition-all flex items-center space-x-2 uppercase tracking-wider active:scale-95">
+            <RefreshCw size={12} />
             <span>Sync All Vaults</span>
         </button>
     );
@@ -42,9 +43,9 @@ export default function VaultsPage() {
         >
             <div className="space-y-10 animate-fade-in pb-20">
                 {/* Active Jobs Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                     {isLoading ? (
-                        [1, 2].map(i => <div key={i} className="h-64 bg-white/50 rounded-[48px] animate-pulse border border-cream-dark" />)
+                        [1, 2, 3].map(i => <div key={i} className="h-48 bg-white/50 rounded-3xl animate-pulse border border-cream-dark" />)
                     ) : (
                         displayJobs.map(job => (
                             <VaultCard key={job.job_id} job={job} />
@@ -399,93 +400,112 @@ function ActivityFeed({ jobs }: { jobs: Job[] }) {
 }
 
 function VaultCard({ job }: { job: Job }) {
-    const { data: stats, isLoading } = useNetworkStats(job.job_id);
+    const { data: stats, isLoading: statsLoading } = useNetworkStats(job.job_id);
+    const { data: revenue, isLoading: revenueLoading } = useJobRevenue(job.job_id, 30);
 
     return (
-        <div className="bg-white p-8 rounded-[40px] border border-cream-dark shadow-sm hover:shadow-xl transition-all duration-500 group relative overflow-hidden flex flex-col h-full">
+        <div className="bg-white p-5 rounded-3xl border border-cream-dark shadow-sm hover:shadow-lg transition-all duration-300 group relative overflow-hidden flex flex-col h-full">
             {/* Header */}
-            <div className="flex justify-between items-start mb-8 relative z-10">
-                <div className="flex items-center space-x-4">
-                    <div className="w-14 h-14 bg-cream rounded-2xl flex items-center justify-center text-primary/40 group-hover:bg-primary group-hover:text-white transition-all duration-500">
-                        <Terminal size={28} />
+            <div className="flex justify-between items-start mb-5 relative z-10">
+                <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-cream rounded-xl flex items-center justify-center text-primary/40 group-hover:bg-primary group-hover:text-white transition-all duration-300">
+                        <Terminal size={20} />
                     </div>
                     <div>
-                        <h3 className="text-xl font-black text-primary tracking-tight">{job.metadata.pair_name}</h3>
-                        <p className="text-[10px] font-black text-primary/30 uppercase tracking-widest">{job.target}</p>
+                        <h3 className="text-base font-black text-primary tracking-tight">{job.metadata.pair_name}</h3>
+                        <p className="text-[9px] font-bold text-primary/30 uppercase tracking-wider">{job.target}</p>
                     </div>
                 </div>
-                <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${job.is_active ? 'bg-green-50 text-green-600' : 'bg-cream text-primary/20'}`}>
+                <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-wider ${job.is_active ? 'bg-green-50 text-green-600' : 'bg-cream text-primary/20'}`}>
                     {job.is_active ? 'Active' : 'Paused'}
                 </span>
             </div>
 
+            {/* Revenue Section */}
+            <div className="bg-green-50/50 rounded-xl p-3 mb-4 relative z-10">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-1 text-green-600">
+                        <DollarSign size={12} />
+                        <span className="text-[8px] font-black uppercase tracking-wider">Revenue (30d)</span>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-lg font-black text-primary tracking-tight">
+                            {revenueLoading ? '...' : `$${revenue?.revenue_usd.toFixed(2) || '0.00'}`}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             {/* Stats Grid */}
-            <div className="grid grid-cols-3 gap-4 mb-8 flex-1 relative z-10">
-                <div className="space-y-1">
-                    <div className="flex items-center space-x-2 text-primary/30">
-                        <Users size={12} />
-                        <span className="text-[9px] font-black uppercase tracking-widest">Active Miners</span>
+            <div className="grid grid-cols-3 gap-3 mb-4 relative z-10">
+                <div className="space-y-0.5">
+                    <div className="flex items-center space-x-1 text-primary/30">
+                        <Users size={10} />
+                        <span className="text-[8px] font-black uppercase tracking-wider">Miners</span>
                     </div>
-                    <p className="text-2xl font-black text-primary tracking-tight">
-                        {isLoading ? '...' : stats?.active_miners_24h || 0}
+                    <p className="text-xl font-black text-primary tracking-tight">
+                        {statsLoading ? '...' : stats?.active_miners_24h || 0}
                     </p>
                 </div>
-                <div className="space-y-1">
-                    <div className="flex items-center space-x-2 text-primary/30">
-                        <Activity size={12} />
-                        <span className="text-[9px] font-black uppercase tracking-widest">Participation</span>
+                <div className="space-y-0.5">
+                    <div className="flex items-center space-x-1 text-primary/30">
+                        <Activity size={10} />
+                        <span className="text-[8px] font-black uppercase tracking-wider">Part.</span>
                     </div>
-                    <p className="text-2xl font-black text-primary tracking-tight">
-                        {isLoading ? '...' : `${((stats?.avg_participation_rate || 0) * 100).toFixed(0)}%`}
+                    <p className="text-xl font-black text-primary tracking-tight">
+                        {statsLoading ? '...' : `${((stats?.avg_participation_rate || 0) * 100).toFixed(0)}%`}
                     </p>
                 </div>
-                <div className="space-y-1">
-                    <div className="flex items-center space-x-2 text-primary/30">
-                        <Layers size={12} />
-                        <span className="text-[9px] font-black uppercase tracking-widest">Total Rounds</span>
+                <div className="space-y-0.5">
+                    <div className="flex items-center space-x-1 text-primary/30">
+                        <Layers size={10} />
+                        <span className="text-[8px] font-black uppercase tracking-wider">Rounds</span>
                     </div>
-                    <p className="text-2xl font-black text-primary tracking-tight">
-                        {isLoading ? '...' : stats?.total_rounds || 0}
+                    <p className="text-xl font-black text-primary tracking-tight">
+                        {statsLoading ? '...' : stats?.total_rounds || 0}
                     </p>
                 </div>
             </div>
 
             {/* Config Details */}
-            <div className="bg-cream/20 rounded-2xl p-5 mb-6 relative z-10">
-                <div className="flex justify-between items-center mb-3">
-                    <p className="text-[9px] font-black text-primary/40 uppercase tracking-widest">Configuration</p>
+            <div className="bg-cream/20 rounded-xl p-3 mb-4 relative z-10">
+                <div className="flex justify-between items-center mb-2">
+                    <p className="text-[8px] font-black text-primary/40 uppercase tracking-wider">Configuration</p>
                     <div className="flex items-center space-x-1 text-primary/40">
-                        <Clock size={12} />
-                        <span className="text-[10px] font-bold">{job.round_duration_seconds / 60}m Cycles</span>
+                        <Clock size={10} />
+                        <span className="text-[9px] font-bold">{job.round_duration_seconds / 60}m Cycles</span>
                     </div>
                 </div>
-                <div className="flex items-center space-x-2 text-[10px] font-mono text-primary/60 truncate">
-                    <Hash size={12} />
-                    <span>{job.pair_address}</span>
+                <div className="flex items-center space-x-1.5 text-[9px] font-mono text-primary/60 truncate">
+                    <Hash size={10} />
+                    <span className="truncate">{job.pair_address}</span>
                 </div>
             </div>
 
             {/* Footer / Actions */}
-            <div className="flex items-center justify-between pt-6 border-t border-cream relative z-10 mt-auto">
-                <div className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span className="text-[10px] font-bold text-ink-muted/60 uppercase tracking-widest">
-                        Round #{isLoading ? '...' : stats?.current_round_number}
+            <div className="flex items-center justify-between pt-4 border-t border-cream relative z-10 mt-auto">
+                <div className="flex items-center space-x-1.5">
+                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                    <span className="text-[9px] font-bold text-ink-muted/60 uppercase tracking-wider">
+                        Round #{statsLoading ? '...' : stats?.current_round_number}
                     </span>
                 </div>
-                <div className="flex space-x-2">
-                    <Link href="/admin/leaderboard" className="p-2 text-primary/30 hover:text-primary hover:bg-cream rounded-xl transition-all">
-                        <Users size={18} />
+                <div className="flex items-center space-x-1">
+                    <Link href="/admin/leaderboard" className="p-1.5 text-primary/30 hover:text-primary hover:bg-cream rounded-lg transition-all">
+                        <Users size={16} />
                     </Link>
-                    <button className="flex items-center space-x-2 text-primary group/action hover:bg-cream px-3 py-2 rounded-xl transition-all">
-                        <span className="text-[10px] font-black uppercase tracking-widest">View Details</span>
-                        <ArrowUpRight size={14} className="group-hover/action:translate-x-0.5 group-hover/action:-translate-y-0.5 transition-transform" />
-                    </button>
+                    <Link
+                        href={`/admin/vaults/${job.job_id}`}
+                        className="flex items-center space-x-1.5 text-primary group/action hover:bg-cream px-2.5 py-1.5 rounded-lg transition-all"
+                    >
+                        <span className="text-[9px] font-black uppercase tracking-wider">Details</span>
+                        <ArrowUpRight size={12} className="group-hover/action:translate-x-0.5 group-hover/action:-translate-y-0.5 transition-transform" />
+                    </Link>
                 </div>
             </div>
 
             {/* Hover Decorator */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-10 -mt-10 group-hover:scale-110 transition-transform duration-700 pointer-events-none"></div>
+            <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full -mr-8 -mt-8 group-hover:scale-110 transition-transform duration-500 pointer-events-none"></div>
         </div>
     );
 }

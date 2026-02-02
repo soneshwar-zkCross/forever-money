@@ -6,8 +6,17 @@ Business logic for miner-related operations.
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from tortoise.expressions import Q
+import logging
 
 from validator.models.job import Job, MinerScore, Prediction, MinerParticipation
+from validator.repositories.job import JobRepository
+from validator.repositories.pool import PoolDataDB
+from validator.services.revenue import RevenueService
+from validator.services.emissions import EmissionsService
+from validator.services.price import PriceService
+from api.utils.bittensor_client import BittensorClient
+
+logger = logging.getLogger(__name__)
 
 
 class MinersService:
@@ -151,13 +160,13 @@ class MinersService:
     async def _get_participation_history(job: Job, miner_uid: int, days: int = 30) -> List[Dict[str, Any]]:
         """Get participation history for last N days"""
         start_date = datetime.utcnow().date() - timedelta(days=days)
-        
+
         participation_records = await MinerParticipation.filter(
             job=job,
             miner_uid=miner_uid,
             participation_date__gte=start_date
         ).order_by("-participation_date")
-        
+
         return [
             {
                 "date": str(p.participation_date),
@@ -167,3 +176,76 @@ class MinersService:
             }
             for p in participation_records
         ]
+
+    @staticmethod
+    async def get_miner_earnings(
+        miner_uid: int,
+        job_repository: JobRepository,
+        pool_data_db: Optional[PoolDataDB] = None,
+    ) -> Dict[str, float]:
+        """
+        Calculate estimated earnings for a miner.
+
+        Args:
+            miner_uid: Miner UID
+            job_repository: Job repository instance
+            pool_data_db: Pool data database instance
+
+        Returns:
+            Dict with estimated earnings in Alpha and USD
+        """
+        try:
+            # Initialize Bittensor client
+            metagraph = BittensorClient.get_metagraph()
+            subtensor = BittensorClient.get_subtensor()
+            netuid = BittensorClient.get_netuid()
+
+            # Create emissions service
+            revenue_service = RevenueService(job_repository, pool_data_db)
+            emissions_service = EmissionsService(
+                metagraph=metagraph,
+                subtensor=subtensor,
+                job_repository=job_repository,
+                revenue_service=revenue_service,
+            )
+
+            # Get miner aggregate scores
+            miner_scores = await emissions_service.get_miner_aggregate_scores()
+
+            if miner_uid not in miner_scores:
+                return {
+                    "estimated_earnings_alpha": 0.0,
+                    "estimated_earnings_usd": 0.0,
+                }
+
+            # Calculate total emissions available to miners
+            burn_ratio, miner_ratio = await emissions_service.calculate_emissions_split()
+            total_emission_rao = sum(metagraph.emission)
+            total_emission_alpha = float(total_emission_rao) / 1e9
+            miner_pool_alpha = total_emission_alpha * miner_ratio
+
+            # Get Alpha price
+            alpha_price_usd = await PriceService.get_alpha_price_usd(subtensor, netuid)
+
+            # Calculate this miner's earnings based on score proportion
+            total_score = sum(miner_scores.values())
+            miner_score = miner_scores[miner_uid]
+
+            if total_score > 0:
+                earnings_alpha = (miner_score / total_score) * miner_pool_alpha
+                earnings_usd = earnings_alpha * alpha_price_usd
+            else:
+                earnings_alpha = 0.0
+                earnings_usd = 0.0
+
+            return {
+                "estimated_earnings_alpha": earnings_alpha,
+                "estimated_earnings_usd": earnings_usd,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get miner earnings for UID {miner_uid}: {e}")
+            return {
+                "estimated_earnings_alpha": 0.0,
+                "estimated_earnings_usd": 0.0,
+            }

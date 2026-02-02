@@ -19,7 +19,9 @@ from api.config import (
     CORS_ORIGINS,
     DATABASE_URL
 )
-from api.routers import jobs, leaderboard, rounds, miners, executions, auth, admin
+from api.routers import jobs, leaderboard, rounds, miners, executions, auth, admin, metrics
+from api.utils.bittensor_client import BittensorClient
+from validator.utils.env import NETUID, SUBTENSOR_NETWORK
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -40,9 +42,14 @@ async def lifespan(app: FastAPI):
         ]}
     )
     logger.info("Database connected successfully")
-    
+
+    # Initialize Bittensor client
+    logger.info("Initializing Bittensor client...")
+    BittensorClient.initialize(netuid=NETUID, network=SUBTENSOR_NETWORK)
+    logger.info("Bittensor client initialized")
+
     yield
-    
+
     # Shutdown
     logger.info("Closing database connection...")
     await Tortoise.close_connections()
@@ -137,8 +144,8 @@ async def health_check():
 
 # Register routers
 # Authentication routes (public, but rate-limited)
-app.include_router(auth.router)
-app.include_router(admin.router)
+app.include_router(auth.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 
 # Data routes (protected - require authentication)
 app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
@@ -146,6 +153,7 @@ app.include_router(leaderboard.router, prefix="/api/jobs", tags=["Leaderboard"])
 app.include_router(rounds.router, prefix="/api/jobs", tags=["Rounds"])
 app.include_router(miners.router, prefix="/api/miners", tags=["Miners"])
 app.include_router(executions.router, prefix="/api/jobs", tags=["Executions"])
+app.include_router(metrics.router, prefix="/api/metrics", tags=["Metrics"])
 
 
 # Root endpoint

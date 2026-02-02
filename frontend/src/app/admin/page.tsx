@@ -4,22 +4,22 @@ import React, { useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import {
     LayoutDashboard,
-    Trophy,
-    Zap,
-    Shield,
+    Database,
     Activity,
-    RefreshCw,
+    AlertCircle,
+    CheckCircle2,
+    Clock,
+    Zap,
+    Terminal,
     Cpu,
-    ArrowUpRight,
-    ArrowDownRight,
-    Layers,
+    HardDrive,
     TrendingUp,
-    BrainCircuit,
+    Users,
+    Layers,
+    RefreshCw,
     ChevronRight,
-    Search,
-    ChevronDown,
 } from 'lucide-react';
-import { useJobs, useLeaderboard, useNetworkStats } from '@/lib/api';
+import { useJobs, useLeaderboard, useNetworkStats, useSubnetEmissions, useExecutions } from '@/lib/api';
 
 export default function DashboardPage() {
     const { data: jobs, isLoading: jobsLoading } = useJobs();
@@ -34,214 +34,264 @@ export default function DashboardPage() {
 
     const { data: stats, isLoading: statsLoading } = useNetworkStats(selectedJobId || '');
     const { data: leaderboard } = useLeaderboard(selectedJobId || '');
+    const { data: emissions, isLoading: emissionsLoading } = useSubnetEmissions();
+    const { data: executions } = useExecutions(selectedJobId || '');
 
-    // Export Logs Functionality
-    const handleExportLogs = () => {
-        if (!leaderboard || leaderboard.length === 0) return;
-
-        const headers = ['Rank', 'UID', 'Hotkey', 'Combined Score', 'Evaluation Score', 'Live Score', 'Participation Days', 'Total Evals', 'Total Live Rounds', 'Status'];
-        const csvContent = [
-            headers.join(','),
-            ...leaderboard.map((miner, index) => [
-                index + 1,
-                miner.miner_uid,
-                miner.miner_hotkey,
-                miner.combined_score,
-                miner.evaluation_score,
-                miner.live_score,
-                miner.participation_days,
-                miner.total_evaluations,
-                miner.total_live_rounds,
-                miner.is_eligible_for_live ? 'Live' : 'Eval'
-            ].join(','))
-        ].join('\n');
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `sn98_logs_${new Date().toISOString().split('T')[0]}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
-    const headerActions = (
-        <>
-            <div className="relative mr-2">
-                <select
-                    className="appearance-none bg-white border border-cream-dark pl-4 pr-10 py-2.5 rounded-xl text-[10px] font-black text-primary shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/5 uppercase tracking-widest cursor-pointer disabled:opacity-50"
-                    value={selectedJobId || ''}
-                    onChange={(e) => setSelectedJobId(e.target.value)}
-                    disabled={jobsLoading}
-                >
-                    {!jobs || jobs.length === 0 ? (
-                        <option value="">{jobsLoading ? 'Loading Vaults...' : 'No Vaults Found'}</option>
-                    ) : (
-                        jobs.map(job => (
-                            <option key={job.job_id} value={job.job_id}>{job.metadata.pair_name} Vault</option>
-                        ))
-                    )}
-                </select>
-                <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-primary/30 pointer-events-none" />
-            </div>
-            <button
-                onClick={handleExportLogs}
-                disabled={!leaderboard || leaderboard.length === 0}
-                className="px-5 py-2.5 bg-white border border-cream-dark rounded-xl text-[10px] font-black text-primary shadow-sm hover:shadow-md transition-all active:scale-95 flex items-center space-x-2 uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-                <span>Export Logs</span>
-            </button>
-            <button className="px-5 py-2.5 bg-primary text-white rounded-xl text-[10px] font-black shadow-lg shadow-primary/20 hover:-translate-y-0.5 transition-all active:translate-y-0 flex items-center space-x-2 uppercase tracking-widest">
-                <RefreshCw size={12} className="animate-spin-slow" />
-                <span>Sync Node</span>
-            </button>
-        </>
-    );
+    const activeJobs = jobs?.filter(j => j.is_active) || [];
+    const totalMiners = stats?.total_miners || 0;
+    const activeMiners = stats?.active_miners_24h || 0;
 
     return (
         <AdminLayout
-            title="Intelligence."
-            description="Global Network Overview & Individual Vault Telemetry."
+            title="Validator Dashboard"
+            description="Real-time validator monitoring and debugging console"
             icon={<LayoutDashboard size={20} />}
-            headerActions={headerActions}
         >
-            <div className="space-y-12 pb-20">
-                {/* Stats Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                    <StatsCard
-                        label="Network Miners"
-                        value={statsLoading ? '...' : (stats?.active_miners_24h || 0)}
-                        change="+12%"
-                        isUp={true}
-                        icon={<Cpu size={20} />}
-                        delay="0"
+            <div className="space-y-6 animate-fade-in pb-20">
+                {/* System Status Bar */}
+                <div className="bg-white border border-cream-dark rounded-2xl p-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-6">
+                            <StatusIndicator
+                                label="API"
+                                status="online"
+                                detail="Healthy"
+                            />
+                            <StatusIndicator
+                                label="Database"
+                                status={jobs ? "online" : "offline"}
+                                detail={`${jobs?.length || 0} jobs`}
+                            />
+                            <StatusIndicator
+                                label="Metagraph"
+                                status={emissions ? "online" : "syncing"}
+                                detail={emissionsLoading ? "Syncing..." : "Synced"}
+                            />
+                            <StatusIndicator
+                                label="Emissions"
+                                status={emissions && emissions.miner_ratio > 0 ? "online" : "offline"}
+                                detail={`${((emissions?.burn_ratio || 0) * 100).toFixed(0)}% burn`}
+                            />
+                        </div>
+                        <div className="text-xs text-primary/40 font-mono">
+                            Last updated: {new Date().toLocaleTimeString()}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Critical Metrics Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <MetricCard
+                        label="Active Vaults"
+                        value={activeJobs.length.toString()}
+                        change={`${jobs?.length || 0} total`}
+                        icon={<Layers size={16} />}
+                        trend="neutral"
                     />
-                    <StatsCard
-                        label="Avg Performance"
-                        value={statsLoading ? '...' : `${((stats?.avg_participation_rate || 0) * 100).toFixed(1)}%`}
-                        change="+2.4%"
-                        isUp={true}
-                        icon={<Activity size={20} />}
-                        delay="100"
+                    <MetricCard
+                        label="Active Miners (24h)"
+                        value={activeMiners.toString()}
+                        change={`${totalMiners} total registered`}
+                        icon={<Users size={16} />}
+                        trend={activeMiners > 0 ? "up" : "neutral"}
                     />
-                    <StatsCard
-                        label="Global Load"
-                        value={statsLoading ? '...' : (stats?.current_round_number || 0)}
-                        change="Stable"
-                        isUp={true}
-                        icon={<Layers size={20} />}
-                        delay="200"
+                    <MetricCard
+                        label="Current Round"
+                        value={`#${stats?.current_round_number || 0}`}
+                        change={`${stats?.total_rounds || 0} completed`}
+                        icon={<Activity size={16} />}
+                        trend="neutral"
                     />
-                    <StatsCard
-                        label="Safety Status"
-                        value="Healthy"
-                        change="Verified"
-                        isUp={true}
-                        icon={<Shield size={20} />}
-                        delay="300"
+                    <MetricCard
+                        label="Subnet Emissions"
+                        value={`${emissions?.total_emissions_alpha.toFixed(2) || '0'} α`}
+                        change={`$${emissions?.total_emissions_usd.toFixed(2) || '0'}`}
+                        icon={<TrendingUp size={16} />}
+                        trend={emissions && emissions.miner_ratio > 0 ? "up" : "neutral"}
                     />
                 </div>
 
-                {/* Content Grid */}
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
-                    {/* Intelligence Visualization */}
-                    <div className="xl:col-span-2 relative group h-[480px]">
-                        <div className="absolute inset-0 bg-primary/5 rounded-[48px] blur-2xl group-hover:bg-primary/10 transition-all duration-700"></div>
-                        <div className="relative bg-white h-full rounded-[48px] border border-cream-dark shadow-sm p-12 overflow-hidden flex flex-col justify-between">
-                            <div className="flex items-center justify-between relative z-10">
-                                <div className="space-y-1">
-                                    <h3 className="text-2xl font-black text-primary tracking-tight">Competitive Spread</h3>
-                                    <p className="text-sm text-ink-muted/40 font-bold uppercase tracking-widest">Top 10 Miner Score Comparison</p>
-                                </div>
-                                <div className="flex space-x-2">
-                                    <div className="flex items-center space-x-2 px-4 py-2 bg-cream/50 rounded-xl">
-                                        <div className="w-2 h-2 rounded-full bg-primary"></div>
-                                        <span className="text-[10px] font-black text-primary uppercase tracking-widest">Active Emission</span>
-                                    </div>
-                                </div>
+                {/* Main Content Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Vault Health */}
+                    <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden">
+                        <div className="px-6 py-4 border-b border-cream-dark flex items-center justify-between">
+                            <h3 className="text-sm font-black text-primary uppercase tracking-wider">Vault Status</h3>
+                            <div className="flex items-center space-x-2">
+                                <span className="text-xs text-primary/40 font-mono">{activeJobs.length} active</span>
                             </div>
-
-                            {/* Real Graph Visualization using Leaderboard Data */}
-                            <div className="flex-1 flex items-end justify-between px-4 pb-4 pt-16 relative z-10">
-                                {(leaderboard?.length ? leaderboard.slice(0, 10) : Array(10).fill({ combined_score: 0 })).map((miner, i) => {
-                                    const maxScore = leaderboard ? Math.max(...leaderboard.map(m => m.combined_score)) : 1;
-                                    const height = miner.combined_score > 0 ? (miner.combined_score / maxScore) * 100 : 20;
-                                    return (
-                                        <div key={i} className="w-10 rounded-2xl bg-cream-dark hover:bg-primary transition-all duration-500 cursor-pointer group/bar relative" style={{ height: `${height}%` }}>
-                                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-primary text-white text-[10px] font-black px-3 py-2 rounded-xl opacity-0 group-hover/bar:opacity-100 transition-all transform translate-y-2 group-hover/bar:translate-y-0 shadow-xl z-30 whitespace-nowrap pointer-events-none">
-                                                <div className="flex flex-col items-center">
-                                                    <span className="text-white/40 text-[8px] uppercase mb-0.5">UID {miner.miner_uid}</span>
-                                                    <span>{miner.combined_score.toFixed(4)} pts</span>
-                                                </div>
-                                                <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-primary rotate-45 -translate-y-1"></div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            <div className="flex items-center justify-between pt-10 border-t border-cream-dark relative z-10">
-                                <div className="flex items-center space-x-8">
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] font-black text-primary/20 uppercase tracking-widest">Spread Range</span>
-                                        <span className="text-lg font-black text-primary">
-                                            {leaderboard?.length ? (leaderboard[0].combined_score - leaderboard[Math.min(leaderboard.length - 1, 9)].combined_score).toFixed(2) : '0.00'} pts
-                                        </span>
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] font-black text-primary/20 uppercase tracking-widest">Efficiency</span>
-                                        <span className="text-lg font-black text-primary">High</span>
-                                    </div>
+                        </div>
+                        <div className="p-6 space-y-3 max-h-80 overflow-y-auto">
+                            {jobsLoading ? (
+                                <div className="text-center py-8 text-primary/40 text-sm">Loading vaults...</div>
+                            ) : activeJobs.length === 0 ? (
+                                <div className="text-center py-8 space-y-2">
+                                    <AlertCircle size={32} className="mx-auto text-orange-500" />
+                                    <p className="text-sm font-bold text-primary">No Active Vaults</p>
+                                    <p className="text-xs text-primary/40">Start validator to create jobs</p>
                                 </div>
-                                <button className="flex items-center space-x-2 text-primary group/more" onClick={() => window.location.href = '/admin/leaderboard'}>
-                                    <span className="text-xs font-black uppercase tracking-widest">View Full Ranks</span>
-                                    <ArrowUpRight size={16} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                                </button>
-                            </div>
+                            ) : (
+                                activeJobs.map(job => (
+                                    <VaultStatusRow
+                                        key={job.job_id}
+                                        name={job.metadata.pair_name}
+                                        address={job.sn_liquidity_manager_address}
+                                        status="active"
+                                        roundDuration={job.round_duration_seconds}
+                                    />
+                                ))
+                            )}
                         </div>
                     </div>
 
-                    {/* Secondary Stats/Cards */}
-                    <div className="space-y-8 h-full">
-                        {/* Current Winner/Top Performer Card */}
-                        <div className="bg-amber-500 p-8 rounded-[48px] text-white flex flex-col justify-between h-[224px] shadow-xl shadow-amber-500/20 group cursor-pointer hover:-translate-y-1 transition-all">
-                            <div className="flex justify-between items-start">
-                                <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-md text-white">
-                                    <Trophy size={24} />
-                                </div>
-                                <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-3 py-1 rounded-full">Top Performer</span>
-                            </div>
-                            <div className="space-y-1">
-                                <p className="text-[10px] font-black text-white/60 uppercase tracking-widest">UID {leaderboard?.[0]?.miner_uid || '??'}</p>
-                                <h4 className="text-2xl font-black tracking-tight leading-none truncate">
-                                    {leaderboard?.[0]?.miner_hotkey ? `${leaderboard[0].miner_hotkey.substring(0, 12)}...` : 'Searching...'}
-                                </h4>
-                                <div className="flex items-center space-x-2 pt-2">
-                                    <TrendingUp size={14} />
-                                    <span className="text-xs font-bold leading-none">{leaderboard?.[0]?.combined_score.toFixed(4) || '0.000'} Score</span>
-                                </div>
-                            </div>
+                    {/* Emissions Debug */}
+                    <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden">
+                        <div className="px-6 py-4 border-b border-cream-dark flex items-center justify-between">
+                            <h3 className="text-sm font-black text-primary uppercase tracking-wider">Emissions Breakdown</h3>
+                            <span className="text-xs text-primary/40 font-mono">
+                                Ratio: {emissions?.profit_ratio.toFixed(2) || '0.00'}x
+                            </span>
                         </div>
+                        <div className="p-6 space-y-4">
+                            {emissionsLoading ? (
+                                <div className="text-center py-8 text-primary/40 text-sm">Loading emissions...</div>
+                            ) : !emissions ? (
+                                <div className="text-center py-8 text-primary/40 text-sm">No emissions data</div>
+                            ) : (
+                                <>
+                                    <DebugRow label="Total Emissions" value={`${emissions.total_emissions_alpha.toFixed(4)} α`} subtext={`$${emissions.total_emissions_usd.toFixed(2)} USD`} />
+                                    <DebugRow label="Miner Allocation" value={`${emissions.miner_alpha.toFixed(4)} α`} subtext={`${(emissions.miner_ratio * 100).toFixed(1)}% of total`} />
+                                    <DebugRow label="Burn (UID 0)" value={`${emissions.burn_alpha.toFixed(4)} α`} subtext={`${(emissions.burn_ratio * 100).toFixed(1)}% of total`} />
+                                    <DebugRow label="Alpha Price" value={`$${emissions.alpha_price_usd.toFixed(4)}`} subtext="Current market price" />
+                                    <DebugRow label="Vault Revenue (30d)" value={`$${emissions.vault_revenue_usd.toFixed(2)}`} subtext="Total subnet revenue" />
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
 
-                        {/* Network Multiplier Card - Replaces Integrity Guard */}
-                        <div className="bg-white p-8 rounded-[48px] border border-cream-dark shadow-sm flex flex-col justify-between h-[224px] group cursor-pointer hover:shadow-lg transition-all">
-                            <div className="flex justify-between items-start">
-                                <div className="p-3 bg-primary/5 text-primary rounded-2xl group-hover:bg-primary group-hover:text-white transition-all">
-                                    <Zap size={24} />
-                                </div>
-                                <span className="text-[10px] font-black uppercase tracking-widest text-primary/40 bg-cream px-3 py-1 rounded-full">Protocol Config</span>
-                            </div>
-                            <div className="space-y-1">
-                                <h4 className="text-2xl font-black text-primary tracking-tight leading-none">Emission Multiplier</h4>
-                                <p className="text-xs text-ink-muted/40 font-medium tracking-wide">Current profit ratio defined by validator settings.</p>
-                                <div className="flex items-center space-x-3 pt-3">
-                                    <div className="px-3 py-1.5 bg-primary/5 rounded-xl text-primary font-black text-lg">1.0x</div>
-                                    <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest">Optimal</span>
-                                </div>
-                            </div>
+                {/* Recent Activity Feed */}
+                <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden">
+                    <div className="px-6 py-4 border-b border-cream-dark flex items-center justify-between">
+                        <h3 className="text-sm font-black text-primary uppercase tracking-wider">Recent Executions</h3>
+                        <div className="flex items-center space-x-2">
+                            <RefreshCw size={14} className="text-primary/40" />
+                            <span className="text-xs text-primary/40 font-mono">Auto-refresh: 5s</span>
                         </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-cream/20">
+                                <tr className="text-[10px] font-black text-primary/40 uppercase tracking-wider">
+                                    <th className="px-6 py-3 text-left">Round</th>
+                                    <th className="px-6 py-3 text-left">Miner UID</th>
+                                    <th className="px-6 py-3 text-left">Hotkey</th>
+                                    <th className="px-6 py-3 text-left">TX Hash</th>
+                                    <th className="px-6 py-3 text-left">Status</th>
+                                    <th className="px-6 py-3 text-left">Time</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-cream/50">
+                                {!executions || executions.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} className="px-6 py-8 text-center text-sm text-primary/40">
+                                            No executions yet. Waiting for rounds to complete...
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    executions.slice(0, 10).map((exec) => (
+                                        <tr key={exec.execution_id} className="hover:bg-cream/10 transition-colors">
+                                            <td className="px-6 py-3 text-sm font-mono text-primary">#{exec.round_number}</td>
+                                            <td className="px-6 py-3 text-sm font-bold text-primary">{exec.miner_uid}</td>
+                                            <td className="px-6 py-3 text-xs font-mono text-primary/60">
+                                                {exec.miner_hotkey.slice(0, 12)}...
+                                            </td>
+                                            <td className="px-6 py-3 text-xs font-mono text-primary/60">
+                                                {exec.tx_hash ? (
+                                                    <a
+                                                        href={`https://basescan.org/tx/${exec.tx_hash}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="hover:text-primary transition-colors flex items-center space-x-1"
+                                                    >
+                                                        <span>{exec.tx_hash.slice(0, 10)}...</span>
+                                                        <ChevronRight size={12} />
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-primary/20">Pending</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-3">
+                                                <StatusBadge status={exec.tx_status || 'pending'} />
+                                            </td>
+                                            <td className="px-6 py-3 text-xs text-primary/40 font-mono">
+                                                {new Date(exec.executed_at).toLocaleTimeString()}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {/* Miner Leaderboard Summary */}
+                <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden">
+                    <div className="px-6 py-4 border-b border-cream-dark flex items-center justify-between">
+                        <h3 className="text-sm font-black text-primary uppercase tracking-wider">Top Miners (Current Vault)</h3>
+                        <a
+                            href="/admin/leaderboard"
+                            className="text-xs text-primary hover:underline font-bold flex items-center space-x-1"
+                        >
+                            <span>View Full Leaderboard</span>
+                            <ChevronRight size={12} />
+                        </a>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-cream/20">
+                                <tr className="text-[10px] font-black text-primary/40 uppercase tracking-wider">
+                                    <th className="px-6 py-3 text-left">Rank</th>
+                                    <th className="px-6 py-3 text-left">UID</th>
+                                    <th className="px-6 py-3 text-left">Hotkey</th>
+                                    <th className="px-6 py-3 text-right">Combined Score</th>
+                                    <th className="px-6 py-3 text-right">Eval Score</th>
+                                    <th className="px-6 py-3 text-right">Live Score</th>
+                                    <th className="px-6 py-3 text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-cream/50">
+                                {!leaderboard || leaderboard.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={7} className="px-6 py-8 text-center text-sm text-primary/40">
+                                            No miners yet. Waiting for predictions...
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    leaderboard.slice(0, 5).map((miner, idx) => (
+                                        <tr key={miner.miner_uid} className="hover:bg-cream/10 transition-colors">
+                                            <td className="px-6 py-3 text-sm font-black text-primary">#{idx + 1}</td>
+                                            <td className="px-6 py-3 text-sm font-bold text-primary">{miner.miner_uid}</td>
+                                            <td className="px-6 py-3 text-xs font-mono text-primary/60">
+                                                {miner.miner_hotkey.slice(0, 16)}...
+                                            </td>
+                                            <td className="px-6 py-3 text-sm font-bold text-primary text-right">
+                                                {miner.combined_score.toFixed(4)}
+                                            </td>
+                                            <td className="px-6 py-3 text-xs text-green-600 text-right font-mono">
+                                                {miner.evaluation_score.toFixed(4)}
+                                            </td>
+                                            <td className="px-6 py-3 text-xs text-blue-600 text-right font-mono">
+                                                {miner.live_score.toFixed(4)}
+                                            </td>
+                                            <td className="px-6 py-3 text-center">
+                                                <StatusBadge status={miner.is_eligible_for_live ? 'success' : 'pending'} />
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -249,22 +299,102 @@ export default function DashboardPage() {
     );
 }
 
-function StatsCard({ label, value, change, isUp, icon, delay }: { label: string, value: string | number, change: string, isUp: boolean, icon: React.ReactNode, delay: string }) {
+function StatusIndicator({ label, status, detail }: { label: string, status: 'online' | 'offline' | 'syncing', detail: string }) {
+    const colors = {
+        online: 'bg-green-500',
+        offline: 'bg-red-500',
+        syncing: 'bg-yellow-500'
+    };
+
     return (
-        <div className={`bg-white p-8 rounded-[40px] border border-cream-dark shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-500 group animate-slide-up`} style={{ animationDelay: `${delay}ms` }}>
-            <div className="flex justify-between items-start mb-10">
-                <div className="p-3.5 bg-cream/80 text-primary rounded-2xl group-hover:bg-primary group-hover:text-white transition-all duration-500">
+        <div className="flex items-center space-x-2">
+            <div className={`w-2 h-2 rounded-full ${colors[status]} ${status === 'online' ? 'animate-pulse' : ''}`}></div>
+            <div>
+                <p className="text-xs font-black text-primary uppercase tracking-wider">{label}</p>
+                <p className="text-[10px] text-primary/40 font-mono">{detail}</p>
+            </div>
+        </div>
+    );
+}
+
+function MetricCard({ label, value, change, icon, trend }: {
+    label: string;
+    value: string;
+    change: string;
+    icon: React.ReactNode;
+    trend: 'up' | 'down' | 'neutral';
+}) {
+    const trendColors = {
+        up: 'text-green-600',
+        down: 'text-red-600',
+        neutral: 'text-primary/40'
+    };
+
+    return (
+        <div className="bg-white border border-cream-dark rounded-2xl p-4">
+            <div className="flex items-start justify-between mb-3">
+                <div className="p-2 bg-cream rounded-lg text-primary/40">
                     {icon}
-                </div>
-                <div className={`flex items-center space-x-1 px-3 py-1 rounded-full text-[10px] font-black ${isUp ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
-                    {isUp ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
-                    <span>{change}</span>
                 </div>
             </div>
             <div className="space-y-1">
-                <p className="text-[10px] font-black text-primary/20 uppercase tracking-[0.2em]">{label}</p>
-                <p className="text-4xl font-black text-primary tracking-tighter">{value}</p>
+                <p className="text-[10px] font-black text-primary/40 uppercase tracking-wider">{label}</p>
+                <p className="text-2xl font-black text-primary tracking-tight">{value}</p>
+                <p className={`text-xs font-mono ${trendColors[trend]}`}>{change}</p>
             </div>
         </div>
+    );
+}
+
+function VaultStatusRow({ name, address, status, roundDuration }: {
+    name: string;
+    address: string;
+    status: 'active' | 'paused' | 'error';
+}) {
+    const statusColors = {
+        active: 'bg-green-500',
+        paused: 'bg-yellow-500',
+        error: 'bg-red-500'
+    };
+
+    return (
+        <div className="flex items-center justify-between p-3 bg-cream/20 rounded-xl hover:bg-cream/40 transition-colors">
+            <div className="flex items-center space-x-3">
+                <div className={`w-2 h-2 rounded-full ${statusColors[status]}`}></div>
+                <div>
+                    <p className="text-sm font-bold text-primary">{name}</p>
+                    <p className="text-[10px] font-mono text-primary/40">{address.slice(0, 12)}...{address.slice(-8)}</p>
+                </div>
+            </div>
+            <div className="text-right">
+                <p className="text-xs font-mono text-primary/60">{roundDuration}s rounds</p>
+            </div>
+        </div>
+    );
+}
+
+function DebugRow({ label, value, subtext }: { label: string; value: string; subtext: string }) {
+    return (
+        <div className="flex items-center justify-between py-2 border-b border-cream/50 last:border-0">
+            <div>
+                <p className="text-xs font-bold text-primary">{label}</p>
+                <p className="text-[10px] text-primary/40">{subtext}</p>
+            </div>
+            <p className="text-sm font-mono font-bold text-primary">{value}</p>
+        </div>
+    );
+}
+
+function StatusBadge({ status }: { status: string }) {
+    const styles: Record<string, string> = {
+        success: 'bg-green-100 text-green-700',
+        pending: 'bg-yellow-100 text-yellow-700',
+        failed: 'bg-red-100 text-red-700',
+    };
+
+    return (
+        <span className={`px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${styles[status] || 'bg-gray-100 text-gray-600'}`}>
+            {status}
+        </span>
     );
 }

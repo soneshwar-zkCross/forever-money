@@ -35,6 +35,10 @@ class JobStatsResponse(BaseModel):
     active_miners_24h: int
     avg_participation_rate: float
     current_round_number: int
+    revenue_usd: Optional[float] = None
+    revenue_token0: Optional[float] = None
+    revenue_token1: Optional[float] = None
+    avg_revenue_per_round: Optional[float] = None
 
 
 class JobDetailResponse(JobResponse):
@@ -140,6 +144,8 @@ class MinerProfileResponse(BaseModel):
     total_rounds: int
     global_win_rate: float
     jobs: List[MinerJobPerformance]
+    estimated_earnings_alpha: Optional[float] = None
+    estimated_earnings_usd: Optional[float] = None
 
 
 class ScoreHistoryItem(BaseModel):
@@ -191,6 +197,85 @@ class ExecutionListResponse(BaseModel):
     job_id: str
     total_executions: int
     executions: List[LiveExecutionResponse]
+
+
+# Metrics Models
+class VaultRevenueResponse(BaseModel):
+    """Revenue for a single vault"""
+    job_id: str
+    vault_address: str
+    pair_address: str
+    revenue_usd: float
+    revenue_token0: float
+    revenue_token1: float
+
+
+class SubnetRevenueResponse(BaseModel):
+    """Subnet-wide revenue metrics"""
+    total_revenue_usd: float
+    lookback_days: int
+    vault_count: int
+    vault_revenues: List[VaultRevenueResponse]
+    updated_at: str
+    error: Optional[str] = None
+
+
+class SubnetEmissionsResponse(BaseModel):
+    """Subnet emissions breakdown"""
+    total_emissions_alpha: float
+    total_emissions_usd: float
+    burn_ratio: float
+    miner_ratio: float
+    burn_alpha: float
+    burn_usd: float
+    miner_alpha: float
+    miner_usd: float
+    alpha_price_usd: float
+    vault_revenue_usd: float
+    profit_ratio: float
+    updated_at: str
+    error: Optional[str] = None
+
+
+class TopEarnerResponse(BaseModel):
+    """Top earning miner"""
+    miner_uid: int
+    miner_hotkey: str
+    score: float
+    estimated_earnings_alpha: float
+    estimated_earnings_usd: float
+    score_percentage: float
+
+
+class PairJobResponse(BaseModel):
+    """Job info within pair performance"""
+    job_id: str
+    vault_address: str
+    revenue_usd: float
+    miner_count: int
+
+
+class PairPerformanceResponse(BaseModel):
+    """Performance metrics for a trading pair"""
+    pair_address: str
+    vault_count: int
+    total_revenue_usd: float
+    total_revenue_token0: float
+    total_revenue_token1: float
+    total_miners: int
+    jobs: List[PairJobResponse]
+
+
+class JobRevenueDetailResponse(BaseModel):
+    """Detailed revenue for a job"""
+    job_id: str
+    vault_address: str
+    pair_address: str
+    revenue_usd: float
+    revenue_token0: float
+    revenue_token1: float
+    lookback_days: int
+    updated_at: str
 
 
 # Error Response

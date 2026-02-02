@@ -21,6 +21,17 @@
         "write",
         "manage_admins"
       ]
+    },
+    {
+      "wallet_address": "0x6428cD757a407c9e18dFb5a51A39CD0C4e27C433",
+      "name": "Admin 3",
+      "added_by": "system",
+      "added_at": "2026-01-31T12:00:00Z",
+      "permissions": [
+        "read",
+        "write",
+        "manage_admins"
+      ]
     }
   ],
   "version": "1.0.0",

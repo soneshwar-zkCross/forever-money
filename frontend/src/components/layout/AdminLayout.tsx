@@ -8,10 +8,13 @@ import {
     LogOut,
     Bell,
     UserCircle,
-    Monitor
+    Monitor,
+    Loader2 // Import Loader2
 } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
+import { useEffect } from 'react';
 
 interface AdminLayoutProps {
     children: React.ReactNode;
@@ -23,12 +26,32 @@ interface AdminLayoutProps {
 
 const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, title, description, icon }) => {
     const pathname = usePathname();
+    const router = useRouter();
+    const { isAuthenticated, loading, logout, user } = useAuth(); // Destructure logout and user too
 
     const isActive = (path: string) => {
         if (path === '/admin' && pathname === '/admin') return true;
         if (path !== '/admin' && pathname?.startsWith(path)) return true;
         return false;
     };
+
+    useEffect(() => {
+        if (!loading && !isAuthenticated) {
+            router.push('/');
+        }
+    }, [loading, isAuthenticated, router]);
+
+    if (loading) {
+        return (
+            <div className="h-screen w-full flex items-center justify-center bg-cream">
+                <Loader2 className="animate-spin text-primary opacity-20" size={48} />
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) {
+        return null; // Will redirect via useEffect
+    }
 
     return (
         <div className="flex h-screen bg-cream text-primary selection:bg-primary-light selection:text-white">
@@ -56,7 +79,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, titl
                 </nav>
 
                 <div className="p-4 mt-auto">
-                    <button className="flex items-center w-full space-x-3 px-4 py-3.5 text-red-500 hover:bg-red-50 rounded-2xl transition-all duration-300 font-bold text-sm group">
+                    <button onClick={logout} className="flex items-center w-full space-x-3 px-4 py-3.5 text-red-500 hover:bg-red-50 rounded-2xl transition-all duration-300 font-bold text-sm group">
                         <LogOut size={18} className="group-hover:-translate-x-1 transition-transform" />
                         <span>Logout</span>
                     </button>
@@ -108,8 +131,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, titl
 
                         <div className="flex items-center space-x-4 pl-2">
                             <div className="text-right hidden md:block">
-                                <p className="text-xs font-black text-primary uppercase tracking-wider leading-none mb-1">Validator 01</p>
-                                <p className="text-[10px] font-mono text-ink-muted/40 uppercase leading-none">5H3j...Bbjm</p>
+                                <p className="text-xs font-black text-primary uppercase tracking-wider leading-none mb-1">Current Admin</p>
+                                <p className="text-[10px] font-mono text-ink-muted/40 uppercase leading-none">
+                                    {user?.wallet_address ? `${user.wallet_address.slice(0, 6)}...${user.wallet_address.slice(-4)}` : '...'}
+                                </p>
                             </div>
                             <div className="w-10 h-10 rounded-2xl bg-white border border-cream-dark flex items-center justify-center text-primary shadow-sm hover:shadow-md transition-shadow cursor-pointer">
                                 <UserCircle size={22} />

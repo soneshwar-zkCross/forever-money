@@ -12,11 +12,28 @@ from api.models.responses import (
     JobResponse,
     JobDetailResponse,
     JobStatsResponse,
+    JobRevenueDetailResponse,
     ErrorResponse
 )
 from api.services.jobs_service import JobService
+from validator.repositories.pool import PoolDataDB
 
 router = APIRouter()
+
+# Lazy initialization of pool data DB
+_pool_data_db: Optional[PoolDataDB] = None
+
+
+def get_pool_data_db() -> Optional[PoolDataDB]:
+    """Get or create pool data DB instance."""
+    global _pool_data_db
+    if _pool_data_db is None:
+        try:
+            _pool_data_db = PoolDataDB()
+        except Exception:
+            # Pool DB might not be available in all environments
+            _pool_data_db = None
+    return _pool_data_db
 
 
 @router.get("/", response_model=JobListResponse)
@@ -91,17 +108,49 @@ async def get_job(job_id: str):
 
 
 @router.get("/{job_id}/stats", response_model=JobStatsResponse)
-async def get_job_stats(job_id: str):
+async def get_job_stats(
+    job_id: str,
+    include_revenue: bool = Query(True, description="Include revenue metrics")
+):
     """
     Get aggregated statistics for a job
-    
+
     - **job_id**: Unique job identifier
+    - **include_revenue**: Include revenue metrics in response (default: True)
     """
     job = await JobService.get_job_by_id(job_id)
-    
+
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    
+
     stats = await JobService.get_job_stats(job)
-    
+
+    # Add revenue metrics if requested
+    if include_revenue:
+        pool_db = get_pool_data_db()
+        revenue = await JobService.get_job_revenue(job, pool_db)
+        stats.update(revenue)
+
     return JobStatsResponse(**stats)
+
+
+@router.get("/{job_id}/revenue", response_model=JobRevenueDetailResponse)
+async def get_job_revenue(
+    job_id: str,
+    lookback_days: int = Query(30, description="Number of days to look back", ge=1, le=365)
+):
+    """
+    Get detailed revenue metrics for a job
+
+    - **job_id**: Unique job identifier
+    - **lookback_days**: Number of days to look back for revenue calculation (default: 30)
+    """
+    job = await JobService.get_job_by_id(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    pool_db = get_pool_data_db()
+    revenue_detail = await JobService.get_job_revenue_detail(job, pool_db, lookback_days)
+
+    return JobRevenueDetailResponse(**revenue_detail)

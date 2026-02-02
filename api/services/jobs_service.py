@@ -7,8 +7,12 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from tortoise.expressions import Q
 from tortoise.functions import Count
+import logging
 
 from validator.models.job import Job, Round, MinerScore, RoundStatus
+from validator.repositories.pool import PoolDataDB
+
+logger = logging.getLogger(__name__)
 
 
 class JobService:
@@ -82,19 +86,19 @@ class JobService:
             job=job,
             status=RoundStatus.ACTIVE
         ).first()
-        
+
         if not current_round:
             return None
-        
+
         # Calculate time remaining
         now = datetime.utcnow()
         time_remaining = (current_round.round_deadline - now).total_seconds()
-        
+
         # Calculate progress
         total_duration = (current_round.round_deadline - current_round.start_time).total_seconds()
         elapsed = (now - current_round.start_time).total_seconds()
         progress_percent = min(100, (elapsed / total_duration * 100)) if total_duration > 0 else 0
-        
+
         return {
             "round_id": current_round.round_id,
             "round_type": current_round.round_type.value,
@@ -104,4 +108,108 @@ class JobService:
             "status": current_round.status.value,
             "time_remaining_seconds": max(0, int(time_remaining)),
             "progress_percent": progress_percent,
+        }
+
+    @staticmethod
+    async def get_job_revenue(
+        job: Job,
+        pool_data_db: Optional[PoolDataDB] = None,
+        lookback_days: int = 30,
+    ) -> Dict[str, float]:
+        """
+        Get revenue metrics for a job.
+
+        Args:
+            job: Job instance
+            pool_data_db: Pool data database instance
+            lookback_days: Number of days to look back
+
+        Returns:
+            Dict with revenue metrics
+        """
+        if not pool_data_db:
+            logger.warning("PoolDataDB not available, returning 0 revenue")
+            return {
+                "revenue_usd": 0.0,
+                "revenue_token0": 0.0,
+                "revenue_token1": 0.0,
+                "avg_revenue_per_round": 0.0,
+            }
+
+        try:
+            # Get vault fees from pool data
+            vault_fees = await pool_data_db.get_miner_vault_fees(
+                sn_liquditiy_manager_addresses=[job.sn_liquidity_manager_address],
+                start_block=0,
+                end_block=999999999,
+            )
+
+            if job.sn_liquidity_manager_address not in vault_fees:
+                return {
+                    "revenue_usd": 0.0,
+                    "revenue_token0": 0.0,
+                    "revenue_token1": 0.0,
+                    "avg_revenue_per_round": 0.0,
+                }
+
+            fees = vault_fees[job.sn_liquidity_manager_address]
+            fee0_wei = fees.get("fee0", 0.0)
+            fee1_wei = fees.get("fee1", 0.0)
+
+            # Convert from wei to tokens
+            fee0_tokens = float(fee0_wei) / 1e18
+            fee1_tokens = float(fee1_wei) / 1e18
+
+            # Simplified USD conversion (token0 = $1, token1 = $1)
+            # TODO: Use actual token prices from PriceService
+            revenue_usd = fee0_tokens + fee1_tokens
+
+            # Calculate average revenue per round
+            total_rounds = await Round.filter(job=job).count()
+            avg_revenue_per_round = revenue_usd / total_rounds if total_rounds > 0 else 0.0
+
+            return {
+                "revenue_usd": revenue_usd,
+                "revenue_token0": fee0_tokens,
+                "revenue_token1": fee1_tokens,
+                "avg_revenue_per_round": avg_revenue_per_round,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get job revenue for {job.job_id}: {e}")
+            return {
+                "revenue_usd": 0.0,
+                "revenue_token0": 0.0,
+                "revenue_token1": 0.0,
+                "avg_revenue_per_round": 0.0,
+            }
+
+    @staticmethod
+    async def get_job_revenue_detail(
+        job: Job,
+        pool_data_db: Optional[PoolDataDB] = None,
+        lookback_days: int = 30,
+    ) -> Dict[str, Any]:
+        """
+        Get detailed revenue breakdown for a job.
+
+        Args:
+            job: Job instance
+            pool_data_db: Pool data database instance
+            lookback_days: Number of days to look back
+
+        Returns:
+            Dict with detailed revenue metrics
+        """
+        revenue = await JobService.get_job_revenue(job, pool_data_db, lookback_days)
+
+        return {
+            "job_id": job.job_id,
+            "vault_address": job.sn_liquidity_manager_address,
+            "pair_address": job.pair_address,
+            "revenue_usd": revenue["revenue_usd"],
+            "revenue_token0": revenue["revenue_token0"],
+            "revenue_token1": revenue["revenue_token1"],
+            "lookback_days": lookback_days,
+            "updated_at": datetime.utcnow().isoformat(),
         }

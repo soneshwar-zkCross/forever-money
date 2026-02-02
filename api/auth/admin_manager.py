@@ -45,19 +45,29 @@ class AdminWalletManager:
         with open(self.wallets_file, 'w') as f:
             json.dump(data, f, indent=2)
     
+    def _normalize_address(self, address: str) -> str:
+        """Normalize address for comparison (lowercase if EVM/0x)"""
+        if address and address.startswith("0x"):
+            return address.lower()
+        return address
+
     def is_admin(self, wallet_address: str) -> bool:
         """Check if wallet is in admin list"""
         data = self.load_wallets()
+        normalized_input = self._normalize_address(wallet_address)
+        
         return any(
-            admin["wallet_address"] == wallet_address
+            self._normalize_address(admin["wallet_address"]) == normalized_input
             for admin in data.get("admins", [])
         )
     
     def get_admin(self, wallet_address: str) -> Optional[dict]:
         """Get admin wallet details"""
         data = self.load_wallets()
+        normalized_input = self._normalize_address(wallet_address)
+        
         for admin in data.get("admins", []):
-            if admin["wallet_address"] == wallet_address:
+            if self._normalize_address(admin["wallet_address"]) == normalized_input:
                 return admin
         return None
     

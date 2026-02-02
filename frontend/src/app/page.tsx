@@ -5,24 +5,27 @@ import { Logo } from '@/components/ui/Logo';
 import { ShieldCheck, ArrowRight, Wallet, Cpu, Loader2, AlertCircle } from 'lucide-react';
 import Image from 'next/image';
 
+import { useAuth } from '@/context/AuthContext';
+
 export default function LoginPage() {
+  const { login } = useAuth();
   const [connecting, setConnecting] = useState(false);
   const [walletType, setWalletType] = useState<null | 'substrate' | 'evm'>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleConnect = (type: 'substrate' | 'evm') => {
+  const handleConnect = async (type: 'substrate' | 'evm') => {
     setError(null);
     setConnecting(true);
     setWalletType(type);
 
-    // Simulate connection for UI demonstration
-    setTimeout(() => {
+    try {
+      await login(type);
+      // Redirect happens in login()
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Authentication failed. Please check console.');
       setConnecting(false);
-      setError(`Connection to ${type === 'substrate' ? 'Polkadot' : 'EVM'} extension failed. Please ensure the extension is installed and unlocked.`);
-
-      // Auto-clear error after 5s
-      setTimeout(() => setError(null), 5000);
-    }, 2000);
+    }
   };
 
   return (
