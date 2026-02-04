@@ -13,6 +13,8 @@ from api.models.responses import (
     JobDetailResponse,
     JobStatsResponse,
     JobRevenueDetailResponse,
+    PoolPriceResponse,
+    AllRoundsResponse,
     ErrorResponse
 )
 from api.services.jobs_service import JobService
@@ -154,3 +156,47 @@ async def get_job_revenue(
     revenue_detail = await JobService.get_job_revenue_detail(job, pool_db, lookback_days)
 
     return JobRevenueDetailResponse(**revenue_detail)
+
+
+@router.get("/{job_id}/price", response_model=PoolPriceResponse)
+async def get_pool_price(job_id: str):
+    """
+    Get pool price statistics from swap events
+
+    - **job_id**: Unique job identifier
+    """
+    job = await JobService.get_job_by_id(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    price_stats = await JobService.get_pool_price(job)
+
+    return PoolPriceResponse(**price_stats)
+
+
+@router.get("/{job_id}/rounds", response_model=AllRoundsResponse)
+async def get_all_rounds(
+    job_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0)
+):
+    """
+    Get all rounds (evaluation and live) with execution data for live rounds
+
+    - **job_id**: Unique job identifier
+    - **limit**: Number of rounds to return (default: 50)
+    - **offset**: Pagination offset
+    """
+    job = await JobService.get_job_by_id(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    rounds, total_count = await JobService.get_all_rounds_with_executions(job, limit, offset)
+
+    return AllRoundsResponse(
+        job_id=job_id,
+        total_rounds=total_count,
+        rounds=rounds
+    )

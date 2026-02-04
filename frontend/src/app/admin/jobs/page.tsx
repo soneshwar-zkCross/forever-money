@@ -18,7 +18,15 @@ import {
     AlertCircle,
     DollarSign
 } from 'lucide-react';
-import { useJobs, useNetworkStats, useJobRevenue, Job } from '@/lib/api';
+import {
+    useJobs,
+    useNetworkStats,
+    useJobRevenue,
+    useJobTVL,
+    useJobPnL,
+    useJobAPY,
+    Job
+} from '@/lib/api';
 import Link from 'next/link';
 
 export default function VaultsPage() {
@@ -402,6 +410,11 @@ function ActivityFeed({ jobs }: { jobs: Job[] }) {
 function VaultCard({ job }: { job: Job }) {
     const { data: stats, isLoading: statsLoading } = useNetworkStats(job.job_id);
     const { data: revenue, isLoading: revenueLoading } = useJobRevenue(job.job_id, 30);
+    const { data: tvl } = useJobTVL(job.job_id);
+    const { data: pnl } = useJobPnL(job.job_id, 30);
+    const { data: apy } = useJobAPY(job.job_id, 30);
+
+    const [token0Symbol, token1Symbol] = job.metadata.pair_name.split('/') || ['T0', 'T1'];
 
     return (
         <div className="bg-white p-5 rounded-3xl border border-cream-dark shadow-sm hover:shadow-lg transition-all duration-300 group relative overflow-hidden flex flex-col h-full">
@@ -421,17 +434,56 @@ function VaultCard({ job }: { job: Job }) {
                 </span>
             </div>
 
-            {/* Revenue Section */}
-            <div className="bg-green-50/50 rounded-xl p-3 mb-4 relative z-10">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-1 text-green-600">
-                        <DollarSign size={12} />
-                        <span className="text-[8px] font-black uppercase tracking-wider">Revenue (30d)</span>
-                    </div>
-                    <div className="text-right">
-                        <p className="text-lg font-black text-primary tracking-tight">
-                            {revenueLoading ? '...' : `$${revenue?.revenue_usd.toFixed(2) || '0.00'}`}
-                        </p>
+            {/* Performance Metrics Grid */}
+            <div className="grid grid-cols-2 gap-2 mb-4 relative z-10 auto-rows-min">
+                {/* TVL */}
+                <div className="bg-blue-50/50 rounded-xl p-2.5">
+                    <p className="text-[8px] font-black text-blue-600 uppercase tracking-wider mb-1">TVL</p>
+                    <p className="text-sm font-black text-primary tracking-tight">
+                        ${(tvl?.tvl_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </p>
+                </div>
+
+                {/* PnL */}
+                <div className={`rounded-xl p-2.5 ${(pnl?.pnl_usd || 0) >= 0 ? 'bg-green-50/50' : 'bg-red-50/50'}`}>
+                    <p className={`text-[8px] font-black uppercase tracking-wider mb-1 ${(pnl?.pnl_usd || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        PnL (30d)
+                    </p>
+                    <p className="text-sm font-black text-primary tracking-tight">
+                        ${(pnl?.pnl_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </p>
+                </div>
+
+                {/* Revenue */}
+                <div className="bg-purple-50/50 rounded-xl p-2.5">
+                    <p className="text-[8px] font-black text-purple-600 uppercase tracking-wider mb-1">Revenue</p>
+                    <p className="text-sm font-black text-primary tracking-tight">
+                        {revenueLoading ? '...' : `$${(revenue?.revenue_usd || 0).toFixed(2)}`}
+                    </p>
+                </div>
+
+                {/* APY */}
+                <div className="bg-orange-50/50 rounded-xl p-2.5 col-span-2">
+                    <p className="text-[8px] font-black text-orange-600 uppercase tracking-wider mb-1">APY</p>
+                    <div className="flex items-center justify-between space-x-2">
+                        <div>
+                            <p className="text-xs font-black text-primary tracking-tight">
+                                {(apy?.apy_percent || 0).toFixed(1)}%
+                            </p>
+                            <p className="text-[8px] text-orange-600 font-bold">USD</p>
+                        </div>
+                        <div>
+                            <p className="text-xs font-black text-primary tracking-tight">
+                                {(apy?.apy_percent_token0 || 0).toFixed(1)}%
+                            </p>
+                            <p className="text-[8px] text-orange-600 font-bold">{token0Symbol}</p>
+                        </div>
+                        <div>
+                            <p className="text-xs font-black text-primary tracking-tight">
+                                {(apy?.apy_percent_token1 || 0).toFixed(1)}%
+                            </p>
+                            <p className="text-[8px] text-orange-600 font-bold">{token1Symbol}</p>
+                        </div>
                     </div>
                 </div>
             </div>

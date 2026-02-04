@@ -177,6 +177,8 @@ class LiveExecutionResponse(BaseModel):
     execution_id: str
     round_id: str
     round_number: int
+    job_id: str
+    vault_name: str
     miner_uid: int
     miner_hotkey: str
     strategy_data: Dict[str, Any]
@@ -276,6 +278,131 @@ class JobRevenueDetailResponse(BaseModel):
     revenue_token1: float
     lookback_days: int
     updated_at: str
+
+
+# TVL, PnL, APY Models
+class JobTVLResponse(BaseModel):
+    """TVL metrics for a job"""
+    job_id: str
+    tvl_token0: float
+    tvl_token1: float
+    tvl_usd: float
+    token0_price_usd: float
+    token1_price_usd: float
+    updated_at: str
+
+
+class JobPnLResponse(BaseModel):
+    """PnL metrics for a job"""
+    job_id: str
+    pnl_usd: float
+    pnl_token0: float
+    pnl_token1: float
+    initial_tvl_usd: float
+    current_tvl_usd: float
+    lookback_days: int
+    updated_at: str
+
+
+class JobAPYResponse(BaseModel):
+    """APY metrics for a job"""
+    job_id: str
+    apy_percent: float
+    apy_percent_token0: float
+    apy_percent_token1: float
+    revenue_usd: float
+    revenue_token0: float
+    revenue_token1: float
+    avg_tvl_usd: float
+    avg_tvl_token0: float
+    avg_tvl_token1: float
+    lookback_days: int
+    updated_at: str
+
+
+class SubnetTVLResponse(BaseModel):
+    """Subnet-wide TVL metrics"""
+    total_tvl_usd: float
+    vault_count: int
+    vault_tvls: List[Dict[str, Any]] = []
+    updated_at: str
+
+
+class SubnetPnLResponse(BaseModel):
+    """Subnet-wide PnL metrics"""
+    total_pnl_usd: float
+    vault_count: int
+    vault_pnls: List[Dict[str, Any]] = []
+    lookback_days: int
+    updated_at: str
+
+
+class MinerWinRateResponse(BaseModel):
+    """Win rate for a miner"""
+    miner_uid: int
+    miner_hotkey: str
+    win_rate: float
+    total_wins: int
+    total_participations: int
+    job_id: Optional[str] = None
+
+
+# Pool Price Models
+class CurrentPositionResponse(BaseModel):
+    """Current liquidity position"""
+    has_position: bool
+    lower_tick: Optional[int] = None
+    upper_tick: Optional[int] = None
+    lower_price: Optional[float] = None
+    upper_price: Optional[float] = None
+    execution_id: Optional[str] = None
+    executed_at: Optional[datetime] = None
+
+
+class PoolPriceResponse(BaseModel):
+    """Pool price statistics"""
+    current_price: Optional[float] = Field(None, description="Current price from latest swap")
+    price_24h_ago: Optional[float] = Field(None, description="Price 24 hours ago")
+    price_24h_high: Optional[float] = Field(None, description="Highest price in last 24h")
+    price_24h_low: Optional[float] = Field(None, description="Lowest price in last 24h")
+    price_change_24h: Optional[float] = Field(None, description="Price change in last 24h")
+    price_change_24h_percent: Optional[float] = Field(None, description="Price change percentage")
+    volume_24h_usd: Optional[float] = Field(None, description="Trading volume in USD (last 24h)")
+    swap_count_24h: Optional[int] = Field(None, description="Number of swaps in last 24h")
+    last_swap_timestamp: Optional[datetime] = Field(None, description="Timestamp of latest swap")
+    current_position: Optional[CurrentPositionResponse] = Field(None, description="Current active position range")
+
+
+class RoundExecutionData(BaseModel):
+    """Execution data for live rounds"""
+    execution_id: str
+    tx_hash: Optional[str] = None
+    tx_status: Optional[str] = None
+    strategy_data: Dict[str, Any]
+    actual_performance: Optional[Dict[str, Any]] = None
+    executed_at: datetime
+
+
+class RoundWithExecutionResponse(BaseModel):
+    """Round with optional execution data"""
+    round_id: str
+    round_number: int
+    round_type: str
+    status: str
+    winner_uid: Optional[int] = None
+    winner_hotkey: Optional[str] = None
+    winner_score: Optional[float] = None
+    start_time: datetime
+    end_time: Optional[datetime] = None
+    execution: Optional[RoundExecutionData] = None
+    participants_count: int
+
+
+class AllRoundsResponse(BaseModel):
+    """List of all rounds with execution data"""
+    job_id: str
+    total_rounds: int
+    rounds: List[RoundWithExecutionResponse]
 
 
 # Error Response

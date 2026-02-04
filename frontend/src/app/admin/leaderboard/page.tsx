@@ -61,38 +61,7 @@ export default function LeaderboardPage() {
             headerActions={headerActions}
         >
             <div className="space-y-10 animate-fade-in pb-20">
-                {/* Top 3 Spotlight */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-4">
-                    {leaderboardLoading ? (
-                        [1, 2, 3].map(i => <div key={i} className="h-64 bg-white/50 rounded-[40px] animate-pulse border border-cream-dark" />)
-                    ) : (
-                        leaderboard?.slice(0, 3).map((miner, idx) => (
-                            <div key={miner.miner_uid} className={`relative group ${idx === 0 ? 'md:-translate-y-4' : ''}`}>
-                                {idx === 0 && (
-                                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-amber-400 text-white text-[10px] font-black px-4 py-1.5 rounded-full shadow-lg shadow-amber-400/20 z-10 uppercase tracking-widest flex items-center space-x-2">
-                                        <Trophy size={12} />
-                                        <span>Subnet Champion</span>
-                                    </div>
-                                )}
-                                <div className={`bg-white p-10 rounded-[48px] border ${idx === 0 ? 'border-amber-200 ring-4 ring-amber-50 shadow-xl' : 'border-cream-dark shadow-sm'} flex flex-col items-center text-center space-y-4 group-hover:-translate-y-1 transition-all duration-500`}>
-                                    <div className={`w-20 h-20 rounded-3xl flex items-center justify-center ${idx === 0 ? 'bg-amber-100 text-amber-600' : idx === 1 ? 'bg-slate-100 text-slate-500' : 'bg-orange-100 text-orange-600'}`}>
-                                        <Medal size={40} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[10px] font-black text-primary/20 uppercase tracking-[0.2em]">UID {miner.miner_uid}</p>
-                                        <h3 className="text-xl font-black text-primary tracking-tight truncate w-32">{miner.miner_hotkey.substring(0, 10)}...</h3>
-                                    </div>
-                                    <div className="bg-cream/50 px-6 py-3 rounded-2xl">
-                                        <p className="text-2xl font-black text-primary tracking-tighter">{miner.combined_score.toFixed(4)}</p>
-                                        <p className="text-[9px] font-black text-primary/30 uppercase tracking-[0.1em]">Combined Score</p>
-                                    </div>
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-
-                {/* Detailed Table */}
+                {/* Miner Table */}
                 <div className="bg-white rounded-[48px] border border-cream-dark shadow-sm overflow-hidden">
                     <div className="p-8 border-b border-cream flex items-center justify-between">
                         <div className="flex items-center space-x-4">

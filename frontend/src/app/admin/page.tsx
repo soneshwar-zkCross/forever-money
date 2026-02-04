@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import AdminLayout from '@/components/layout/AdminLayout';
 import {
     LayoutDashboard,
@@ -19,7 +20,15 @@ import {
     RefreshCw,
     ChevronRight,
 } from 'lucide-react';
-import { useJobs, useLeaderboard, useNetworkStats, useSubnetEmissions, useExecutions } from '@/lib/api';
+import {
+    useJobs,
+    useLeaderboard,
+    useNetworkStats,
+    useSubnetEmissions,
+    useExecutions,
+    useSubnetTVL,
+    useSubnetPnL
+} from '@/lib/api';
 
 export default function DashboardPage() {
     const { data: jobs, isLoading: jobsLoading } = useJobs();
@@ -36,6 +45,8 @@ export default function DashboardPage() {
     const { data: leaderboard } = useLeaderboard(selectedJobId || '');
     const { data: emissions, isLoading: emissionsLoading } = useSubnetEmissions();
     const { data: executions } = useExecutions(selectedJobId || '');
+    const { data: subnetTVL } = useSubnetTVL();
+    const { data: subnetPnL } = useSubnetPnL(30);
 
     const activeJobs = jobs?.filter(j => j.is_active) || [];
     const totalMiners = stats?.total_miners || 0;
@@ -80,7 +91,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Critical Metrics Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <MetricCard
                         label="Active Vaults"
                         value={activeJobs.length.toString()}
@@ -95,12 +106,20 @@ export default function DashboardPage() {
                         icon={<Users size={16} />}
                         trend={activeMiners > 0 ? "up" : "neutral"}
                     />
+
                     <MetricCard
-                        label="Current Round"
-                        value={`#${stats?.current_round_number || 0}`}
-                        change={`${stats?.total_rounds || 0} completed`}
-                        icon={<Activity size={16} />}
-                        trend="neutral"
+                        label="Total TVL"
+                        value={`$${(subnetTVL?.total_tvl_usd || 0).toLocaleString()}`}
+                        change={`${subnetTVL?.vault_count || 0} vaults`}
+                        icon={<Database size={16} />}
+                        trend="up"
+                    />
+                    <MetricCard
+                        label="PnL (30d)"
+                        value={`$${(subnetPnL?.total_pnl_usd || 0).toLocaleString()}`}
+                        change={`Across ${subnetPnL?.vault_count || 0} vaults`}
+                        icon={<TrendingUp size={16} />}
+                        trend={subnetPnL && subnetPnL.total_pnl_usd > 0 ? "up" : subnetPnL && subnetPnL.total_pnl_usd < 0 ? "down" : "neutral"}
                     />
                     <MetricCard
                         label="Subnet Emissions"
@@ -134,10 +153,10 @@ export default function DashboardPage() {
                                 activeJobs.map(job => (
                                     <VaultStatusRow
                                         key={job.job_id}
+                                        jobId={job.job_id}
                                         name={job.metadata.pair_name}
                                         address={job.sn_liquidity_manager_address}
                                         status="active"
-                                        roundDuration={job.round_duration_seconds}
                                     />
                                 ))
                             )}
@@ -183,6 +202,7 @@ export default function DashboardPage() {
                         <table className="w-full">
                             <thead className="bg-cream/20">
                                 <tr className="text-[10px] font-black text-primary/40 uppercase tracking-wider">
+                                    <th className="px-6 py-3 text-left">Vault</th>
                                     <th className="px-6 py-3 text-left">Round</th>
                                     <th className="px-6 py-3 text-left">Miner UID</th>
                                     <th className="px-6 py-3 text-left">Hotkey</th>
@@ -194,13 +214,22 @@ export default function DashboardPage() {
                             <tbody className="divide-y divide-cream/50">
                                 {!executions || executions.length === 0 ? (
                                     <tr>
-                                        <td colSpan={6} className="px-6 py-8 text-center text-sm text-primary/40">
+                                        <td colSpan={7} className="px-6 py-8 text-center text-sm text-primary/40">
                                             No executions yet. Waiting for rounds to complete...
                                         </td>
                                     </tr>
                                 ) : (
                                     executions.slice(0, 10).map((exec) => (
                                         <tr key={exec.execution_id} className="hover:bg-cream/10 transition-colors">
+                                            <td className="px-6 py-3">
+                                                <Link
+                                                    href={`/admin/vaults/${exec.job_id}`}
+                                                    className="text-sm font-bold text-primary hover:text-primary/70 transition-colors flex items-center space-x-1"
+                                                >
+                                                    <span>{exec.vault_name}</span>
+                                                    <ChevronRight size={12} />
+                                                </Link>
+                                            </td>
                                             <td className="px-6 py-3 text-sm font-mono text-primary">#{exec.round_number}</td>
                                             <td className="px-6 py-3 text-sm font-bold text-primary">{exec.miner_uid}</td>
                                             <td className="px-6 py-3 text-xs font-mono text-primary/60">
@@ -238,7 +267,7 @@ export default function DashboardPage() {
                 {/* Miner Leaderboard Summary */}
                 <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden">
                     <div className="px-6 py-4 border-b border-cream-dark flex items-center justify-between">
-                        <h3 className="text-sm font-black text-primary uppercase tracking-wider">Top Miners (Current Vault)</h3>
+                        <h3 className="text-sm font-black text-primary uppercase tracking-wider">Top Miners</h3>
                         <a
                             href="/admin/leaderboard"
                             className="text-xs text-primary hover:underline font-bold flex items-center space-x-1"
@@ -346,7 +375,8 @@ function MetricCard({ label, value, change, icon, trend }: {
     );
 }
 
-function VaultStatusRow({ name, address, status, roundDuration }: {
+function VaultStatusRow({ jobId, name, address, status }: {
+    jobId: string;
     name: string;
     address: string;
     status: 'active' | 'paused' | 'error';
@@ -358,18 +388,18 @@ function VaultStatusRow({ name, address, status, roundDuration }: {
     };
 
     return (
-        <div className="flex items-center justify-between p-3 bg-cream/20 rounded-xl hover:bg-cream/40 transition-colors">
-            <div className="flex items-center space-x-3">
-                <div className={`w-2 h-2 rounded-full ${statusColors[status]}`}></div>
-                <div>
-                    <p className="text-sm font-bold text-primary">{name}</p>
-                    <p className="text-[10px] font-mono text-primary/40">{address.slice(0, 12)}...{address.slice(-8)}</p>
+        <Link href={`/admin/vaults/${jobId}`} className="block">
+            <div className="flex items-center justify-between p-3 bg-cream/20 rounded-xl hover:bg-cream/40 transition-colors cursor-pointer group">
+                <div className="flex items-center space-x-3">
+                    <div className={`w-2 h-2 rounded-full ${statusColors[status]}`}></div>
+                    <div>
+                        <p className="text-sm font-bold text-primary group-hover:text-primary/80">{name}</p>
+                        <p className="text-[10px] font-mono text-primary/40">{address.slice(0, 12)}...{address.slice(-8)}</p>
+                    </div>
                 </div>
+                <ChevronRight size={16} className="text-primary/20 group-hover:text-primary/40 transition-colors" />
             </div>
-            <div className="text-right">
-                <p className="text-xs font-mono text-primary/60">{roundDuration}s rounds</p>
-            </div>
-        </div>
+        </Link>
     );
 }
 

@@ -38,15 +38,24 @@ async def lifespan(app: FastAPI):
         db_url=DATABASE_URL,
         modules={'models': [
             'validator.models.job',
-            'validator.models.pool_events'
+            'validator.models.pool_events',
+            'api.models.metrics'  # API-only metrics tables
         ]}
     )
+    await Tortoise.generate_schemas(safe=True)  # Create tables if they don't exist
     logger.info("Database connected successfully")
 
     # Initialize Bittensor client
     logger.info("Initializing Bittensor client...")
     BittensorClient.initialize(netuid=NETUID, network=SUBTENSOR_NETWORK)
     logger.info("Bittensor client initialized")
+
+    # Start background metrics snapshot task
+    # Temporarily disabled - uncomment after testing
+    # logger.info("Starting metrics snapshot background task...")
+    # from api.tasks.metrics_snapshot import snapshot_all_metrics
+    # asyncio.create_task(snapshot_all_metrics(interval_seconds=300))  # 5 minutes
+    # logger.info("Metrics snapshot task started")
 
     yield
 

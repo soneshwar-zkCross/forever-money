@@ -103,7 +103,7 @@ class RevenueService:
 
         try:
             vault_fees = await self.pool_data_db.get_miner_vault_fees(
-                sn_liquditiy_manager_addresses=vault_addresses,
+                sn_liquidity_manager_addresses=vault_addresses,
                 start_block=start_block,
                 end_block=end_block,
             )
@@ -201,7 +201,7 @@ class RevenueService:
 
         try:
             vault_fees = await self.pool_data_db.get_miner_vault_fees(
-                sn_liquditiy_manager_addresses=vault_addresses,
+                sn_liquidity_manager_addresses=vault_addresses,
                 start_block=start_block,
                 end_block=end_block,
             )

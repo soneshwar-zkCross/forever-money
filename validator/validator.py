@@ -205,7 +205,7 @@ async def run_jobs_validator(config):
                     if job.job_id not in running_jobs:
                         logger.info(
                             f"NEW JOB DETECTED: {job.job_id} | "
-                            f"Vault: {job.sn_liquditiy_manager_address} | "
+                            f"Vault: {job.sn_liquidity_manager_address} | "
                             f"Pair: {job.pair_address} | "
                             f"Round Duration: {job.round_duration_seconds}s"
                         )
