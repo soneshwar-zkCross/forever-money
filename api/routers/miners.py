@@ -174,16 +174,16 @@ async def get_miner_job_earnings(uid: int, job_id: str):
 async def get_miner_dividends(uid: int):
     """
     Get current dividend balance for a miner from metagraph.
-    
+
     - **uid**: Miner UID
-    
+
     Returns current dividend balance in Alpha (not total historic earnings).
     """
     try:
         from api.services.miner_earnings_service import MinerEarningsService
-        
+
         dividends = await MinerEarningsService.get_current_dividends(uid)
-        
+
         return {
             "miner_uid": uid,
             "current_dividends_alpha": dividends,
@@ -191,3 +191,84 @@ async def get_miner_dividends(uid: int):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get dividends: {str(e)}")
+
+
+@router.get("/{uid}/vaults")
+async def get_miner_vaults(uid: int):
+    """
+    Get all vaults (positions across pairs) for a miner.
+
+    Shows the miner's participation and performance across different trading pairs.
+    Each vault represents the miner's position/performance on a specific pair.
+
+    - **uid**: Miner UID
+
+    Returns list of vaults with pair info, scores, and performance metrics.
+    """
+    try:
+        # Get all miner scores (one per job/pair)
+        from validator.models.job import MinerScore, Job
+
+        miner_scores = await MinerScore.filter(miner_uid=uid).prefetch_related('job').all()
+
+        if not miner_scores:
+            return {
+                "miner_uid": uid,
+                "total_vaults": 0,
+                "vaults": []
+            }
+
+        vaults = []
+        for score in miner_scores:
+            job = score.job
+
+            # Get pool data DB for revenue calculation
+            pool_db = get_pool_data_db()
+
+            # Calculate revenue for this job
+            revenue_data = await JobService.get_job_revenue(job, pool_db)
+
+            # Build vault data
+            vault = {
+                "vault_id": f"vault_{uid}_{job.job_id}",
+                "job_id": job.job_id,
+                "pair_name": job.metadata.get("pair_name", "Unknown") if job.metadata else "Unknown",
+                "pair_address": job.pair_address,
+
+                # Miner performance
+                "combined_score": float(score.combined_score),
+                "evaluation_score": float(score.evaluation_score),
+                "live_score": float(score.live_score),
+                "is_eligible_for_live": score.is_eligible_for_live,
+
+                # Participation stats
+                "total_evaluations": score.total_evaluations,
+                "total_live_rounds": score.total_live_rounds,
+                "participation_days": score.participation_days,
+
+                # Job config
+                "is_active": job.is_active,
+                "fee_rate": job.fee_rate,
+                "target_ratio": job.target_ratio,
+
+                # Revenue metrics (estimated share)
+                "revenue_usd": revenue_data.get("revenue_usd", 0),
+                "revenue_token0": revenue_data.get("revenue_token0", 0),
+                "revenue_token1": revenue_data.get("revenue_token1", 0),
+            }
+
+            vaults.append(vault)
+
+        # Sort by combined score descending
+        vaults.sort(key=lambda x: x["combined_score"], reverse=True)
+
+        return {
+            "miner_uid": uid,
+            "miner_hotkey": miner_scores[0].miner_hotkey if miner_scores else None,
+            "total_vaults": len(vaults),
+            "active_vaults": sum(1 for v in vaults if v["is_eligible_for_live"]),
+            "vaults": vaults
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get miner vaults: {str(e)}")

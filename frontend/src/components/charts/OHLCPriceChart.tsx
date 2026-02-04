@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import {
-    AreaChart,
-    Area,
+    ComposedChart,
+    Bar,
+    Line,
     XAxis,
     YAxis,
     CartesianGrid,
@@ -11,6 +12,7 @@ import {
     ResponsiveContainer,
     ReferenceLine,
     ReferenceArea,
+    Cell,
 } from 'recharts';
 import { fetchOHLCData, getCoingeckoId, OHLCDataPoint } from '@/lib/coingecko';
 
@@ -29,10 +31,59 @@ interface OHLCPriceChartProps {
 interface ChartData {
     timestamp: number;
     time: string;
-    price: number;
+    open: number;
     high: number;
     low: number;
+    close: number;
+    // For candlestick rendering as bars
+    candleRange: [number, number];
+    isGreen: boolean;
 }
+
+// Custom Candlestick Shape
+const Candlestick = (props: any) => {
+    const { x, y, width, height, payload } = props;
+
+    if (!payload || payload.open === undefined || payload.close === undefined) {
+        return null;
+    }
+
+    const isGreen = payload.close >= payload.open;
+    const color = isGreen ? '#10b981' : '#ef4444';
+    const wickColor = '#6b7280';
+
+    // Calculate positions
+    const candleWidth = Math.max(width * 0.7, 2);
+    const candleX = x + (width - candleWidth) / 2;
+
+    // Wick (high to low line)
+    const wickX = x + width / 2;
+
+    return (
+        <g>
+            {/* Wick (thin line from high to low) */}
+            <line
+                x1={wickX}
+                y1={y}
+                x2={wickX}
+                y2={y + height}
+                stroke={wickColor}
+                strokeWidth={1}
+            />
+
+            {/* Candle body */}
+            <rect
+                x={candleX}
+                y={isGreen ? y : y + (height * (payload.open - payload.low) / (payload.high - payload.low))}
+                width={candleWidth}
+                height={Math.abs(height * (payload.close - payload.open) / (payload.high - payload.low))}
+                fill={color}
+                stroke={color}
+                strokeWidth={1}
+            />
+        </g>
+    );
+};
 
 export default function OHLCPriceChart({
     token0Symbol,
@@ -96,24 +147,30 @@ export default function OHLCPriceChart({
 
                 // Transform OHLC data
                 const transformed: ChartData[] = ohlcData.map((point) => {
-                    let price = point.close;
+                    let open = point.open;
                     let high = point.high;
                     let low = point.low;
+                    let close = point.close;
 
                     // If we fetched T1 but want T0/T1, or if we need inversion
                     if (invertPrice) {
-                        price = 1 / price;
                         const oldHigh = high;
-                        high = 1 / low;
-                        low = 1 / oldHigh;
+                        const oldLow = low;
+                        open = 1 / open;
+                        close = 1 / close;
+                        high = 1 / oldLow;  // Inverted
+                        low = 1 / oldHigh;  // Inverted
                     }
 
                     return {
                         timestamp: point.timestamp,
                         time: formatTime(point.timestamp, days),
-                        price,
+                        open,
                         high,
                         low,
+                        close,
+                        candleRange: [low, high] as [number, number],
+                        isGreen: close >= open,
                     };
                 });
 
@@ -159,39 +216,53 @@ export default function OHLCPriceChart({
         );
     }
 
-    // Calculate price range for Y-axis
-    const allPrices = chartData.flatMap(d => [d.price, d.high, d.low]);
+    // Calculate price range for Y-axis including bounds
+    const allPrices = chartData.flatMap(d => [d.high, d.low]);
+    if (lowerPriceBound && lowerPriceBound > 0) allPrices.push(lowerPriceBound);
+    if (upperPriceBound && upperPriceBound > 0) allPrices.push(upperPriceBound);
+    if (currentPrice && currentPrice > 0) allPrices.push(currentPrice);
+
     const minPrice = Math.min(...allPrices);
     const maxPrice = Math.max(...allPrices);
-    const padding = (maxPrice - minPrice) * 0.1;
+    const padding = (maxPrice - minPrice) * 0.15; // 15% padding
+
+    const yDomain = [
+        Math.max(0, minPrice - padding),
+        maxPrice + padding
+    ];
 
     return (
         <div className="space-y-4">
             <ResponsiveContainer width="100%" height={400}>
-                <AreaChart
+                <ComposedChart
                     data={chartData}
                     margin={{ top: 10, right: 30, left: 10, bottom: 5 }}
                 >
                     <defs>
-                        <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                        <linearGradient id="greenFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+                            <stop offset="100%" stopColor="#10b981" stopOpacity={0.3} />
+                        </linearGradient>
+                        <linearGradient id="redFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#ef4444" stopOpacity={0.8} />
+                            <stop offset="100%" stopColor="#ef4444" stopOpacity={0.3} />
                         </linearGradient>
                     </defs>
 
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
 
                     <XAxis
                         dataKey="time"
-                        tick={{ fill: '#6b7280', fontSize: 12 }}
+                        tick={{ fill: '#6b7280', fontSize: 11 }}
                         tickLine={{ stroke: '#e5e7eb' }}
+                        interval="preserveStartEnd"
                     />
 
                     <YAxis
-                        tick={{ fill: '#6b7280', fontSize: 12 }}
+                        tick={{ fill: '#6b7280', fontSize: 11 }}
                         tickLine={{ stroke: '#e5e7eb' }}
-                        domain={[minPrice - padding, maxPrice + padding]}
-                        tickFormatter={(value) => `$${value.toFixed(value < 1 ? 4 : 2)}`}
+                        domain={yDomain}
+                        tickFormatter={(value) => `$${value < 1 ? value.toFixed(4) : value.toFixed(2)}`}
                     />
 
                     <Tooltip
@@ -200,106 +271,130 @@ export default function OHLCPriceChart({
                             border: '1px solid #e5e7eb',
                             borderRadius: '8px',
                             padding: '12px',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
                         }}
-                        formatter={(value: any, name?: string) => {
-                            const num = Number(value);
-                            const formatted = num < 1 ? num.toFixed(6) : num.toFixed(2);
-                            const safeName = name || '';
-                            return [`$${formatted}`, safeName === 'price' ? 'Price' : safeName];
+                        content={({ active, payload }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            const data = payload[0].payload;
+                            const formatPrice = (val: number) => val < 1 ? val.toFixed(6) : val.toFixed(2);
+
+                            return (
+                                <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-lg">
+                                    <p className="text-xs font-bold text-gray-700 mb-2">{data.time}</p>
+                                    <div className="space-y-1 text-xs">
+                                        <div className="flex justify-between gap-4">
+                                            <span className="text-gray-600">Open:</span>
+                                            <span className="font-mono font-semibold">${formatPrice(data.open)}</span>
+                                        </div>
+                                        <div className="flex justify-between gap-4">
+                                            <span className="text-gray-600">High:</span>
+                                            <span className="font-mono font-semibold text-green-600">${formatPrice(data.high)}</span>
+                                        </div>
+                                        <div className="flex justify-between gap-4">
+                                            <span className="text-gray-600">Low:</span>
+                                            <span className="font-mono font-semibold text-red-600">${formatPrice(data.low)}</span>
+                                        </div>
+                                        <div className="flex justify-between gap-4">
+                                            <span className="text-gray-600">Close:</span>
+                                            <span className="font-mono font-semibold">${formatPrice(data.close)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
                         }}
                     />
 
-                    {/* Liquidity Range - Lower Bound */}
-                    {lowerPriceBound && (
-                        <ReferenceLine
-                            y={lowerPriceBound}
-                            stroke="#10b981"
-                            strokeWidth={2}
-                            strokeDasharray="5 5"
-                            label={{
-                                value: `Lower: $${lowerPriceBound.toFixed(2)}`,
-                                position: 'left',
-                                fill: '#059669',
-                                fontSize: 11,
-                                fontWeight: 'bold',
-                            }}
-                        />
-                    )}
-
-                    {/* Liquidity Range - Upper Bound */}
-                    {upperPriceBound && (
-                        <ReferenceLine
-                            y={upperPriceBound}
-                            stroke="#10b981"
-                            strokeWidth={2}
-                            strokeDasharray="5 5"
-                            label={{
-                                value: `Upper: $${upperPriceBound.toFixed(2)}`,
-                                position: 'left',
-                                fill: '#059669',
-                                fontSize: 11,
-                                fontWeight: 'bold',
-                            }}
-                        />
-                    )}
-
                     {/* Liquidity Range - Shaded Area */}
-                    {lowerPriceBound && upperPriceBound && (
+                    {lowerPriceBound && upperPriceBound && lowerPriceBound > 0 && upperPriceBound > 0 && (
                         <ReferenceArea
                             y1={lowerPriceBound}
                             y2={upperPriceBound}
                             fill="#10b981"
                             fillOpacity={0.1}
                             stroke="#10b981"
-                            strokeOpacity={0.3}
+                            strokeOpacity={0}
                         />
                     )}
 
-                    {/* Current Price Line */}
-                    {currentPrice && (
+                    {/* Liquidity Range - Lower Bound */}
+                    {lowerPriceBound && lowerPriceBound > 0 && (
                         <ReferenceLine
-                            y={currentPrice}
-                            stroke="#f59e0b"
+                            y={lowerPriceBound}
+                            stroke="#10b981"
                             strokeWidth={2}
+                            strokeDasharray="5 5"
                             label={{
-                                value: `Current: $${currentPrice.toFixed(2)}`,
-                                position: 'right',
-                                fill: '#d97706',
-                                fontSize: 11,
+                                value: `Lower: $${lowerPriceBound < 1 ? lowerPriceBound.toFixed(4) : lowerPriceBound.toFixed(2)}`,
+                                position: 'insideBottomLeft',
+                                fill: '#059669',
+                                fontSize: 10,
                                 fontWeight: 'bold',
                             }}
                         />
                     )}
 
-                    <Area
-                        type="monotone"
-                        dataKey="price"
-                        stroke="#8b5cf6"
-                        strokeWidth={2}
-                        fill="url(#priceGradient)"
-                        dot={false}
-                        activeDot={{ r: 6, fill: '#8b5cf6' }}
+                    {/* Liquidity Range - Upper Bound */}
+                    {upperPriceBound && upperPriceBound > 0 && (
+                        <ReferenceLine
+                            y={upperPriceBound}
+                            stroke="#10b981"
+                            strokeWidth={2}
+                            strokeDasharray="5 5"
+                            label={{
+                                value: `Upper: $${upperPriceBound < 1 ? upperPriceBound.toFixed(4) : upperPriceBound.toFixed(2)}`,
+                                position: 'insideTopLeft',
+                                fill: '#059669',
+                                fontSize: 10,
+                                fontWeight: 'bold',
+                            }}
+                        />
+                    )}
+
+                    {/* Current Price Line */}
+                    {currentPrice && currentPrice > 0 && (
+                        <ReferenceLine
+                            y={currentPrice}
+                            stroke="#f59e0b"
+                            strokeWidth={2}
+                            label={{
+                                value: `Current: $${currentPrice < 1 ? currentPrice.toFixed(4) : currentPrice.toFixed(2)}`,
+                                position: 'insideTopRight',
+                                fill: '#d97706',
+                                fontSize: 10,
+                                fontWeight: 'bold',
+                            }}
+                        />
+                    )}
+
+                    {/* Candlesticks using Bar with custom shape */}
+                    <Bar
+                        dataKey="candleRange"
+                        shape={<Candlestick />}
+                        isAnimationActive={false}
                     />
-                </AreaChart>
+                </ComposedChart>
             </ResponsiveContainer>
 
             {/* Legend */}
             <div className="flex items-center justify-center space-x-6 text-xs">
                 <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                    <div className="flex space-x-1">
+                        <div className="w-2 h-3 bg-green-500"></div>
+                        <div className="w-2 h-3 bg-red-500"></div>
+                    </div>
                     <span className="text-gray-600">
-                        {invertPrice ? `${token0Symbol}/${token1Symbol}` : `${token0Symbol}`} Price
+                        {invertPrice ? `${token0Symbol}/${token1Symbol}` : token0Symbol} Price
                     </span>
                 </div>
-                {lowerPriceBound && upperPriceBound && (
+                {lowerPriceBound && upperPriceBound && lowerPriceBound > 0 && upperPriceBound > 0 && (
                     <div className="flex items-center space-x-2">
-                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                        <div className="w-3 h-3 bg-green-500 opacity-30 border border-green-500"></div>
                         <span className="text-gray-600">Liquidity Range</span>
                     </div>
                 )}
-                {currentPrice && (
+                {currentPrice && currentPrice > 0 && (
                     <div className="flex items-center space-x-2">
-                        <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+                        <div className="w-3 h-0.5 bg-orange-500"></div>
                         <span className="text-gray-600">Current Position</span>
                     </div>
                 )}

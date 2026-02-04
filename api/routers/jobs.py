@@ -18,6 +18,7 @@ from api.models.responses import (
     ErrorResponse
 )
 from api.services.jobs_service import JobService
+from api.services.candle_service import CandleService
 from validator.repositories.pool import PoolDataDB
 
 router = APIRouter()
@@ -200,3 +201,180 @@ async def get_all_rounds(
         total_rounds=total_count,
         rounds=rounds
     )
+
+
+@router.get("/{job_id}/candles")
+async def get_job_candles(
+    job_id: str,
+    interval: int = Query(300, description="Candle interval in seconds", ge=60, le=3600),
+    lookback_hours: int = Query(24, description="Hours to look back", ge=1, le=168)
+):
+    """
+    Get OHLCV candles built from swap events
+
+    - **job_id**: Job identifier
+    - **interval**: Candle interval in seconds (default: 300 = 5min)
+    - **lookback_hours**: Hours of history to fetch (default: 24)
+
+    Returns candlestick data for charting.
+    """
+    job = await JobService.get_job_by_id(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    candles = await CandleService.build_candles_from_swaps(
+        job=job,
+        interval_seconds=interval,
+        lookback_hours=lookback_hours
+    )
+
+    return {
+        "job_id": job_id,
+        "interval_seconds": interval,
+        "lookback_hours": lookback_hours,
+        "candles": candles,
+        "total_candles": len(candles)
+    }
+
+
+@router.get("/{job_id}/pool-data/candles")
+async def get_pool_data_candles(
+    job_id: str,
+    interval: int = Query(300, description="Candle interval in seconds", ge=60, le=3600),
+    lookback_hours: int = Query(24, description="Hours to look back", ge=1, le=168)
+):
+    """
+    Get OHLCV candles from reader database (historical swap data)
+
+    This endpoint fetches candles from the external swap events database
+    which contains historical pool data.
+
+    - **job_id**: Job identifier
+    - **interval**: Candle interval in seconds (default: 300 = 5min)
+    - **lookback_hours**: Hours of history to fetch (default: 24)
+
+    Returns candlestick data with price, volume, fees, and liquidity.
+    """
+    job = await JobService.get_job_by_id(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    candles = await CandleService.fetch_candles_from_reader_db(
+        job=job,
+        interval_seconds=interval,
+        lookback_hours=lookback_hours
+    )
+
+    return {
+        "job_id": job_id,
+        "interval_seconds": interval,
+        "lookback_hours": lookback_hours,
+        "source": "reader_database",
+        "candles": candles,
+        "total_candles": len(candles)
+    }
+
+
+@router.get("/{job_id}/pool-data/stats")
+async def get_pool_data_stats(
+    job_id: str,
+    lookback_hours: int = Query(24, description="Hours to look back", ge=1, le=168)
+):
+    """
+    Get aggregated pool statistics from reader database
+
+    Fetches comprehensive pool statistics including volume, fees,
+    price changes, and swap counts from the historical swap database.
+
+    - **job_id**: Job identifier
+    - **lookback_hours**: Hours of history to analyze (default: 24)
+
+    Returns pool statistics for the specified time period.
+    """
+    job = await JobService.get_job_by_id(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    stats = await CandleService.get_pool_stats_from_reader_db(
+        job=job,
+        lookback_hours=lookback_hours
+    )
+
+    if not stats:
+        raise HTTPException(
+            status_code=503,
+            detail="Pool data not available from reader database"
+        )
+
+    return {
+        "job_id": job_id,
+        "lookback_hours": lookback_hours,
+        "source": "reader_database",
+        **stats
+    }
+
+
+@router.post("/{job_id}/sync-pool-data")
+async def sync_pool_data(
+    job_id: str,
+    lookback_hours: int = Query(24, description="Hours to sync", ge=1, le=168)
+):
+    """
+    Sync pool data from reader database to cache/metadata
+
+    This endpoint fetches the latest pool statistics from the reader database
+    and updates the job's metadata with current pool information.
+
+    - **job_id**: Job identifier
+    - **lookback_hours**: Hours of data to sync (default: 24)
+
+    Returns synced pool data.
+    """
+    job = await JobService.get_job_by_id(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    # Fetch stats from reader DB
+    stats = await CandleService.get_pool_stats_from_reader_db(
+        job=job,
+        lookback_hours=lookback_hours
+    )
+
+    if not stats:
+        raise HTTPException(
+            status_code=503,
+            detail="Failed to fetch pool data from reader database"
+        )
+
+    # Update job metadata with pool data
+    if job.metadata is None:
+        job.metadata = {}
+
+    job.metadata.update({
+        "pool_data": {
+            "last_sync": datetime.utcnow().isoformat(),
+            "lookback_hours": lookback_hours,
+            "current_price": stats.get("close_price"),
+            "price_change_pct": stats.get("price_change_pct"),
+            "volume_24h_token0": stats.get("volume0"),
+            "volume_24h_token1": stats.get("volume1"),
+            "fees_24h_token0": stats.get("fees0"),
+            "fees_24h_token1": stats.get("fees1"),
+            "total_swaps": stats.get("total_swaps"),
+            "token0_symbol": stats.get("token0_symbol"),
+            "token1_symbol": stats.get("token1_symbol"),
+        }
+    })
+
+    await job.save()
+
+    return {
+        "job_id": job_id,
+        "synced": True,
+        "sync_time": datetime.utcnow().isoformat(),
+        "pool_data": job.metadata["pool_data"]
+    }

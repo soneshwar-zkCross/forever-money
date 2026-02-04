@@ -93,7 +93,7 @@ export default function DashboardPage() {
                 {/* Critical Metrics Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <MetricCard
-                        label="Active Vaults"
+                        label="Active Pairs"
                         value={activeJobs.length.toString()}
                         change={`${jobs?.length || 0} total`}
                         icon={<Layers size={16} />}
@@ -110,14 +110,14 @@ export default function DashboardPage() {
                     <MetricCard
                         label="Total TVL"
                         value={`$${(subnetTVL?.total_tvl_usd || 0).toLocaleString()}`}
-                        change={`${subnetTVL?.vault_count || 0} vaults`}
+                        change={`${subnetTVL?.vault_count || 0} pairs`}
                         icon={<Database size={16} />}
                         trend="up"
                     />
                     <MetricCard
                         label="PnL (30d)"
                         value={`$${(subnetPnL?.total_pnl_usd || 0).toLocaleString()}`}
-                        change={`Across ${subnetPnL?.vault_count || 0} vaults`}
+                        change={`Across ${subnetPnL?.vault_count || 0} pairs`}
                         icon={<TrendingUp size={16} />}
                         trend={subnetPnL && subnetPnL.total_pnl_usd > 0 ? "up" : subnetPnL && subnetPnL.total_pnl_usd < 0 ? "down" : "neutral"}
                     />
@@ -132,21 +132,21 @@ export default function DashboardPage() {
 
                 {/* Main Content Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Vault Health */}
+                    {/* Pair Status */}
                     <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden">
                         <div className="px-6 py-4 border-b border-cream-dark flex items-center justify-between">
-                            <h3 className="text-sm font-black text-primary uppercase tracking-wider">Vault Status</h3>
+                            <h3 className="text-sm font-black text-primary uppercase tracking-wider">Pair Status</h3>
                             <div className="flex items-center space-x-2">
                                 <span className="text-xs text-primary/40 font-mono">{activeJobs.length} active</span>
                             </div>
                         </div>
                         <div className="p-6 space-y-3 max-h-80 overflow-y-auto">
                             {jobsLoading ? (
-                                <div className="text-center py-8 text-primary/40 text-sm">Loading vaults...</div>
+                                <div className="text-center py-8 text-primary/40 text-sm">Loading pairs...</div>
                             ) : activeJobs.length === 0 ? (
                                 <div className="text-center py-8 space-y-2">
                                     <AlertCircle size={32} className="mx-auto text-orange-500" />
-                                    <p className="text-sm font-bold text-primary">No Active Vaults</p>
+                                    <p className="text-sm font-bold text-primary">No Active Pairs</p>
                                     <p className="text-xs text-primary/40">Start validator to create jobs</p>
                                 </div>
                             ) : (
@@ -223,7 +223,7 @@ export default function DashboardPage() {
                                         <tr key={exec.execution_id} className="hover:bg-cream/10 transition-colors">
                                             <td className="px-6 py-3">
                                                 <Link
-                                                    href={`/admin/vaults/${exec.job_id}`}
+                                                    href={`/admin/pairs/${exec.job_id}`}
                                                     className="text-sm font-bold text-primary hover:text-primary/70 transition-colors flex items-center space-x-1"
                                                 >
                                                     <span>{exec.vault_name}</span>
@@ -388,7 +388,7 @@ function VaultStatusRow({ jobId, name, address, status }: {
     };
 
     return (
-        <Link href={`/admin/vaults/${jobId}`} className="block">
+        <Link href={`/admin/pairs/${jobId}`} className="block">
             <div className="flex items-center justify-between p-3 bg-cream/20 rounded-xl hover:bg-cream/40 transition-colors cursor-pointer group">
                 <div className="flex items-center space-x-3">
                     <div className={`w-2 h-2 rounded-full ${statusColors[status]}`}></div>

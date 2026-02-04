@@ -1,6 +1,6 @@
 'use client';
 
-import React, { use } from 'react';
+import React, { use, useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import {
     Terminal,
@@ -15,13 +15,17 @@ import {
     ExternalLink,
     Layers,
     Zap,
+    RefreshCw,
 } from 'lucide-react';
-import { useJobs, useNetworkStats, useAllRounds, usePoolPrice, useJobAPY, useJobPnL, useJobTVL, Job } from '@/lib/api';
+import { useJobs, useNetworkStats, useAllRounds, usePoolPrice, useJobAPY, useJobPnL, useJobTVL, usePoolDataStats, Job } from '@/lib/api';
+import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceArea } from 'recharts';
-import OHLCPriceChart from '@/components/charts/OHLCPriceChart';
+import PoolPriceChart from '@/components/charts/PoolPriceChart';
 
-export default function VaultDetailPage({ params }: { params: Promise<{ id: string }> }) {
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+
+export default function PairDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: jobId } = use(params);
     const { data: jobs } = useJobs();
     const { data: stats } = useNetworkStats(jobId);
@@ -30,6 +34,45 @@ export default function VaultDetailPage({ params }: { params: Promise<{ id: stri
     const { data: apy } = useJobAPY(jobId, 30);
     const { data: pnl } = useJobPnL(jobId, 30);
     const { data: tvl } = useJobTVL(jobId);
+    const { data: poolDataStats, refetch: refetchPoolData, isLoading: poolDataLoading, isError: poolDataError } = usePoolDataStats(jobId, 24); // Pool data from reader DB
+
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [syncSuccess, setSyncSuccess] = useState(false);
+    const [syncError, setSyncError] = useState<string | null>(null);
+    const queryClient = useQueryClient();
+
+    // Sync pool data function
+    const handleSyncPoolData = async () => {
+        setIsSyncing(true);
+        setSyncError(null);
+        setSyncSuccess(false);
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/sync-pool-data?lookback_hours=24`, {
+                method: 'POST',
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to sync pool data');
+            }
+
+            const data = await response.json();
+
+            // Invalidate and refetch queries
+            queryClient.invalidateQueries({ queryKey: ['pool-data-stats', jobId] });
+            queryClient.invalidateQueries({ queryKey: ['jobs'] });
+            await refetchPoolData();
+
+            setSyncSuccess(true);
+            setTimeout(() => setSyncSuccess(false), 3000);
+        } catch (error) {
+            console.error('Sync error:', error);
+            setSyncError(error instanceof Error ? error.message : 'Failed to sync');
+            setTimeout(() => setSyncError(null), 5000);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     const rounds = roundsData?.rounds || [];
     const liveExecutions = rounds.filter(r => r.execution !== null);
@@ -40,15 +83,15 @@ export default function VaultDetailPage({ params }: { params: Promise<{ id: stri
     if (!job) {
         return (
             <AdminLayout
-                title="Vault Not Found"
-                description="The requested vault does not exist"
+                title="Pair Not Found"
+                description="The requested trading pair does not exist"
                 icon={<Terminal size={20} />}
             >
                 <div className="text-center py-20">
                     <AlertCircle size={48} className="mx-auto text-primary/20 mb-4" />
-                    <p className="text-lg font-bold text-primary mb-2">Vault Not Found</p>
-                    <Link href="/admin/jobs" className="text-sm text-primary hover:underline">
-                        Back to Vaults
+                    <p className="text-lg font-bold text-primary mb-2">Pair Not Found</p>
+                    <Link href="/admin/pairs" className="text-sm text-primary hover:underline">
+                        Back to Pairs
                     </Link>
                 </div>
             </AdminLayout>
@@ -58,18 +101,18 @@ export default function VaultDetailPage({ params }: { params: Promise<{ id: stri
     return (
         <AdminLayout
             title={job.metadata.pair_name}
-            description={`Vault: ${job.sn_liquidity_manager_address.slice(0, 12)}...${job.sn_liquidity_manager_address.slice(-8)}`}
+            description={`Pool: ${job.sn_liquidity_manager_address.slice(0, 12)}...${job.sn_liquidity_manager_address.slice(-8)}`}
             icon={<Terminal size={20} />}
         >
             <div className="space-y-6 pb-20">
                 {/* Header with Back Button */}
                 <div className="flex items-center justify-between">
                     <Link
-                        href="/admin/jobs"
+                        href="/admin/pairs"
                         className="flex items-center space-x-2 text-sm text-primary/60 hover:text-primary transition-colors"
                     >
                         <ArrowLeft size={16} />
-                        <span>Back to Vaults</span>
+                        <span>Back to Pairs</span>
                     </Link>
                     <div className="flex items-center space-x-4">
                         <span className="px-3 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-black uppercase">
@@ -87,7 +130,7 @@ export default function VaultDetailPage({ params }: { params: Promise<{ id: stri
                     </div>
                 </div>
 
-                {/* Vault Stats Grid */}
+                {/* Pair Stats Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <StatCard
                         label="Total Miners"
@@ -109,14 +152,14 @@ export default function VaultDetailPage({ params }: { params: Promise<{ id: stri
                     />
                 </div>
 
-                {/* Vault Performance Metrics */}
+                {/* Pair Performance Metrics */}
                 <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden">
                     <div className="px-6 py-4 border-b border-cream-dark">
                         <h3 className="text-sm font-black text-primary uppercase tracking-wider">
-                            Vault Performance
+                            Pair Performance
                         </h3>
                         <p className="text-xs text-primary/40 mt-1">
-                            Total returns and APY for {job.metadata.pair_name} vault
+                            Returns and APY for {job.metadata.pair_name} over 30 days
                         </p>
                     </div>
                     <div className="p-6">
@@ -125,14 +168,14 @@ export default function VaultDetailPage({ params }: { params: Promise<{ id: stri
                             {/* Token0 Return */}
                             <div className="bg-gradient-to-br from-green-50 to-white border border-green-200 rounded-xl p-6">
                                 <h4 className="text-sm font-bold text-green-700 mb-3">
-                                    Total Return ({token0Symbol})
+                                    30-Day Return ({token0Symbol})
                                 </h4>
                                 <div className="mb-4">
                                     <p className={`text-3xl font-black mb-1 ${(pnl?.pnl_token0 || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                         {(pnl?.pnl_token0 || 0) >= 0 ? '+' : ''}{((pnl?.pnl_token0 || 0) / (pnl?.initial_tvl_usd || 1) * 100).toFixed(2)}%
                                     </p>
                                     <p className="text-sm text-gray-600">
-                                        APY: {(apy?.apy_percent_token0 || 0) >= 0 ? '+' : ''}{(apy?.apy_percent_token0 || 0).toFixed(1)}%
+                                        Annualized: {(apy?.apy_percent_token0 || 0) >= 0 ? '+' : ''}{(apy?.apy_percent_token0 || 0).toFixed(1)}% APY
                                     </p>
                                 </div>
                                 <div className="space-y-2 text-xs">
@@ -150,14 +193,14 @@ export default function VaultDetailPage({ params }: { params: Promise<{ id: stri
                             {/* Token1 Return */}
                             <div className="bg-gradient-to-br from-blue-50 to-white border border-blue-200 rounded-xl p-6">
                                 <h4 className="text-sm font-bold text-blue-700 mb-3">
-                                    Total Return ({token1Symbol})
+                                    30-Day Return ({token1Symbol})
                                 </h4>
                                 <div className="mb-4">
                                     <p className={`text-3xl font-black mb-1 ${(pnl?.pnl_token1 || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                         {(pnl?.pnl_token1 || 0) >= 0 ? '+' : ''}{((pnl?.pnl_token1 || 0) / (pnl?.initial_tvl_usd || 1) * 100).toFixed(2)}%
                                     </p>
                                     <p className="text-sm text-gray-600">
-                                        APY: {(apy?.apy_percent_token1 || 0) >= 0 ? '+' : ''}{(apy?.apy_percent_token1 || 0).toFixed(1)}%
+                                        Annualized: {(apy?.apy_percent_token1 || 0) >= 0 ? '+' : ''}{(apy?.apy_percent_token1 || 0).toFixed(1)}% APY
                                     </p>
                                 </div>
                                 <div className="space-y-2 text-xs">
@@ -232,106 +275,157 @@ export default function VaultDetailPage({ params }: { params: Promise<{ id: stri
                 {/* Pool Price Chart Placeholder */}
                 <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden">
                     <div className="px-6 py-4 border-b border-cream-dark">
-                        <h3 className="text-sm font-black text-primary uppercase tracking-wider">
-                            Pool Price & Miner Positions
-                        </h3>
-                        <p className="text-xs text-primary/40 mt-1">
-                            Liquidity ranges and price movements for {job.metadata.pair_name}
-                        </p>
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="text-sm font-black text-primary uppercase tracking-wider">
+                                    Pool Price & Miner Positions
+                                </h3>
+                                <p className="text-xs text-primary/40 mt-1">
+                                    Liquidity ranges and price movements for {job.metadata.pair_name}
+                                </p>
+                            </div>
+                            <button
+                                onClick={handleSyncPoolData}
+                                disabled={isSyncing}
+                                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                                    syncSuccess
+                                        ? 'bg-green-100 text-green-700 border border-green-300'
+                                        : syncError
+                                            ? 'bg-red-100 text-red-700 border border-red-300'
+                                            : 'bg-primary text-white hover:bg-primary/90 border border-primary'
+                                } ${isSyncing ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg'}`}
+                            >
+                                <RefreshCw
+                                    size={14}
+                                    className={isSyncing ? 'animate-spin' : ''}
+                                />
+                                <span>
+                                    {isSyncing
+                                        ? 'Syncing...'
+                                        : syncSuccess
+                                            ? 'Synced!'
+                                            : syncError
+                                                ? 'Error'
+                                                : 'Sync Pool Data'}
+                                </span>
+                            </button>
+                        </div>
                     </div>
                     <div className="p-6">
-                        {/* Price Summary Cards */}
-                        <div className="grid grid-cols-3 gap-4 max-w-3xl mx-auto mb-6">
+                        {/* Sync Error Message */}
+                        {syncError && (
+                            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                                <p className="text-xs text-red-700">
+                                    <span className="font-bold">Error:</span> {syncError}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Sync Success Message */}
+                        {syncSuccess && (
+                            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                                <p className="text-xs text-green-700">
+                                    <CheckCircle2 size={14} className="inline mr-1" />
+                                    <span className="font-bold">Pool data synced successfully!</span>
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Pool Data Info Banner */}
+                        {poolDataLoading && (
+                            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center space-x-2">
+                                <RefreshCw size={14} className="animate-spin text-blue-600" />
+                                <p className="text-xs text-blue-700">Loading pool data from reader database...</p>
+                            </div>
+                        )}
+
+                        {poolDataError && !poolDataStats && (
+                            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <p className="text-xs text-yellow-700">
+                                    <AlertCircle size={14} className="inline mr-1" />
+                                    <span className="font-bold">Pool data unavailable.</span> Showing data from swap events.
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Price Summary Cards - Enhanced with Pool Data */}
+                        <div className="grid grid-cols-4 gap-4 mb-6">
                             <div className="bg-white p-3 rounded-lg border border-cream-dark">
                                 <p className="text-xs text-primary/40 mb-1">Current Price</p>
                                 <p className="text-sm font-black text-primary">
-                                    {poolPrice?.current_price
-                                        ? `$${poolPrice.current_price < 1
-                                            ? poolPrice.current_price.toFixed(4)
-                                            : poolPrice.current_price.toFixed(2)}`
-                                        : '-'}
+                                    {poolDataStats?.close_price
+                                        ? `$${poolDataStats.close_price < 1
+                                            ? poolDataStats.close_price.toFixed(4)
+                                            : poolDataStats.close_price.toFixed(2)}`
+                                        : poolPrice?.current_price
+                                            ? `$${poolPrice.current_price < 1
+                                                ? poolPrice.current_price.toFixed(4)
+                                                : poolPrice.current_price.toFixed(2)}`
+                                            : '-'}
                                 </p>
-                                {poolPrice?.price_change_24h_percent !== null && poolPrice?.price_change_24h_percent !== undefined && (
-                                    <p className={`text-xs font-mono mt-1 ${poolPrice.price_change_24h_percent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                        {poolPrice.price_change_24h_percent >= 0 ? '+' : ''}{poolPrice.price_change_24h_percent.toFixed(2)}%
+                                {poolDataStats?.price_change_pct !== undefined && (
+                                    <p className={`text-xs font-mono mt-1 ${poolDataStats.price_change_pct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {poolDataStats.price_change_pct >= 0 ? '+' : ''}{poolDataStats.price_change_pct.toFixed(2)}%
                                     </p>
+                                )}
+                                {poolDataStats && (
+                                    <p className="text-[9px] text-purple-600 font-bold mt-1">Pool Data</p>
                                 )}
                             </div>
                             <div className="bg-white p-3 rounded-lg border border-cream-dark">
                                 <p className="text-xs text-primary/40 mb-1">24h Range</p>
                                 <p className="text-sm font-black text-primary">
-                                    {poolPrice?.price_24h_low && poolPrice?.price_24h_high
-                                        ? `$${(poolPrice.price_24h_low < 1 ? poolPrice.price_24h_low.toFixed(4) : poolPrice.price_24h_low.toFixed(2))} - $${(poolPrice.price_24h_high < 1 ? poolPrice.price_24h_high.toFixed(4) : poolPrice.price_24h_high.toFixed(2))}`
-                                        : '-'}
+                                    {poolDataStats?.low_price && poolDataStats?.high_price
+                                        ? `$${(poolDataStats.low_price < 1 ? poolDataStats.low_price.toFixed(4) : poolDataStats.low_price.toFixed(2))} - $${(poolDataStats.high_price < 1 ? poolDataStats.high_price.toFixed(4) : poolDataStats.high_price.toFixed(2))}`
+                                        : poolPrice?.price_24h_low && poolPrice?.price_24h_high
+                                            ? `$${(poolPrice.price_24h_low < 1 ? poolPrice.price_24h_low.toFixed(4) : poolPrice.price_24h_low.toFixed(2))} - $${(poolPrice.price_24h_high < 1 ? poolPrice.price_24h_high.toFixed(4) : poolPrice.price_24h_high.toFixed(2))}`
+                                            : '-'}
                                 </p>
                             </div>
                             <div className="bg-white p-3 rounded-lg border border-cream-dark">
                                 <p className="text-xs text-primary/40 mb-1">24h Volume</p>
                                 <p className="text-sm font-black text-primary">
-                                    {poolPrice?.volume_24h_usd ? `$${poolPrice.volume_24h_usd.toFixed(0)}` : '-'}
+                                    ${poolDataStats?.volume1 ? (poolDataStats.volume1 * (poolDataStats.close_price || 0)).toFixed(0) : (poolPrice?.volume_24h_usd?.toFixed(0) || '-')}
                                 </p>
-                                {poolPrice?.swap_count_24h !== undefined && (
-                                    <p className="text-xs text-primary/40 mt-1">{poolPrice.swap_count_24h} swaps</p>
+                                {poolDataStats?.total_swaps !== undefined && (
+                                    <p className="text-xs text-primary/40 mt-1">{poolDataStats.total_swaps} swaps</p>
                                 )}
                             </div>
-                        </div>
-
-                        {/* Price Chart */}
-                        <div className="mt-8 max-w-4xl mx-auto">
-                            <OHLCPriceChart
-                                token0Symbol={token0Symbol}
-                                token1Symbol={token1Symbol}
-                                token0Address={job.pair_address} // Simplification, usually you'd want individual token addresses
-                                days={1}
-                                lowerPriceBound={poolPrice?.current_position?.lower_price ?? undefined}
-                                upperPriceBound={poolPrice?.current_position?.upper_price ?? undefined}
-                                currentPrice={poolPrice?.current_price ?? undefined}
-                                invertPrice={job.metadata.pair_name.toLowerCase().includes('xtao')}
-                            />
-                        </div>
-
-                        {/* Current Position Range */}
-                        {poolPrice?.current_position?.has_position && (
-                            <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-w-lg mx-auto mt-4">
-                                <p className="text-xs font-black text-green-700 uppercase tracking-wider mb-2">
-                                    Current Liquidity Range
+                            <div className="bg-white p-3 rounded-lg border border-cream-dark">
+                                <p className="text-xs text-primary/40 mb-1">24h Fees</p>
+                                <p className="text-sm font-black text-primary">
+                                    {poolDataStats?.fees1
+                                        ? `$${(poolDataStats.fees1 * (poolDataStats.close_price || 0)).toFixed(2)}`
+                                        : '-'}
                                 </p>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <p className="text-xs text-green-600 mb-1">Lower Bound</p>
-                                        <p className="text-sm font-mono font-bold text-green-700">
-                                            ${poolPrice.current_position.lower_price?.toFixed(2) || '-'}
-                                        </p>
-                                        <p className="text-xs text-green-600 mt-1">
-                                            Tick: {poolPrice.current_position.lower_tick?.toLocaleString()}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-green-600 mb-1">Upper Bound</p>
-                                        <p className="text-sm font-mono font-bold text-green-700">
-                                            ${poolPrice.current_position.upper_price?.toFixed(2) || '-'}
-                                        </p>
-                                        <p className="text-xs text-green-600 mt-1">
-                                            Tick: {poolPrice.current_position.upper_tick?.toLocaleString()}
-                                        </p>
-                                    </div>
-                                </div>
-                                {poolPrice.current_position.executed_at && (
-                                    <p className="text-xs text-green-600 mt-3">
-                                        Last updated: {new Date(poolPrice.current_position.executed_at).toLocaleString()}
+                                {poolDataStats && (
+                                    <p className="text-xs text-primary/40 mt-1">
+                                        {poolDataStats.fees0?.toFixed(4)} {poolDataStats.token0_symbol}
                                     </p>
                                 )}
                             </div>
-                        )}
+                        </div>
+
+                        {/* Price Chart - Full Width */}
+                        <div className="mt-8">
+                            <PoolPriceChart
+                                jobId={jobId}
+                                token0Symbol={token0Symbol}
+                                token1Symbol={token1Symbol}
+                                lowerPriceBound={poolPrice?.current_position?.lower_price ?? undefined}
+                                upperPriceBound={poolPrice?.current_position?.upper_price ?? undefined}
+                                currentPrice={poolPrice?.current_price ?? undefined}
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Vault Configuration */}
+            {/* Pair Configuration */}
             <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden">
                 <div className="px-6 py-4 border-b border-cream-dark">
                     <h3 className="text-sm font-black text-primary uppercase tracking-wider">
-                        Vault Configuration
+                        Pair Configuration
                     </h3>
                 </div>
                 <div className="p-6 space-y-4">

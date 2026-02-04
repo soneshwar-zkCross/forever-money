@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 import { useMinerWinRate, useMinerDividends, useMinerJobEarnings } from '@/lib/metrics-hooks';
-import { useJobs } from '@/lib/api';
+import { useJobs, useMinerVaults } from '@/lib/api';
+import Link from 'next/link';
 
 export default function MinerDetailsPage() {
     const params = useParams();
@@ -17,6 +18,7 @@ export default function MinerDetailsPage() {
     const { data: dividendsData } = useMinerDividends(minerUid);
     const { data: jobEarningsData } = useMinerJobEarnings(minerUid, selectedJobId);
     const { data: jobs } = useJobs();
+    const { data: minerVaults } = useMinerVaults(minerUid);
 
     if (winRateLoading || !minerUid) {
         return (
@@ -231,6 +233,97 @@ export default function MinerDetailsPage() {
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
+            </div>
+
+            {/* Miner's Vaults Section */}
+            <div className="mt-8 bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-8 border border-gray-700">
+                <h2 className="text-xl font-semibold mb-2">Miner's Vaults</h2>
+                <p className="text-sm text-gray-400 mb-6">
+                    Liquidity positions across different trading pairs
+                </p>
+
+                {minerVaults && minerVaults.total_vaults > 0 ? (
+                    <div className="space-y-4">
+                        <div className="flex gap-4 mb-6">
+                            <div className="px-4 py-2 bg-green-900/20 border border-green-800/50 rounded-lg">
+                                <span className="text-xs text-green-300">Total Vaults: </span>
+                                <span className="text-sm font-bold text-white">{minerVaults.total_vaults}</span>
+                            </div>
+                            <div className="px-4 py-2 bg-blue-900/20 border border-blue-800/50 rounded-lg">
+                                <span className="text-xs text-blue-300">Active: </span>
+                                <span className="text-sm font-bold text-white">{minerVaults.active_vaults}</span>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {minerVaults.vaults.map((vault) => (
+                                <Link
+                                    key={vault.vault_id}
+                                    href={`/admin/pairs/${vault.job_id}`}
+                                    className="block bg-gray-800/50 border border-gray-700 rounded-xl p-5 hover:border-purple-600 hover:bg-gray-800 transition-all group"
+                                >
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h3 className="text-lg font-bold text-white group-hover:text-purple-400 transition-colors">
+                                                {vault.pair_name}
+                                            </h3>
+                                            <p className="text-xs text-gray-500 font-mono mt-1">
+                                                {vault.pair_address.slice(0, 12)}...{vault.pair_address.slice(-8)}
+                                            </p>
+                                        </div>
+                                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${vault.is_eligible_for_live ? 'bg-green-900/30 text-green-400 border border-green-800' : 'bg-gray-700/30 text-gray-400 border border-gray-600'}`}>
+                                            {vault.is_eligible_for_live ? 'Active' : 'Inactive'}
+                                        </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3 mb-4">
+                                        <div>
+                                            <p className="text-xs text-gray-400 mb-1">Combined Score</p>
+                                            <p className="text-lg font-bold text-purple-400">
+                                                {vault.combined_score.toFixed(3)}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-400 mb-1">Revenue</p>
+                                            <p className="text-lg font-bold text-green-400">
+                                                ${vault.revenue_usd.toFixed(2)}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-2 text-xs">
+                                        <div className="bg-gray-900/50 rounded px-2 py-1.5">
+                                            <p className="text-gray-500">Evaluations</p>
+                                            <p className="text-white font-bold">{vault.total_evaluations}</p>
+                                        </div>
+                                        <div className="bg-gray-900/50 rounded px-2 py-1.5">
+                                            <p className="text-gray-500">Live Rounds</p>
+                                            <p className="text-white font-bold">{vault.total_live_rounds}</p>
+                                        </div>
+                                        <div className="bg-gray-900/50 rounded px-2 py-1.5">
+                                            <p className="text-gray-500">Days</p>
+                                            <p className="text-white font-bold">{vault.participation_days}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 pt-3 border-t border-gray-700 flex items-center justify-between">
+                                        <div className="flex gap-3 text-xs text-gray-400">
+                                            <span>Eval: {vault.evaluation_score.toFixed(3)}</span>
+                                            <span>Live: {vault.live_score.toFixed(3)}</span>
+                                        </div>
+                                        <svg className="w-4 h-4 text-purple-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-center py-12">
+                        <p className="text-gray-400">No vaults found for this miner.</p>
+                    </div>
+                )}
             </div>
 
             {/* Note about dividends */}

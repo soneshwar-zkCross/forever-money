@@ -29,7 +29,7 @@ import {
 } from '@/lib/api';
 import Link from 'next/link';
 
-export default function VaultsPage() {
+export default function PairsPage() {
     const { data: jobs, isLoading } = useJobs();
 
     // Use mock jobs if API returns empty (for demo purposes)
@@ -38,25 +38,25 @@ export default function VaultsPage() {
     const headerActions = (
         <button className="px-4 py-2 bg-primary text-white rounded-xl text-[9px] font-black shadow-lg shadow-primary/20 hover:-translate-y-0.5 transition-all flex items-center space-x-2 uppercase tracking-wider active:scale-95">
             <RefreshCw size={12} />
-            <span>Sync All Vaults</span>
+            <span>Sync All Pairs</span>
         </button>
     );
 
     return (
         <AdminLayout
-            title="Execution Vaults"
-            description="Monitor individual miner vaults and their rebalancing cycles."
+            title="Trading Pairs"
+            description="Monitor trading pairs and their active miners."
             icon={<Terminal size={20} />}
             headerActions={headerActions}
         >
             <div className="space-y-10 animate-fade-in pb-20">
-                {/* Active Jobs Grid */}
+                {/* Active Pairs Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                     {isLoading ? (
                         [1, 2, 3].map(i => <div key={i} className="h-48 bg-white/50 rounded-3xl animate-pulse border border-cream-dark" />)
                     ) : (
                         displayJobs.map(job => (
-                            <VaultCard key={job.job_id} job={job} />
+                            <PairCard key={job.job_id} job={job} />
                         ))
                     )}
                 </div>
@@ -407,7 +407,7 @@ function ActivityFeed({ jobs }: { jobs: Job[] }) {
     );
 }
 
-function VaultCard({ job }: { job: Job }) {
+function PairCard({ job }: { job: Job }) {
     const { data: stats, isLoading: statsLoading } = useNetworkStats(job.job_id);
     const { data: revenue, isLoading: revenueLoading } = useJobRevenue(job.job_id, 30);
     const { data: tvl } = useJobTVL(job.job_id);
@@ -547,7 +547,7 @@ function VaultCard({ job }: { job: Job }) {
                         <Users size={16} />
                     </Link>
                     <Link
-                        href={`/admin/vaults/${job.job_id}`}
+                        href={`/admin/pairs/${job.job_id}`}
                         className="flex items-center space-x-1.5 text-primary group/action hover:bg-cream px-2.5 py-1.5 rounded-lg transition-all"
                     >
                         <span className="text-[9px] font-black uppercase tracking-wider">Details</span>

@@ -35,11 +35,14 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, titl
         return false;
     };
 
+    // Bypass authentication for now
+    /*
     useEffect(() => {
         if (!loading && !isAuthenticated) {
             router.push('/');
         }
     }, [loading, isAuthenticated, router]);
+    */
 
     if (loading) {
         return (
@@ -49,9 +52,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, titl
         );
     }
 
+    /*
     if (!isAuthenticated) {
         return null; // Will redirect via useEffect
     }
+    */
 
     return (
         <div className="flex h-screen bg-cream text-primary selection:bg-primary-light selection:text-white">
@@ -69,13 +74,13 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, titl
                     <NavItem icon={<LayoutDashboard size={18} />} label="Dashboard" href="/admin" active={isActive('/admin')} />
                     <NavItem icon={<Trophy size={18} />} label="Leaderboard" href="/admin/leaderboard" active={isActive('/admin/leaderboard')} />
                     <NavItem icon={<Users size={18} />} label="Miners" href="/admin/miners" active={isActive('/admin/miners')} />
-                    <NavItem icon={<Terminal size={18} />} label="Vaults" href="/admin/jobs" active={isActive('/admin/jobs')} />
+                    <NavItem icon={<Terminal size={18} />} label="Pairs" href="/admin/pairs" active={isActive('/admin/pairs')} />
 
                     <div className="pt-8 mb-2">
                         <p className="px-4 pb-2 text-[10px] font-black uppercase tracking-[0.2em] text-primary/30">Network</p>
                     </div>
                     <NavItem icon={<Monitor size={18} />} label="Metrics" href="/admin/metrics" active={isActive('/admin/metrics')} />
-                    <NavItem icon={<Settings size={18} />} label="Settings" href="/admin/settings" active={isActive('/admin/settings')} />
+                    {/* <NavItem icon={<Settings size={18} />} label="Settings" href="/admin/settings" active={isActive('/admin/settings')} /> */}
                 </nav>
 
                 <div className="p-4 mt-auto">

@@ -137,8 +137,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         router.push('/');
     };
 
+    // For development/bypass mode, we can force isAuthenticated to true
+    // or provide a dummy user if none exists.
+    const effectiveUser = user || (loading ? null : {
+        wallet_address: '0x0000...0000',
+        permissions: ['admin'],
+        exp: Math.floor(Date.now() / 1000) + 86400
+    });
+
     return (
-        <AuthContext.Provider value={{ user, loading, login, logout, isAuthenticated: !!user }}>
+        <AuthContext.Provider value={{
+            user: effectiveUser,
+            loading,
+            login,
+            logout,
+            isAuthenticated: loading ? false : true
+        }}>
             {children}
         </AuthContext.Provider>
     );

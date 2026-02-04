@@ -1,17 +1,23 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Logo } from '@/components/ui/Logo';
 import { ShieldCheck, ArrowRight, Wallet, Cpu, Loader2, AlertCircle } from 'lucide-react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 
 import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
+  const router = useRouter();
   const { login } = useAuth();
   const [connecting, setConnecting] = useState(false);
   const [walletType, setWalletType] = useState<null | 'substrate' | 'evm'>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    router.push('/admin');
+  }, [router]);
 
   const handleConnect = async (type: 'substrate' | 'evm') => {
     setError(null);
