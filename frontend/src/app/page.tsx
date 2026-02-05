@@ -38,7 +38,7 @@ export default function LoginPage() {
     <div className="relative h-screen w-full flex items-center justify-center overflow-hidden dragon-bg font-sans">
       <div className="absolute inset-0 bg-white/20 backdrop-blur-[2px] animate-fade-in"></div>
 
-      {/* Error Changes */}
+      {/* Error inline Changes */}
       {error && (
         <div className="absolute top-8 left-1/2 -translate-x-1/2 z-50 animate-slide-up">
           <div className="bg-red-50 border border-red-200 px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 text-red-600">
