@@ -109,23 +109,18 @@ class MockDataSeeder:
         print(f"✅ Connected to database: {db_url}")
 
     async def clean_existing_data(self):
-        """Clean existing mock data"""
-        print("🧹 Cleaning existing mock data...")
+        """Clean ALL existing data - complete wipe"""
+        print("🧹 Cleaning ALL existing data...")
 
-        # Get all mock pool addresses
-        mock_addresses = [p["pair_address"].lower().replace("0x", "") for p in MOCK_POOLS]
-
-        # Delete in reverse dependency order
-        await SwapEvent.filter(evt_address__in=mock_addresses).delete()
+        # Delete EVERYTHING in reverse dependency order
+        await SwapEvent.all().delete()
         await LiveExecution.all().delete()
         await Prediction.all().delete()
         await MinerScore.all().delete()
         await Round.all().delete()
-        # Delete jobs matching our pool IDs
-        for pool in MOCK_POOLS:
-            await Job.filter(job_id=pool["pair_id"]).delete()
+        await Job.all().delete()
 
-        print("✅ Cleaned existing data")
+        print("✅ Cleaned ALL data - fresh start")
 
     async def seed_jobs(self):
         """Create mock jobs (trading pairs)"""
@@ -228,16 +223,50 @@ class MockDataSeeder:
         print(f"✅ Seeded miner scores")
 
     async def seed_predictions_and_executions(self):
-        """Create predictions and live executions for rounds"""
-        print(f"\n🎯 Seeding predictions and executions...")
+        """Create predictions and live executions for rounds with strategic miners based on real swap data"""
+        print(f"\n🎯 Seeding predictions and executions based on real swap data...")
 
         prediction_count = 0
         execution_count = 0
+
+        # Strategic miner configurations: rebalance at 10%, 20%, ..., 100% price movement
+        miner_strategies = {
+            1: {"rebalance_threshold": 0.10, "name": "Conservative"},
+            2: {"rebalance_threshold": 0.20, "name": "Moderate-Conservative"},
+            3: {"rebalance_threshold": 0.30, "name": "Balanced"},
+            4: {"rebalance_threshold": 0.40, "name": "Moderate-Aggressive"},
+            5: {"rebalance_threshold": 0.50, "name": "Aggressive"},
+            6: {"rebalance_threshold": 0.60, "name": "Very Aggressive"},
+            7: {"rebalance_threshold": 0.70, "name": "High Risk"},
+            8: {"rebalance_threshold": 0.80, "name": "Extreme"},
+            9: {"rebalance_threshold": 0.90, "name": "Maximum"},
+            10: {"rebalance_threshold": 1.00, "name": "All-In"},
+        }
 
         for round_data in self.rounds:
             round_obj = round_data["round"]
             job = round_data["job"]
             round_type = round_data["round_type"]
+
+            # Get actual price data for this round period from swaps
+            pool_address = job.pair_address.lower().replace("0x", "")
+            round_start_ts = int(round_obj.start_time.timestamp())
+            round_end_ts = int(round_obj.end_time.timestamp()) if round_obj.end_time else round_start_ts + 900
+
+            # Fetch swaps during this round
+            round_swaps = await SwapEvent.filter(
+                evt_address=pool_address,
+                evt_block_time__gte=round_start_ts,
+                evt_block_time__lte=round_end_ts
+            ).order_by('evt_block_time').all()
+
+            # Calculate opening price from first swap (or use default)
+            if round_swaps:
+                opening_tick = round_swaps[0].tick
+                opening_price = pow(1.0001, opening_tick)
+            else:
+                # No swaps in this round, use a default mid-price
+                opening_price = 1.0
 
             # Get eligible miners for this job
             eligible_miners = await MinerScore.filter(
@@ -256,9 +285,18 @@ class MockDataSeeder:
             participants = random.sample(eligible_miners, num_participants)
 
             for miner_score in participants:
-                # Create prediction
-                lower_bound = random.uniform(0.8, 0.95)
-                upper_bound = random.uniform(1.05, 1.2)
+                # Get miner's strategy
+                miner_uid = miner_score.miner_uid
+                strategy = miner_strategies.get(miner_uid, {"rebalance_threshold": 0.50, "name": "Default"})
+
+                # Calculate strategic bounds based on ACTUAL opening price and miner's threshold
+                threshold = strategy["rebalance_threshold"]
+                lower_bound = opening_price * (1 - threshold)
+                upper_bound = opening_price * (1 + threshold)
+
+                # Calculate realistic liquidity based on pool config
+                pool_config = next(p for p in MOCK_POOLS if p["pair_id"] == job.job_id)
+                base_liquidity = random.uniform(5000, 50000)
 
                 prediction = await Prediction.create(
                     prediction_id=f"pred_{round_obj.round_id}_{miner_score.miner_uid}",
@@ -271,7 +309,13 @@ class MockDataSeeder:
                         "lower_price_bound": lower_bound,
                         "upper_price_bound": upper_bound,
                         "target_ratio": 0.5,
-                        "liquidity_amount": random.uniform(1000, 10000)
+                        "liquidity_amount": base_liquidity,
+                        "opening_price": opening_price,
+                        "strategy": {
+                            "name": strategy["name"],
+                            "rebalance_threshold": strategy["rebalance_threshold"],
+                            "description": f"Rebalances when price moves {strategy['rebalance_threshold']*100:.0f}% from opening"
+                        }
                     }
                 )
                 prediction_count += 1
@@ -279,7 +323,24 @@ class MockDataSeeder:
                 # Create live execution if it's a live round
                 from validator.models.job import RoundType
                 if round_type == RoundType.LIVE:
-                    execution_success = random.random() > 0.15  # 85% success rate
+                    # Determine success based on whether price stayed in range
+                    if round_swaps:
+                        # Get min/max price during round
+                        min_tick = min(s.tick for s in round_swaps)
+                        max_tick = max(s.tick for s in round_swaps)
+                        min_price = pow(1.0001, min_tick)
+                        max_price = pow(1.0001, max_tick)
+
+                        # Success if price stayed within bounds
+                        stayed_in_range = min_price >= lower_bound and max_price <= upper_bound
+                        execution_success = stayed_in_range or random.random() > 0.3  # Some succeed even out of range
+
+                        # Calculate fees earned (proportional to time in range)
+                        time_in_range = 1.0 if stayed_in_range else random.uniform(0.2, 0.8)
+                        fees_earned = base_liquidity * 0.0003 * time_in_range  # 0.03% fee
+                    else:
+                        execution_success = random.random() > 0.15
+                        fees_earned = 0
 
                     # Generate 64-char hex tx_hash (0x + 64 chars = 66 total)
                     tx_hash = f"0x{'a' * 60}{execution_count:04d}"
@@ -295,7 +356,11 @@ class MockDataSeeder:
                         tx_status="success" if execution_success else "failed",
                         actual_performance={
                             "success": execution_success,
-                            "error": None if execution_success else "Simulated failure"
+                            "fees_earned": fees_earned if execution_success else 0,
+                            "time_in_range": time_in_range if round_swaps else 0,
+                            "opening_price": opening_price,
+                            "final_price": max_price if round_swaps else opening_price,
+                            "error": None if execution_success else "Price moved out of range"
                         }
                     )
                     execution_count += 1
