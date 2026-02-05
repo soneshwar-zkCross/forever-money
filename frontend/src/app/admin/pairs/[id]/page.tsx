@@ -25,6 +25,16 @@ import PoolPriceChart from '@/components/charts/PoolPriceChart';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
+// Time range options (in hours)
+const TIME_RANGES = [
+    { label: '7d', hours: 7 * 24 },
+    { label: '10d', hours: 10 * 24 },
+    { label: '15d', hours: 15 * 24 },
+    { label: '30d', hours: 30 * 24 },
+    { label: '3M', hours: 90 * 24 },
+    { label: '6M', hours: 180 * 24 },
+];
+
 export default function PairDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: jobId } = use(params);
     const { data: jobs } = useJobs();
@@ -34,7 +44,9 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
     const { data: apy } = useJobAPY(jobId, 30);
     const { data: pnl } = useJobPnL(jobId, 30);
     const { data: tvl } = useJobTVL(jobId);
-    const { data: poolDataStats, refetch: refetchPoolData, isLoading: poolDataLoading, isError: poolDataError } = usePoolDataStats(jobId, 24); // Pool data from reader DB
+
+    const [selectedTimeRange, setSelectedTimeRange] = useState(TIME_RANGES[0].hours); // Default to 7 days
+    const { data: poolDataStats, refetch: refetchPoolData, isLoading: poolDataLoading, isError: poolDataError } = usePoolDataStats(jobId, selectedTimeRange); // Pool data from reader DB
 
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncSuccess, setSyncSuccess] = useState(false);
@@ -48,7 +60,7 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
         setSyncSuccess(false);
 
         try {
-            const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/sync-pool-data?lookback_hours=24`, {
+            const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/sync-pool-data?lookback_hours=${selectedTimeRange}`, {
                 method: 'POST',
             });
 
@@ -275,7 +287,7 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                 {/* Pool Price Chart Placeholder */}
                 <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden">
                     <div className="px-6 py-4 border-b border-cream-dark">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between mb-4">
                             <div>
                                 <h3 className="text-sm font-black text-primary uppercase tracking-wider">
                                     Pool Price & Miner Positions
@@ -287,13 +299,12 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                             <button
                                 onClick={handleSyncPoolData}
                                 disabled={isSyncing}
-                                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                                    syncSuccess
-                                        ? 'bg-green-100 text-green-700 border border-green-300'
-                                        : syncError
-                                            ? 'bg-red-100 text-red-700 border border-red-300'
-                                            : 'bg-primary text-white hover:bg-primary/90 border border-primary'
-                                } ${isSyncing ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg'}`}
+                                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${syncSuccess
+                                    ? 'bg-green-100 text-green-700 border border-green-300'
+                                    : syncError
+                                        ? 'bg-red-100 text-red-700 border border-red-300'
+                                        : 'bg-primary text-white hover:bg-primary/90 border border-primary'
+                                    } ${isSyncing ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg'}`}
                             >
                                 <RefreshCw
                                     size={14}
@@ -309,6 +320,22 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                                                 : 'Sync Pool Data'}
                                 </span>
                             </button>
+                        </div>
+
+                        {/* Time Range Selector */}
+                        <div className="flex items-center space-x-2">
+                            {TIME_RANGES.map((range) => (
+                                <button
+                                    key={range.label}
+                                    onClick={() => setSelectedTimeRange(range.hours)}
+                                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${selectedTimeRange === range.hours
+                                        ? 'bg-primary text-white shadow-md'
+                                        : 'bg-white text-primary border border-cream-dark hover:bg-cream/30'
+                                        }`}
+                                >
+                                    {range.label}
+                                </button>
+                            ))}
                         </div>
                     </div>
                     <div className="p-6">
@@ -415,6 +442,7 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                                 lowerPriceBound={poolPrice?.current_position?.lower_price ?? undefined}
                                 upperPriceBound={poolPrice?.current_position?.upper_price ?? undefined}
                                 currentPrice={poolPrice?.current_price ?? undefined}
+                                lookbackHours={selectedTimeRange}
                             />
                         </div>
                     </div>
@@ -552,8 +580,8 @@ function ActivityStatusBadge({ status }: { status: string }) {
 function RoundCard({ round }: { round: any }) {
     const execution = round.execution;
     const isLive = round.round_type === 'live';
-    const rebalance = execution?.actual_performance?.rebalance;
-    const strategy = execution?.strategy_data;
+    const predictions = round.predictions || [];
+    const executions = round.executions || [];
 
     return (
         <div className={`rounded-xl p-4 border transition-colors ${isLive
@@ -587,156 +615,118 @@ function RoundCard({ round }: { round: any }) {
                 </div>
             </div>
 
-            {/* Winner Info */}
-            {round.winner_uid !== null && (
+
+
+            {/* All Miner Predictions */}
+            {predictions.length > 0 && (
                 <div className="bg-white rounded-lg p-3 mb-3">
-                    <p className="text-[10px] font-black text-primary/40 uppercase tracking-wider mb-2">
-                        Winner
+                    <p className="text-[10px] font-black text-primary/40 uppercase tracking-wider mb-3">
+                        Miner Predictions ({predictions.length})
                     </p>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-sm font-bold text-primary">
-                                UID {round.winner_uid}
-                            </p>
-                            <p className="text-xs font-mono text-primary/40">
-                                {round.winner_hotkey?.slice(0, 20)}...
-                            </p>
-                        </div>
-                        {round.winner_score && (
-                            <div className="text-right">
-                                <p className="text-sm font-mono font-bold text-primary">
-                                    {round.winner_score.toFixed(2)}
-                                </p>
-                                <p className="text-xs text-primary/40">score</p>
-                            </div>
-                        )}
+                    <div className="space-y-2">
+                        {predictions.map((pred: any, idx: number) => {
+                            const predData = pred.prediction_data;
+                            const strategyInfo = predData?.strategy || {};
+                            const execution = executions.find((e: any) => e.miner_uid === pred.miner_uid);
+                            const action = strategyInfo.action || strategyInfo.name || (predData?.should_rebalance ? 'REBALANCE' : 'HOLD');
+
+                            return (
+                                <div
+                                    key={idx}
+                                    className="p-3 rounded-lg border bg-gray-50 border-gray-200"
+                                >
+                                    <div className="flex items-start justify-between mb-2">
+                                        <div className="flex-1">
+                                            <div className="flex items-center space-x-2 mb-1">
+                                                <p className="text-xs font-bold text-primary">
+                                                    Miner UID {pred.miner_uid}
+                                                    {idx === 0 && (
+                                                        <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[8px] font-black uppercase rounded">
+                                                            Initial Entry
+                                                        </span>
+                                                    )}
+                                                </p>
+                                                {execution && (
+                                                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${execution.tx_status === 'success'
+                                                        ? 'bg-green-100 text-green-700'
+                                                        : 'bg-red-100 text-red-700'
+                                                        }`}>
+                                                        {execution.tx_status}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-[10px] font-mono text-primary/40">
+                                                Vault: vault_{pred.miner_uid}_{round.round_id?.split('_')[0]}_{round.round_id?.split('_')[1]}
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-col items-end space-y-2">
+                                            <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${action === 'REBALANCE' || action?.toUpperCase().includes('REBALANCE')
+                                                ? 'bg-purple-100 text-purple-700'
+                                                : 'bg-gray-200 text-gray-600'
+                                                }`}>
+                                                {action}
+                                            </span>
+                                            {execution?.tx_hash && (
+                                                <a
+                                                    href={`https://basescan.org/tx/${execution.tx_hash}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="font-mono text-[9px] text-primary/40 hover:text-primary hover:underline flex items-center space-x-1"
+                                                >
+                                                    <span>{execution.tx_hash.slice(0, 8)}...</span>
+                                                    <ExternalLink size={8} />
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-2 text-[10px]">
+                                        <div>
+                                            <span className="text-primary/40">Range:</span>
+                                            <p className="font-mono text-primary font-bold">
+                                                ${predData?.lower_price_bound?.toFixed(4)} - ${predData?.upper_price_bound?.toFixed(4)}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <span className="text-primary/40">Liquidity:</span>
+                                            <p className="font-mono text-primary font-bold">
+                                                ${predData?.liquidity_amount?.toFixed(0)}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <span className="text-primary/40">Threshold:</span>
+                                            <p className="font-mono text-primary font-bold">
+                                                {(strategyInfo.rebalance_threshold * 100).toFixed(0)}%
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {execution?.actual_performance && (
+                                        <div className="mt-2 pt-2 border-t border-gray-200 text-[10px]">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <span className="text-primary/40">Success:</span>
+                                                    <span className={`ml-2 font-bold ${execution.actual_performance.success ? 'text-green-600' : 'text-red-600'
+                                                        }`}>
+                                                        {execution.actual_performance.success ? 'Yes' : 'No'}
+                                                    </span>
+                                                </div>
+                                                {execution.actual_performance.error && (
+                                                    <span className="text-red-600 text-[9px]">
+                                                        {execution.actual_performance.error}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}
 
-            {/* Execution Details for LIVE rounds */}
-            {isLive && execution && (
-                <>
-                    {/* Proposed Strategy */}
-                    {strategy && (
-                        <div className="bg-white rounded-lg p-3 mb-3">
-                            <p className="text-[10px] font-black text-primary/40 uppercase tracking-wider mb-2">
-                                Proposed Strategy
-                            </p>
-                            <div className="grid grid-cols-2 gap-3 text-xs">
-                                <div>
-                                    <span className="text-primary/40">New Range:</span>
-                                    <p className="font-mono text-primary font-bold">
-                                        [{strategy.lower_tick?.toLocaleString()}, {strategy.upper_tick?.toLocaleString()}]
-                                    </p>
-                                </div>
-                                <div>
-                                    <span className="text-primary/40">Liquidity:</span>
-                                    <p className="font-mono text-primary">
-                                        {strategy.liquidity_token0?.toFixed(2)} / {strategy.liquidity_token1?.toFixed(2)}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
-                    {/* Rebalance Executed */}
-                    {rebalance && (
-                        <div className="bg-white rounded-lg p-3 mb-3">
-                            <p className="text-[10px] font-black text-primary/40 uppercase tracking-wider mb-3">
-                                Rebalance Executed
-                            </p>
-
-                            {/* Position Change */}
-                            <div className="space-y-2 text-xs mb-3">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-primary/40">Old Position:</span>
-                                    <span className="font-mono text-red-600 font-bold">
-                                        [{rebalance.old_lower_tick?.toLocaleString()}, {rebalance.old_upper_tick?.toLocaleString()}]
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-primary/40">New Position:</span>
-                                    <span className="font-mono text-green-600 font-bold">
-                                        [{rebalance.new_lower_tick?.toLocaleString()}, {rebalance.new_upper_tick?.toLocaleString()}]
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Fees Collected */}
-                            <div className="bg-green-50 border border-green-200 rounded-lg p-2 mb-3">
-                                <p className="text-[10px] font-black text-green-700 uppercase tracking-wider mb-1">
-                                    Fees Collected
-                                </p>
-                                <div className="flex items-center justify-between text-xs">
-                                    <span className="font-mono text-green-600 font-bold">
-                                        {rebalance.fees_collected_0?.toFixed(4)} token0
-                                    </span>
-                                    <span className="font-mono text-green-600 font-bold">
-                                        {rebalance.fees_collected_1?.toFixed(4)} token1
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Tokens Moved */}
-                            <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                                <div className="bg-red-50 rounded p-2">
-                                    <p className="text-[9px] font-black text-red-700 uppercase mb-1">Removed</p>
-                                    <p className="font-mono text-red-600 text-[10px]">
-                                        {rebalance.tokens_removed_0?.toFixed(2)} t0
-                                    </p>
-                                    <p className="font-mono text-red-600 text-[10px]">
-                                        {rebalance.tokens_removed_1?.toFixed(2)} t1
-                                    </p>
-                                </div>
-                                <div className="bg-green-50 rounded p-2">
-                                    <p className="text-[9px] font-black text-green-700 uppercase mb-1">Added</p>
-                                    <p className="font-mono text-green-600 text-[10px]">
-                                        {rebalance.tokens_added_0?.toFixed(2)} t0
-                                    </p>
-                                    <p className="font-mono text-green-600 text-[10px]">
-                                        {rebalance.tokens_added_1?.toFixed(2)} t1
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Impact Metrics */}
-                            {execution.actual_performance && (
-                                <div className="pt-3 border-t border-cream flex items-center justify-between text-xs">
-                                    <div>
-                                        <span className="text-primary/40">Price Impact:</span>
-                                        <span className={`ml-2 font-mono font-bold ${Math.abs(execution.actual_performance.price_impact || 0) > 0.01 ? 'text-orange-600' : 'text-green-600'}`}>
-                                            {((execution.actual_performance.price_impact || 0) * 100).toFixed(3)}%
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span className="text-primary/40">Slippage:</span>
-                                        <span className="ml-2 font-mono font-bold text-primary">
-                                            {((execution.actual_performance.slippage || 0) * 100).toFixed(3)}%
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Transaction */}
-                    {execution.tx_hash && (
-                        <div className="flex items-center justify-between text-xs bg-white rounded-lg p-3">
-                            <span className="text-primary/40">Transaction:</span>
-                            <a
-                                href={`https://basescan.org/tx/${execution.tx_hash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="font-mono text-primary hover:underline flex items-center space-x-1"
-                            >
-                                <span>{execution.tx_hash.slice(0, 16)}...</span>
-                                <ExternalLink size={10} />
-                            </a>
-                        </div>
-                    )}
-                </>
-            )}
         </div>
     );
 }
@@ -753,10 +743,7 @@ function StrategyCard({ round }: { round: any }) {
             <div className="flex items-start justify-between mb-3">
                 <div>
                     <p className="text-sm font-bold text-primary mb-1">
-                        Round #{round.round_number} • UID {round.winner_uid}
-                    </p>
-                    <p className="text-xs font-mono text-primary/40">
-                        {round.winner_hotkey?.slice(0, 20)}...
+                        Round #{round.round_number} Execution Details
                     </p>
                 </div>
                 <ActivityStatusBadge status={execution.tx_status || 'pending'} />

@@ -179,8 +179,9 @@ class MockDataSeeder:
                     round_deadline=round_deadline,
                     end_time=round_end,
                     start_block=start_block + (round_num * 100),
-                    status=RoundStatus.COMPLETED if round_num < self.num_rounds else RoundStatus.ACTIVE,
-                    performance_data={}
+                    status=RoundStatus.COMPLETED,  # All rounds completed for testing
+                    performance_data={},  # Will populate after predictions
+                    winner_uid=None  # Will set after predictions
                 )
 
                 self.rounds.append({
@@ -364,6 +365,34 @@ class MockDataSeeder:
                         }
                     )
                     execution_count += 1
+
+            # After creating all predictions for this round, update round's performance_data
+            round_predictions = await Prediction.filter(round=round_obj).all()
+
+            if round_predictions:
+                # Build performance_data with scores for each miner
+                scores = {}
+                for pred in round_predictions:
+                    # Simulate a score based on strategy threshold (tighter ranges = higher risk = potentially higher score)
+                    strategy_threshold = pred.prediction_data.get("strategy", {}).get("rebalance_threshold", 0.5)
+                    base_score = random.uniform(0.6, 0.9)
+                    # Tighter ranges (lower threshold) get slight bonus
+                    threshold_bonus = (1 - strategy_threshold) * 0.1
+                    final_score = min(base_score + threshold_bonus, 1.0)
+
+                    scores[str(pred.miner_uid)] = {
+                        "score": final_score,
+                        "accepted": True,
+                        "prediction_data": pred.prediction_data
+                    }
+
+                # Set winner as highest scoring miner
+                winner_uid = max(scores.items(), key=lambda x: x[1]["score"])[0]
+
+                # Update round with performance data and winner
+                round_obj.performance_data = {"scores": scores}
+                round_obj.winner_uid = int(winner_uid)
+                await round_obj.save()
 
         print(f"  ✓ Created {prediction_count} predictions")
         print(f"  ✓ Created {execution_count} live executions")

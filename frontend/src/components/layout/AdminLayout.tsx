@@ -9,7 +9,7 @@ import {
     Bell,
     UserCircle,
     Monitor,
-    Loader2 // Import Loader2
+    Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -22,27 +22,19 @@ interface AdminLayoutProps {
     title?: string;
     description?: string;
     icon?: React.ReactNode;
+    className?: string;
 }
 
-const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, title, description, icon }) => {
+const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, title, description, icon, className }) => {
     const pathname = usePathname();
     const router = useRouter();
-    const { isAuthenticated, loading, logout, user } = useAuth(); // Destructure logout and user too
+    const { isAuthenticated, loading, logout, user } = useAuth();
 
     const isActive = (path: string) => {
         if (path === '/admin' && pathname === '/admin') return true;
         if (path !== '/admin' && pathname?.startsWith(path)) return true;
         return false;
     };
-
-    // Bypass authentication for now
-    /*
-    useEffect(() => {
-        if (!loading && !isAuthenticated) {
-            router.push('/');
-        }
-    }, [loading, isAuthenticated, router]);
-    */
 
     if (loading) {
         return (
@@ -52,14 +44,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, titl
         );
     }
 
-    /*
-    if (!isAuthenticated) {
-        return null; // Will redirect via useEffect
-    }
-    */
-
     return (
-        <div className="flex h-screen bg-cream text-primary selection:bg-primary-light selection:text-white">
+        <div className={`flex h-screen bg-cream text-primary selection:bg-primary-light selection:text-white ${className || ''}`}>
             {/* Sidebar */}
             <aside className="w-64 bg-white border-r border-cream-dark flex flex-col h-full z-20">
                 <div className="p-8 pb-10 flex items-center space-x-3 group">
@@ -80,7 +66,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, titl
                         <p className="px-4 pb-2 text-[10px] font-black uppercase tracking-[0.2em] text-primary/30">Network</p>
                     </div>
                     <NavItem icon={<Monitor size={18} />} label="Metrics" href="/admin/metrics" active={isActive('/admin/metrics')} />
-                    {/* <NavItem icon={<Settings size={18} />} label="Settings" href="/admin/settings" active={isActive('/admin/settings')} /> */}
                 </nav>
 
                 <div className="p-4 mt-auto">
@@ -94,7 +79,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, titl
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
                 {/* Header */}
-                <header className="h-20 glass-nav px-8 lg:px-12 flex items-center justify-between sticky top-0 z-10 shrink-0">
+                <header className="h-20 glass-nav px-8 lg:px-12 flex items-center justify-between sticky top-0 z-10 shrink-0 border-b border-cream-dark">
                     <div className="flex items-center space-x-4">
                         <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary/40">
                             {icon || <Monitor size={16} />}

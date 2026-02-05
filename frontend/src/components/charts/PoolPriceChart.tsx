@@ -38,6 +38,7 @@ interface PoolPriceChartProps {
     currentPrice?: number;
     token0Symbol?: string;
     token1Symbol?: string;
+    lookbackHours?: number;
 }
 
 export default function PoolPriceChart({
@@ -47,6 +48,7 @@ export default function PoolPriceChart({
     currentPrice,
     token0Symbol = 'Token0',
     token1Symbol = 'Token1',
+    lookbackHours = 24,
 }: PoolPriceChartProps) {
     const [candles, setCandles] = useState<CandleData[]>([]);
     const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
@@ -62,7 +64,7 @@ export default function PoolPriceChart({
 
             try {
                 // Try to fetch from pool-data endpoint first (reader database)
-                let res = await fetch(`${API_BASE_URL}/jobs/${jobId}/pool-data/candles?interval=3600&lookback_hours=24`);
+                let res = await fetch(`${API_BASE_URL}/jobs/${jobId}/pool-data/candles?interval=3600&lookback_hours=${lookbackHours}`);
 
                 if (res.ok) {
                     const data = await res.json();
@@ -71,7 +73,7 @@ export default function PoolPriceChart({
                 } else {
                     console.warn('Pool data not available, falling back to swap events');
                     // Fallback to regular candles
-                    res = await fetch(`${API_BASE_URL}/jobs/${jobId}/candles?interval=3600&lookback_hours=24`);
+                    res = await fetch(`${API_BASE_URL}/jobs/${jobId}/candles?interval=3600&lookback_hours=${lookbackHours}`);
 
                     if (!res.ok) throw new Error('Failed to fetch candles');
 
@@ -94,7 +96,7 @@ export default function PoolPriceChart({
             const interval = setInterval(fetchCandles, 60000);
             return () => clearInterval(interval);
         }
-    }, [jobId]);
+    }, [jobId, lookbackHours]);
 
     // Transform candles to chart data
     useEffect(() => {
@@ -104,19 +106,22 @@ export default function PoolPriceChart({
             .filter(c => c.close > 0)
             .map(candle => {
                 const date = new Date(candle.timestamp * 1000);
+
+                // For time ranges > 24 hours, show date + time
+                const timeFormat = lookbackHours > 24
+                    ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+                      date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+                    : date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+
                 return {
-                    time: date.toLocaleTimeString('en-US', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: false
-                    }),
+                    time: timeFormat,
                     price: candle.close,
                     timestamp: candle.timestamp,
                 };
             });
 
         setChartData(transformed);
-    }, [candles]);
+    }, [candles, lookbackHours]);
 
     if (loading) {
         return (
@@ -323,8 +328,10 @@ export default function PoolPriceChart({
                     </p>
                 </div>
                 <div className="p-2 bg-gray-50 rounded">
-                    <p className="text-gray-500 mb-1">Interval</p>
-                    <p className="font-bold text-gray-900">1 Hour</p>
+                    <p className="text-gray-500 mb-1">Time Range</p>
+                    <p className="font-bold text-gray-900">
+                        {lookbackHours >= 720 ? `${lookbackHours / 720}M` : `${lookbackHours / 24}d`}
+                    </p>
                 </div>
             </div>
         </div>

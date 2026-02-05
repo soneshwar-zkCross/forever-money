@@ -9,7 +9,7 @@ from tortoise.expressions import Q
 from tortoise.functions import Count
 import logging
 
-from validator.models.job import Job, Round, MinerScore, RoundStatus, LiveExecution
+from validator.models.job import Job, Round, MinerScore, RoundStatus, LiveExecution, Prediction
 from validator.models.pool_events import SwapEvent
 from validator.repositories.pool import PoolDataDB
 
@@ -429,19 +429,37 @@ class JobService:
                     ).first()
                     miner_hotkey = miner_score.miner_hotkey if miner_score else f"UNKNOWN_UID_{round_obj.winner_uid}"
 
+                # Get predictions for this round
+                predictions = await Prediction.filter(round=round_obj).all()
+                predictions_data = []
+                for pred in predictions:
+                    predictions_data.append({
+                        "miner_uid": pred.miner_uid,
+                        "miner_hotkey": pred.miner_hotkey,
+                        "accepted": pred.accepted,
+                        "prediction_data": pred.prediction_data,
+                        "submitted_at": pred.submitted_at,
+                    })
+
                 # Get execution data if it's a live round
                 execution_data = None
+                executions_list = []
                 if round_obj.round_type.value == "live":
-                    execution = await LiveExecution.filter(round=round_obj).first()
-                    if execution:
-                        execution_data = {
+                    executions = await LiveExecution.filter(round=round_obj).all()
+                    for execution in executions:
+                        exec_data = {
                             "execution_id": execution.execution_id,
+                            "miner_uid": execution.miner_uid,
                             "tx_hash": execution.tx_hash,
                             "tx_status": execution.tx_status,
                             "strategy_data": execution.strategy_data,
                             "actual_performance": execution.actual_performance,
                             "executed_at": execution.executed_at,
                         }
+                        executions_list.append(exec_data)
+                        # Keep first execution for backwards compat
+                        if execution_data is None:
+                            execution_data = exec_data
 
                 # Get winner score from performance_data
                 winner_score = None
@@ -461,7 +479,9 @@ class JobService:
                     "start_time": round_obj.start_time,
                     "end_time": round_obj.end_time,
                     "execution": execution_data,
-                    "participants_count": len(round_obj.performance_data.get("scores", {})) if round_obj.performance_data else 0,
+                    "executions": executions_list,  # All executions for this round
+                    "predictions": predictions_data,  # All predictions for this round
+                    "participants_count": len(predictions),
                 })
 
             return result, total_count

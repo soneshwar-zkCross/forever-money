@@ -15,29 +15,47 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# Pool configuration for xTAO/USDC
-XTAO_USDC_POOL = {
-    "id": "xtao-usdc-base",
-    "name": "xTAO/USDC Aerodrome (Base)",
-    "address": "0xf9d5533091B5339BC102fCE5DecFe74C09512315",
-    "network": "base",
-    "table_name": "base_poocl_swaps_v2",
-    "token0": {"symbol": "USDC", "decimals": 6, "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"},
-    "token1": {"symbol": "xTAO", "decimals": 18, "address": "0xb99fbe68c8a0cc14be8c1af73dd4dfea8a76add7"},
-    "fee_tier": 0.003,
-    "tick_spacing": 60,
-    "invert_price": True,  # Show xTAO/USDC (xTAO price in USDC)
+# Pool configurations (address -> config)
+POOL_CONFIGS = {
+    "0xf9d5533091B5339BC102fCE5DecFe74C09512315": {
+        "id": "xtao-usdc-base",
+        "name": "xTAO/USDC Aerodrome (Base)",
+        "table_name": "base_poocl_swaps_v2",
+        "token0": {"symbol": "USDC", "decimals": 6},
+        "token1": {"symbol": "xTAO", "decimals": 18},
+        "fee_tier": 0.003,
+        "invert_price": True,
+    },
+    "0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59": {
+        "id": "weth-usdc-base",
+        "name": "WETH/USDC Aerodrome (Base)",
+        "table_name": "base_poocl_swaps_v2",
+        "token0": {"symbol": "WETH", "decimals": 18},
+        "token1": {"symbol": "USDC", "decimals": 6},
+        "fee_tier": 0.0005,
+        "invert_price": False,  # WETH is token0, USDC is token1, so tick already gives USDC/WETH
+    },
+    "0x4e962bb3889bf030368f56810a9c96b83cb3e778": {
+        "id": "cbbtc-usdc-base",
+        "name": "cbBTC/USDC Aerodrome (Base)",
+        "table_name": "base_poocl_swaps_v2",
+        "token0": {"symbol": "USDC", "decimals": 6},
+        "token1": {"symbol": "cbBTC", "decimals": 8},
+        "fee_tier": 0.0005,
+        "invert_price": True,
+    },
 }
 
 
 class PoolDataService:
     """Service for fetching pool data from reader database"""
 
-    def __init__(self, reader_db_url: Optional[str] = None):
+    def __init__(self, pool_address: str, reader_db_url: Optional[str] = None):
         """
-        Initialize with reader DB connection URL.
+        Initialize with pool address and reader DB connection URL.
 
         Args:
+            pool_address: Pool address to fetch data for
             reader_db_url: PostgreSQL connection string for reader database
         """
         self.reader_db_url = reader_db_url or os.getenv("READER_DB_URL")
@@ -45,10 +63,23 @@ class PoolDataService:
             raise ValueError("READER_DB_URL environment variable not set")
 
         self.pool = None
-        self.config = XTAO_USDC_POOL
+        self.pool_address = pool_address.lower()
+
+        # Get pool config or use default
+        self.config = POOL_CONFIGS.get(
+            self.pool_address,
+            {
+                "id": "unknown",
+                "name": "Unknown Pool",
+                "table_name": "base_poocl_swaps_v2",
+                "token0": {"symbol": "Token0", "decimals": 18},
+                "token1": {"symbol": "Token1", "decimals": 18},
+                "fee_tier": 0.003,
+                "invert_price": False,
+            }
+        )
+
         # Decimal adjustment for price calculation
-        # Raw tick price = token1/token0 in raw units
-        # Adjusted = multiply by 10^(token0_decimals - token1_decimals)
         self.decimal_adjustment = 10 ** (
             self.config["token0"]["decimals"] - self.config["token1"]["decimals"]
         )
@@ -110,7 +141,7 @@ class PoolDataService:
         """
         await self.connect()
 
-        pool_address = self.config["address"].lower().replace("0x", "")
+        pool_address = self.pool_address.replace("0x", "")
         table_name = self.config["table_name"]
 
         # Optimized query - removed LOWER() and simplified calculations
@@ -252,11 +283,7 @@ class PoolDataService:
         """
         await self.connect()
 
-        # Remove 0x prefix if present
-        pool_address = self.config["address"].lower()
-        if pool_address.startswith("0x"):
-            pool_address = pool_address[2:]
-
+        pool_address = self.pool_address.replace("0x", "")
         table_name = self.config["table_name"]
 
         # Optimized query - return ticks instead of computing prices
@@ -334,7 +361,7 @@ class PoolDataService:
         """
         await self.connect()
 
-        pool_address = self.config["address"].lower().replace("0x", "")
+        pool_address = self.pool_address.replace("0x", "")
         table_name = self.config["table_name"]
 
         query = f"""

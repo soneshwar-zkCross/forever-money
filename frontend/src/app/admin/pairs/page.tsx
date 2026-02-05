@@ -435,7 +435,7 @@ function PairCard({ job }: { job: Job }) {
             </div>
 
             {/* Performance Metrics Grid */}
-            <div className="grid grid-cols-2 gap-2 mb-4 relative z-10 auto-rows-min">
+            <div className="grid grid-cols-3 gap-2 mb-4 relative z-10 auto-rows-min">
                 {/* TVL */}
                 <div className="bg-blue-50/50 rounded-xl p-2.5">
                     <p className="text-[8px] font-black text-blue-600 uppercase tracking-wider mb-1">TVL</p>
@@ -463,7 +463,7 @@ function PairCard({ job }: { job: Job }) {
                 </div>
 
                 {/* APY */}
-                <div className="bg-orange-50/50 rounded-xl p-2.5 col-span-2">
+                <div className="bg-orange-50/50 rounded-xl p-2.5 col-span-3">
                     <p className="text-[8px] font-black text-orange-600 uppercase tracking-wider mb-1">APY</p>
                     <div className="flex items-center justify-between space-x-2">
                         <div>
@@ -489,7 +489,7 @@ function PairCard({ job }: { job: Job }) {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-3 gap-3 mb-4 relative z-10">
+            <div className="grid grid-cols-2 gap-3 mb-4 relative z-10">
                 <div className="space-y-0.5">
                     <div className="flex items-center space-x-1 text-primary/30">
                         <Users size={10} />
@@ -499,17 +499,8 @@ function PairCard({ job }: { job: Job }) {
                         {statsLoading ? '...' : stats?.active_miners_24h || 0}
                     </p>
                 </div>
-                <div className="space-y-0.5">
-                    <div className="flex items-center space-x-1 text-primary/30">
-                        <Activity size={10} />
-                        <span className="text-[8px] font-black uppercase tracking-wider">Part.</span>
-                    </div>
-                    <p className="text-xl font-black text-primary tracking-tight">
-                        {statsLoading ? '...' : `${((stats?.avg_participation_rate || 0) * 100).toFixed(0)}%`}
-                    </p>
-                </div>
-                <div className="space-y-0.5">
-                    <div className="flex items-center space-x-1 text-primary/30">
+                <div className="space-y-0.5 text-right">
+                    <div className="flex items-center justify-end space-x-1 text-primary/30">
                         <Layers size={10} />
                         <span className="text-[8px] font-black uppercase tracking-wider">Rounds</span>
                     </div>

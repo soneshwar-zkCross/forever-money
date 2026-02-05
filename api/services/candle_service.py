@@ -113,7 +113,8 @@ class CandleService:
             List of candle dictionaries with OHLCV data
         """
         try:
-            pool_service = PoolDataService()
+            # Initialize pool service with job's pair address
+            pool_service = PoolDataService(pool_address=job.pair_address)
 
             # Calculate time range
             end_ts = int(datetime.utcnow().timestamp())
@@ -129,7 +130,7 @@ class CandleService:
             # Close connection
             await pool_service.close()
 
-            logger.info(f"Fetched {len(candles)} candles from reader DB for job {job.job_id}")
+            logger.info(f"Fetched {len(candles)} candles from reader DB for job {job.job_id} (pool: {job.pair_address})")
             return candles
 
         except Exception as e:
@@ -152,7 +153,8 @@ class CandleService:
             Dictionary with pool stats (volume, fees, price changes, etc.)
         """
         try:
-            pool_service = PoolDataService()
+            # Initialize pool service with job's pair address
+            pool_service = PoolDataService(pool_address=job.pair_address)
 
             # Calculate time range
             end_ts = int(datetime.utcnow().timestamp())
@@ -164,7 +166,7 @@ class CandleService:
             # Close connection
             await pool_service.close()
 
-            logger.info(f"Fetched pool stats from reader DB for job {job.job_id}")
+            logger.info(f"Fetched pool stats from reader DB for job {job.job_id} (pool: {job.pair_address})")
             return stats
 
         except Exception as e:

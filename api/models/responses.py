@@ -395,6 +395,8 @@ class RoundWithExecutionResponse(BaseModel):
     start_time: datetime
     end_time: Optional[datetime] = None
     execution: Optional[RoundExecutionData] = None
+    executions: List[Dict[str, Any]] = []  # All executions for this round
+    predictions: List[Dict[str, Any]] = []  # All predictions for this round
     participants_count: int
 
 

@@ -207,7 +207,7 @@ async def get_all_rounds(
 async def get_job_candles(
     job_id: str,
     interval: int = Query(300, description="Candle interval in seconds", ge=60, le=3600),
-    lookback_hours: int = Query(24, description="Hours to look back", ge=1, le=168)
+    lookback_hours: int = Query(24, description="Hours to look back", ge=1, le=4320)
 ):
     """
     Get OHLCV candles built from swap events
@@ -242,7 +242,7 @@ async def get_job_candles(
 async def get_pool_data_candles(
     job_id: str,
     interval: int = Query(300, description="Candle interval in seconds", ge=60, le=3600),
-    lookback_hours: int = Query(24, description="Hours to look back", ge=1, le=168)
+    lookback_hours: int = Query(24, description="Hours to look back", ge=1, le=4320)
 ):
     """
     Get OHLCV candles from reader database (historical swap data)
@@ -280,7 +280,7 @@ async def get_pool_data_candles(
 @router.get("/{job_id}/pool-data/stats")
 async def get_pool_data_stats(
     job_id: str,
-    lookback_hours: int = Query(24, description="Hours to look back", ge=1, le=168)
+    lookback_hours: int = Query(24, description="Hours to look back", ge=1, le=4320)
 ):
     """
     Get aggregated pool statistics from reader database (CACHED)
@@ -339,7 +339,7 @@ async def get_pool_data_stats(
 @router.post("/{job_id}/sync-pool-data")
 async def sync_pool_data(
     job_id: str,
-    lookback_hours: int = Query(24, description="Hours to sync", ge=1, le=168)
+    lookback_hours: int = Query(24, description="Hours to sync", ge=1, le=4320)
 ):
     """
     Sync pool data from reader database to cache/metadata
