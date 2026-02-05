@@ -1,7 +1,17 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
-import { createChart, IChartApi, Time, CandlestickStyleOptions, DeepPartial } from 'lightweight-charts';
+import React, { useEffect, useState } from 'react';
+import {
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    ReferenceLine,
+    ReferenceArea,
+} from 'recharts';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
@@ -13,6 +23,12 @@ interface CandleData {
     close: number;
     volume0: number;
     volume1: number;
+}
+
+interface ChartDataPoint {
+    time: string;
+    price: number;
+    timestamp: number;
 }
 
 interface PoolPriceChartProps {
@@ -32,10 +48,8 @@ export default function PoolPriceChart({
     token0Symbol = 'Token0',
     token1Symbol = 'Token1',
 }: PoolPriceChartProps) {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const chartRef = useRef<IChartApi | null>(null);
-
     const [candles, setCandles] = useState<CandleData[]>([]);
+    const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [dataSource, setDataSource] = useState<string>('');
@@ -82,123 +96,27 @@ export default function PoolPriceChart({
         }
     }, [jobId]);
 
-    // Create chart
+    // Transform candles to chart data
     useEffect(() => {
-        if (!containerRef.current || candles.length === 0) return;
+        if (candles.length === 0) return;
 
-        // Clear existing chart
-        if (chartRef.current) {
-            chartRef.current.remove();
-            chartRef.current = null;
-        }
-
-        const chart = createChart(containerRef.current, {
-            width: containerRef.current.clientWidth,
-            height: 600,
-            layout: {
-                background: { color: '#ffffff' },
-                textColor: '#6b7280',
-            },
-            grid: {
-                vertLines: { color: 'rgba(229, 231, 235, 1)' },
-                horzLines: { color: 'rgba(229, 231, 235, 1)' },
-            },
-            crosshair: {
-                mode: 1, // Normal mode
-            },
-            rightPriceScale: {
-                borderColor: '#e5e7eb',
-            },
-            timeScale: {
-                borderColor: '#e5e7eb',
-                timeVisible: true,
-                secondsVisible: false,
-            },
-        });
-
-        chartRef.current = chart;
-
-        // Add candlestick series (v5 API)
-        const candlestickSeries = (chart as any).addCandlestickSeries({
-            upColor: '#10b981',
-            downColor: '#ef4444',
-            borderUpColor: '#10b981',
-            borderDownColor: '#ef4444',
-            wickUpColor: '#10b981',
-            wickDownColor: '#ef4444',
-        });
-
-        // Transform and set candlestick data
-        const candlestickData = candles
-            .filter(c => c.open > 0 && c.high > 0 && c.low > 0 && c.close > 0)
-            .map(candle => ({
-                time: candle.timestamp as Time,
-                open: candle.open,
-                high: candle.high,
-                low: candle.low,
-                close: candle.close,
-            }));
-
-        if (candlestickData.length > 0) {
-            candlestickSeries.setData(candlestickData);
-        }
-
-        // Add price bound lines if available
-        if (lowerPriceBound && lowerPriceBound > 0) {
-            candlestickSeries.createPriceLine({
-                price: lowerPriceBound,
-                color: '#10b981',
-                lineWidth: 2,
-                lineStyle: 2, // Dashed
-                axisLabelVisible: true,
-                title: 'Lower Bound',
+        const transformed = candles
+            .filter(c => c.close > 0)
+            .map(candle => {
+                const date = new Date(candle.timestamp * 1000);
+                return {
+                    time: date.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    }),
+                    price: candle.close,
+                    timestamp: candle.timestamp,
+                };
             });
-        }
 
-        if (upperPriceBound && upperPriceBound > 0) {
-            candlestickSeries.createPriceLine({
-                price: upperPriceBound,
-                color: '#10b981',
-                lineWidth: 2,
-                lineStyle: 2, // Dashed
-                axisLabelVisible: true,
-                title: 'Upper Bound',
-            });
-        }
-
-        if (currentPrice && currentPrice > 0) {
-            candlestickSeries.createPriceLine({
-                price: currentPrice,
-                color: '#f59e0b',
-                lineWidth: 2,
-                lineStyle: 0, // Solid
-                axisLabelVisible: true,
-                title: 'Current',
-            });
-        }
-
-        // Fit content
-        chart.timeScale().fitContent();
-
-        // Handle resize
-        const handleResize = () => {
-            if (containerRef.current && chartRef.current) {
-                chartRef.current.applyOptions({
-                    width: containerRef.current.clientWidth,
-                });
-            }
-        };
-
-        window.addEventListener('resize', handleResize);
-
-        return () => {
-            window.removeEventListener('resize', handleResize);
-            if (chartRef.current) {
-                chartRef.current.remove();
-                chartRef.current = null;
-            }
-        };
-    }, [candles, lowerPriceBound, upperPriceBound, currentPrice]);
+        setChartData(transformed);
+    }, [candles]);
 
     if (loading) {
         return (
@@ -222,7 +140,7 @@ export default function PoolPriceChart({
         );
     }
 
-    if (candles.length === 0) {
+    if (chartData.length === 0) {
         return (
             <div className="flex items-center justify-center h-[600px] bg-white rounded-lg border border-gray-200">
                 <div className="text-center">
@@ -233,6 +151,16 @@ export default function PoolPriceChart({
         );
     }
 
+    // Calculate Y-axis domain
+    const allPrices = chartData.map(d => d.price);
+    if (lowerPriceBound && lowerPriceBound > 0) allPrices.push(lowerPriceBound);
+    if (upperPriceBound && upperPriceBound > 0) allPrices.push(upperPriceBound);
+    if (currentPrice && currentPrice > 0) allPrices.push(currentPrice);
+
+    const minPrice = Math.min(...allPrices);
+    const maxPrice = Math.max(...allPrices);
+    const padding = (maxPrice - minPrice) * 0.15;
+
     return (
         <div className="space-y-4">
             {/* Data source badge */}
@@ -241,7 +169,7 @@ export default function PoolPriceChart({
                     <div className="px-2 py-1 bg-purple-100 text-purple-700 rounded font-semibold">
                         📊 Pool Data Available
                     </div>
-                    <span className="text-gray-500">Real-time data from Aerodrome</span>
+                    <span className="text-gray-500">Real-time data from Aerodrome (cached)</span>
                 </div>
             )}
 
@@ -254,19 +182,116 @@ export default function PoolPriceChart({
                 </div>
             )}
 
-            {/* Chart container */}
-            <div
-                ref={containerRef}
-                className="w-full h-[600px] bg-white rounded-lg border border-gray-200"
-            />
+            {/* Chart */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <ResponsiveContainer width="100%" height={600}>
+                    <LineChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+
+                        <XAxis
+                            dataKey="time"
+                            tick={{ fill: '#6b7280', fontSize: 11 }}
+                            tickLine={{ stroke: '#e5e7eb' }}
+                        />
+
+                        <YAxis
+                            tick={{ fill: '#6b7280', fontSize: 11 }}
+                            tickLine={{ stroke: '#e5e7eb' }}
+                            domain={[Math.max(0, minPrice - padding), maxPrice + padding]}
+                            tickFormatter={(value) => `$${value < 1 ? value.toFixed(4) : value.toFixed(2)}`}
+                        />
+
+                        <Tooltip
+                            contentStyle={{
+                                backgroundColor: '#fff',
+                                border: '1px solid #e5e7eb',
+                                borderRadius: '8px',
+                                padding: '12px',
+                            }}
+                            formatter={(value: any) => {
+                                const num = Number(value);
+                                return [`$${num < 1 ? num.toFixed(6) : num.toFixed(2)}`, 'Price'];
+                            }}
+                        />
+
+                        {/* Liquidity Range - Shaded Area */}
+                        {lowerPriceBound && upperPriceBound && lowerPriceBound > 0 && upperPriceBound > 0 && (
+                            <ReferenceArea
+                                y1={lowerPriceBound}
+                                y2={upperPriceBound}
+                                fill="#10b981"
+                                fillOpacity={0.1}
+                                stroke="#10b981"
+                                strokeOpacity={0}
+                            />
+                        )}
+
+                        {/* Lower Bound */}
+                        {lowerPriceBound && lowerPriceBound > 0 && (
+                            <ReferenceLine
+                                y={lowerPriceBound}
+                                stroke="#10b981"
+                                strokeWidth={2}
+                                strokeDasharray="5 5"
+                                label={{
+                                    value: `Lower: $${lowerPriceBound < 1 ? lowerPriceBound.toFixed(4) : lowerPriceBound.toFixed(2)}`,
+                                    position: 'insideBottomLeft',
+                                    fill: '#059669',
+                                    fontSize: 10,
+                                    fontWeight: 'bold',
+                                }}
+                            />
+                        )}
+
+                        {/* Upper Bound */}
+                        {upperPriceBound && upperPriceBound > 0 && (
+                            <ReferenceLine
+                                y={upperPriceBound}
+                                stroke="#10b981"
+                                strokeWidth={2}
+                                strokeDasharray="5 5"
+                                label={{
+                                    value: `Upper: $${upperPriceBound < 1 ? upperPriceBound.toFixed(4) : upperPriceBound.toFixed(2)}`,
+                                    position: 'insideTopLeft',
+                                    fill: '#059669',
+                                    fontSize: 10,
+                                    fontWeight: 'bold',
+                                }}
+                            />
+                        )}
+
+                        {/* Current Price */}
+                        {currentPrice && currentPrice > 0 && (
+                            <ReferenceLine
+                                y={currentPrice}
+                                stroke="#f59e0b"
+                                strokeWidth={2}
+                                label={{
+                                    value: `Current: $${currentPrice < 1 ? currentPrice.toFixed(4) : currentPrice.toFixed(2)}`,
+                                    position: 'insideTopRight',
+                                    fill: '#d97706',
+                                    fontSize: 10,
+                                    fontWeight: 'bold',
+                                }}
+                            />
+                        )}
+
+                        <Line
+                            type="monotone"
+                            dataKey="price"
+                            stroke="#8b5cf6"
+                            strokeWidth={3}
+                            dot={false}
+                            activeDot={{ r: 6, fill: '#8b5cf6' }}
+                        />
+                    </LineChart>
+                </ResponsiveContainer>
+            </div>
 
             {/* Legend */}
             <div className="flex items-center justify-center space-x-6 text-xs">
                 <div className="flex items-center space-x-2">
-                    <div className="flex space-x-1">
-                        <div className="w-2 h-3 bg-green-500"></div>
-                        <div className="w-2 h-3 bg-red-500"></div>
-                    </div>
+                    <div className="w-8 h-0.5 bg-purple-600"></div>
                     <span className="text-gray-600">
                         {token1Symbol}/{token0Symbol} Price
                     </span>
@@ -294,7 +319,7 @@ export default function PoolPriceChart({
                 <div className="p-2 bg-gray-50 rounded">
                     <p className="text-gray-500 mb-1">Data Source</p>
                     <p className="font-bold text-gray-900">
-                        {dataSource === 'reader_database' ? 'Reader DB' : 'Swap Events'}
+                        {dataSource === 'reader_database' ? 'Reader DB (Cached)' : 'Swap Events'}
                     </p>
                 </div>
                 <div className="p-2 bg-gray-50 rounded">

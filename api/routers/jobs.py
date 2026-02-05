@@ -283,13 +283,13 @@ async def get_pool_data_stats(
     lookback_hours: int = Query(24, description="Hours to look back", ge=1, le=168)
 ):
     """
-    Get aggregated pool statistics from reader database
+    Get aggregated pool statistics from reader database (CACHED)
 
-    Fetches comprehensive pool statistics including volume, fees,
-    price changes, and swap counts from the historical swap database.
+    Returns cached pool statistics from job metadata. To refresh the cache,
+    use the POST /jobs/{job_id}/sync-pool-data endpoint.
 
     - **job_id**: Job identifier
-    - **lookback_hours**: Hours of history to analyze (default: 24)
+    - **lookback_hours**: Hours of history (ignored, uses cached data)
 
     Returns pool statistics for the specified time period.
     """
@@ -298,16 +298,35 @@ async def get_pool_data_stats(
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    stats = await CandleService.get_pool_stats_from_reader_db(
-        job=job,
-        lookback_hours=lookback_hours
-    )
+    # Return cached data from job metadata
+    if job.metadata and "pool_data" in job.metadata:
+        pool_data = job.metadata["pool_data"]
+        return {
+            "job_id": job_id,
+            "lookback_hours": pool_data.get("lookback_hours", 24),
+            "source": "cached",
+            "last_sync": pool_data.get("last_sync"),
+            "start_ts": int(datetime.utcnow().timestamp()) - (pool_data.get("lookback_hours", 24) * 3600),
+            "end_ts": int(datetime.utcnow().timestamp()),
+            "total_swaps": pool_data.get("total_swaps", 0),
+            "volume0": pool_data.get("volume_24h_token0", 0),
+            "volume1": pool_data.get("volume_24h_token1", 0),
+            "fees0": pool_data.get("fees_24h_token0", 0),
+            "fees1": pool_data.get("fees_24h_token1", 0),
+            "open_price": pool_data.get("current_price", 0),
+            "close_price": pool_data.get("current_price", 0),
+            "high_price": pool_data.get("high_price_24h", 0),
+            "low_price": pool_data.get("low_price_24h", 0),
+            "price_change_pct": pool_data.get("price_change_pct", 0),
+            "token0_symbol": pool_data.get("token0_symbol", "Token0"),
+            "token1_symbol": pool_data.get("token1_symbol", "Token1"),
+        }
 
-    if not stats:
-        raise HTTPException(
-            status_code=503,
-            detail="Pool data not available from reader database"
-        )
+    # No cached data available
+    raise HTTPException(
+        status_code=503,
+        detail="Pool data not cached. Use POST /jobs/{job_id}/sync-pool-data to fetch data."
+    )
 
     return {
         "job_id": job_id,

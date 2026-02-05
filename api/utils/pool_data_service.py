@@ -113,23 +113,34 @@ class PoolDataService:
         pool_address = self.config["address"].lower().replace("0x", "")
         table_name = self.config["table_name"]
 
+        # Optimized query - removed LOWER() and simplified calculations
         query = f"""
+            WITH bucketed AS (
+                SELECT
+                    (FLOOR(evt_block_time::bigint / $1) * $1) as bucket_ts,
+                    tick,
+                    amount0,
+                    amount1,
+                    liquidity,
+                    evt_block_time::bigint as ts
+                FROM "{table_name}"
+                WHERE evt_address = $2
+                    AND evt_block_time::bigint >= $3
+                    AND evt_block_time::bigint <= $4
+            )
             SELECT
-                (FLOOR(evt_block_time::bigint / $1) * $1)::text as bucket_ts,
-                (ARRAY_AGG(POWER(1.0001, tick::integer) ORDER BY evt_block_time::bigint ASC))[1]::text as open,
-                MAX(POWER(1.0001, tick::integer))::text as high,
-                MIN(POWER(1.0001, tick::integer))::text as low,
-                (ARRAY_AGG(POWER(1.0001, tick::integer) ORDER BY evt_block_time::bigint DESC))[1]::text as close,
-                COALESCE(SUM(ABS(amount0::numeric)), 0)::text as volume0,
-                COALESCE(SUM(ABS(amount1::numeric)), 0)::text as volume1,
-                COALESCE(SUM(CASE WHEN amount0::numeric > 0 THEN amount0::numeric ELSE 0 END), 0)::text as input_volume0,
-                COALESCE(SUM(CASE WHEN amount1::numeric > 0 THEN amount1::numeric ELSE 0 END), 0)::text as input_volume1,
-                COUNT(*)::text as swap_count,
-                COALESCE(AVG(liquidity::numeric), 0)::text as avg_liquidity
-            FROM "{table_name}"
-            WHERE LOWER(evt_address) = $2
-                AND evt_block_time::bigint >= $3
-                AND evt_block_time::bigint <= $4
+                bucket_ts::text,
+                COUNT(*)::int as swap_count,
+                MIN(tick)::int as min_tick,
+                MAX(tick)::int as max_tick,
+                (array_agg(tick ORDER BY ts ASC))[1]::int as open_tick,
+                (array_agg(tick ORDER BY ts DESC))[1]::int as close_tick,
+                SUM(ABS(amount0::numeric))::text as volume0,
+                SUM(ABS(amount1::numeric))::text as volume1,
+                SUM(CASE WHEN amount0::numeric > 0 THEN ABS(amount0::numeric) ELSE 0 END)::text as input_volume0,
+                SUM(CASE WHEN amount1::numeric > 0 THEN ABS(amount1::numeric) ELSE 0 END)::text as input_volume1,
+                AVG(liquidity::numeric)::text as avg_liquidity
+            FROM bucketed
             GROUP BY bucket_ts
             ORDER BY bucket_ts ASC
         """
@@ -140,6 +151,19 @@ class PoolDataService:
 
             raw_candles = []
             for row in rows:
+                # Calculate prices from ticks (faster to do client-side)
+                open_price = pow(1.0001, row["open_tick"]) * self.decimal_adjustment
+                close_price = pow(1.0001, row["close_tick"]) * self.decimal_adjustment
+                high_price = pow(1.0001, row["max_tick"]) * self.decimal_adjustment
+                low_price = pow(1.0001, row["min_tick"]) * self.decimal_adjustment
+
+                # Invert if needed
+                if self.config["invert_price"]:
+                    open_price = 1 / open_price if open_price > 0 else 0
+                    close_price = 1 / close_price if close_price > 0 else 0
+                    high_price = 1 / low_price if low_price > 0 else 0
+                    low_price = 1 / high_price if high_price > 0 else 0
+
                 vol0 = self._normalize_amount(row["volume0"], self.config["token0"]["decimals"])
                 vol1 = self._normalize_amount(row["volume1"], self.config["token1"]["decimals"])
                 input_vol0 = self._normalize_amount(row["input_volume0"], self.config["token0"]["decimals"])
@@ -147,10 +171,10 @@ class PoolDataService:
 
                 candle = {
                     "timestamp": int(row["bucket_ts"]),
-                    "open": self._adjust_price(float(row["open"])),
-                    "high": self._adjust_price(float(row["high"])),
-                    "low": self._adjust_price(float(row["low"])),
-                    "close": self._adjust_price(float(row["close"])),
+                    "open": open_price,
+                    "high": high_price,
+                    "low": low_price,
+                    "close": close_price,
                     "volume0": vol0,
                     "volume1": vol1,
                     "fees0": input_vol0 * self.config["fee_tier"],
@@ -228,22 +252,27 @@ class PoolDataService:
         """
         await self.connect()
 
-        pool_address = self.config["address"].lower().replace("0x", "")
+        # Remove 0x prefix if present
+        pool_address = self.config["address"].lower()
+        if pool_address.startswith("0x"):
+            pool_address = pool_address[2:]
+
         table_name = self.config["table_name"]
 
+        # Optimized query - return ticks instead of computing prices
         query = f"""
             SELECT
-                COUNT(*)::text as total_swaps,
-                COALESCE(SUM(ABS(amount0::numeric)), 0)::text as total_volume0,
-                COALESCE(SUM(ABS(amount1::numeric)), 0)::text as total_volume1,
-                COALESCE(SUM(CASE WHEN amount0::numeric > 0 THEN amount0::numeric ELSE 0 END), 0)::text as input_volume0,
-                COALESCE(SUM(CASE WHEN amount1::numeric > 0 THEN amount1::numeric ELSE 0 END), 0)::text as input_volume1,
-                (ARRAY_AGG(POWER(1.0001, tick::integer) ORDER BY evt_block_time::bigint ASC))[1]::text as open_price,
-                (ARRAY_AGG(POWER(1.0001, tick::integer) ORDER BY evt_block_time::bigint DESC))[1]::text as close_price,
-                MAX(POWER(1.0001, tick::integer))::text as high_price,
-                MIN(POWER(1.0001, tick::integer))::text as low_price
+                COUNT(*)::int as total_swaps,
+                SUM(ABS(amount0::numeric))::text as total_volume0,
+                SUM(ABS(amount1::numeric))::text as total_volume1,
+                SUM(CASE WHEN amount0::numeric > 0 THEN ABS(amount0::numeric) ELSE 0 END)::text as input_volume0,
+                SUM(CASE WHEN amount1::numeric > 0 THEN ABS(amount1::numeric) ELSE 0 END)::text as input_volume1,
+                (array_agg(tick ORDER BY evt_block_time::bigint ASC))[1]::int as open_tick,
+                (array_agg(tick ORDER BY evt_block_time::bigint DESC))[1]::int as close_tick,
+                MAX(tick)::int as high_tick,
+                MIN(tick)::int as low_tick
             FROM "{table_name}"
-            WHERE LOWER(evt_address) = $1
+            WHERE evt_address = $1
                 AND evt_block_time::bigint >= $2
                 AND evt_block_time::bigint <= $3
         """
@@ -255,15 +284,23 @@ class PoolDataService:
             if not row:
                 return {}
 
+            # Calculate prices from ticks (client-side calculation is faster)
+            open_price = pow(1.0001, row["open_tick"]) * self.decimal_adjustment
+            close_price = pow(1.0001, row["close_tick"]) * self.decimal_adjustment
+            high_price = pow(1.0001, row["high_tick"]) * self.decimal_adjustment
+            low_price = pow(1.0001, row["low_tick"]) * self.decimal_adjustment
+
+            # Invert if needed
+            if self.config["invert_price"]:
+                open_price = 1 / open_price if open_price > 0 else 0
+                close_price = 1 / close_price if close_price > 0 else 0
+                high_price = 1 / low_price if low_price > 0 else 0
+                low_price = 1 / high_price if high_price > 0 else 0
+
             volume0 = self._normalize_amount(row["total_volume0"], self.config["token0"]["decimals"])
             volume1 = self._normalize_amount(row["total_volume1"], self.config["token1"]["decimals"])
             input_volume0 = self._normalize_amount(row["input_volume0"], self.config["token0"]["decimals"])
             input_volume1 = self._normalize_amount(row["input_volume1"], self.config["token1"]["decimals"])
-
-            open_price = self._adjust_price(float(row["open_price"] or 0))
-            close_price = self._adjust_price(float(row["close_price"] or 0))
-            high_price = self._adjust_price(float(row["high_price"] or 0))
-            low_price = self._adjust_price(float(row["low_price"] or 0))
 
             price_change_pct = ((close_price - open_price) / open_price * 100) if open_price > 0 else 0
 
