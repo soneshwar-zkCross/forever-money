@@ -23,6 +23,10 @@ async def drop_all_tables(db_url: str):
     """Drop all tables and recreate schema"""
     print("🗑️  Dropping all tables...")
 
+    # Tortoise ORM expects 'postgres' not 'postgresql'
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgres://", 1)
+
     await Tortoise.init(
         db_url=db_url,
         modules={'models': [

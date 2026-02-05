@@ -48,14 +48,14 @@ async def verify_data():
         print(f"    └─ {pair_name} - Current Price: ${current_price:.4f if current_price < 100 else current_price:.2f}")
 
         # Count rounds for this job
-        rounds = await Round.filter(job_id=job.job_id).all()
+        rounds = await Round.filter(job=job).all()
         eval_rounds = [r for r in rounds if r.round_type == "evaluation"]
         live_rounds = [r for r in rounds if r.round_type == "live"]
 
         print(f"    └─ Rounds: {len(eval_rounds)} evaluation, {len(live_rounds)} live")
 
         # Count miners for this job
-        miners = await MinerScore.filter(job_id=job.job_id).all()
+        miners = await MinerScore.filter(job=job).all()
         eligible = [m for m in miners if m.is_eligible_for_live]
 
         print(f"    └─ Miners: {len(miners)} total, {len(eligible)} eligible")

@@ -94,6 +94,10 @@ class MockDataSeeder:
         """Initialize database connection"""
         db_url = os.getenv("DB_URL", "postgresql://postgres:postgres@localhost:5432/forevermoneydb")
 
+        # Tortoise ORM expects 'postgres' not 'postgresql'
+        if db_url.startswith("postgresql://"):
+            db_url = db_url.replace("postgresql://", "postgres://", 1)
+
         await Tortoise.init(
             db_url=db_url,
             modules={'models': [
@@ -108,13 +112,18 @@ class MockDataSeeder:
         """Clean existing mock data"""
         print("🧹 Cleaning existing mock data...")
 
+        # Get all mock pool addresses
+        mock_addresses = [p["pair_address"].lower().replace("0x", "") for p in MOCK_POOLS]
+
         # Delete in reverse dependency order
-        await SwapEvent.filter(evt_address__in=[p["pair_address"].lower().replace("0x", "") for p in MOCK_POOLS]).delete()
+        await SwapEvent.filter(evt_address__in=mock_addresses).delete()
         await LiveExecution.all().delete()
         await Prediction.all().delete()
         await MinerScore.all().delete()
         await Round.all().delete()
-        await Job.filter(job_id__contains="mock").delete()
+        # Delete jobs matching our pool IDs
+        for pool in MOCK_POOLS:
+            await Job.filter(job_id=pool["pair_id"]).delete()
 
         print("✅ Cleaned existing data")
 
@@ -204,14 +213,14 @@ class MockDataSeeder:
                 is_eligible = combined_score > 0.65
 
                 await MinerScore.create(
-                    job_id=job.job_id,
+                    job=job,
                     miner_uid=miner_uid,
                     miner_hotkey=f"5{'0' * 46}{miner_uid:02d}",
                     evaluation_score=Decimal(str(evaluation_score)),
                     live_score=Decimal(str(live_score)),
                     combined_score=Decimal(str(combined_score)),
                     is_eligible_for_live=is_eligible,
-                    last_updated=datetime.utcnow()
+                    last_active=datetime.utcnow()
                 )
 
             print(f"  ✓ Created scores for {len(self.miner_uids)} miners on {job.job_id}")
@@ -232,7 +241,7 @@ class MockDataSeeder:
 
             # Get eligible miners for this job
             eligible_miners = await MinerScore.filter(
-                job_id=job.job_id,
+                job=job,
                 is_eligible_for_live=True
             ).all()
 
@@ -272,6 +281,9 @@ class MockDataSeeder:
                 if round_type == RoundType.LIVE:
                     execution_success = random.random() > 0.15  # 85% success rate
 
+                    # Generate 64-char hex tx_hash (0x + 64 chars = 66 total)
+                    tx_hash = f"0x{'a' * 60}{execution_count:04d}"
+
                     await LiveExecution.create(
                         execution_id=f"exec_{round_obj.round_id}_{miner_score.miner_uid}",
                         round=round_obj,
@@ -279,7 +291,7 @@ class MockDataSeeder:
                         miner_uid=miner_score.miner_uid,
                         sn_liquidity_manager_address=job.sn_liquidity_manager_address,
                         strategy_data=prediction.prediction_data,
-                        tx_hash=f"0x{'a' * 62}{execution_count:02d}",
+                        tx_hash=tx_hash,
                         tx_status="success" if execution_success else "failed",
                         actual_performance={
                             "success": execution_success,
