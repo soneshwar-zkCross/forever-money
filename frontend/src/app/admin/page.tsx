@@ -135,8 +135,9 @@ export default function DashboardPage() {
                                     <tr className="text-primary/30 text-left border-b border-cream-dark">
                                         <th className="pb-3 font-black uppercase tracking-tighter">Pair</th>
                                         <th className="pb-3 font-black uppercase tracking-tighter">Earnings</th>
-                                        <th className="pb-3 font-black uppercase tracking-tighter">APY 1</th>
-                                        <th className="pb-3 font-black uppercase tracking-tighter">APY 2</th>
+                                        <th className="pb-3 font-black uppercase tracking-tighter whitespace-nowrap">T1 (APY)</th>
+                                        <th className="pb-3 font-black uppercase tracking-tighter whitespace-nowrap">T2 (APY)</th>
+                                        <th className="pb-3 font-black uppercase tracking-tighter whitespace-nowrap">Pool Share</th>
                                         <th className="pb-3"></th>
                                     </tr>
                                 </thead>
@@ -157,6 +158,7 @@ export default function DashboardPage() {
                                             <td className="py-4 font-mono font-bold">${(72350 - (i * 2000)).toLocaleString()}</td>
                                             <td className="py-4 font-mono text-primary/60">45.6%</td>
                                             <td className="py-4 font-mono text-primary/60">32.5%</td>
+                                            <td className="py-4 font-mono text-primary/60">54%</td>
                                             <td className="py-4 text-right">
                                                 <ChevronRight size={14} className="text-primary/20 group-hover:text-primary transition-colors inline" />
                                             </td>

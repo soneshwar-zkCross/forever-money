@@ -21,6 +21,80 @@ import { useJobs, useNetworkStats, useLeaderboard, useJobAPY, useJobPnL, useJobT
 import Link from 'next/link';
 import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip } from 'recharts';
 
+// Mock Data for fallback/demo purposes
+const MOCK_JOBS = [
+    {
+        job_id: 'job_link_usdc',
+        pair_address: '0x...LINK',
+        fee_rate: 0.05,
+        target: 'LINK/USDC',
+        chain_id: 1,
+        is_active: true,
+        round_duration_seconds: 600,
+        metadata: { pair_name: 'LINK/USDC', description: 'Chainlink / USDC Vault' },
+        sn_liquidity_manager_address: '0xMockPoolLINK',
+        target_ratio: 0.5,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+    },
+    {
+        job_id: 'job_xaut_usdt',
+        pair_address: '0x...XAUT',
+        fee_rate: 0.2,
+        target: 'XAUT/USDT',
+        chain_id: 1,
+        is_active: true,
+        round_duration_seconds: 3600,
+        metadata: { pair_name: 'XAUT/USDT', description: 'Tether Gold / USDT Vault' },
+        sn_liquidity_manager_address: '0xMockPoolXAUT',
+        target_ratio: 0.5,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+    },
+    {
+        job_id: 'job_xsn_usdc',
+        pair_address: '0x...xSN',
+        fee_rate: 0.1,
+        target: 'xSN/USDC',
+        chain_id: 1,
+        is_active: true,
+        round_duration_seconds: 600,
+        metadata: { pair_name: 'xSN/USDC', description: 'xSN / USDC Vault' },
+        sn_liquidity_manager_address: '0xMockPoolxSN',
+        target_ratio: 0.5,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+    },
+    {
+        job_id: 'job_sol_usdc',
+        pair_address: '0x...SOL',
+        fee_rate: 0.15,
+        target: 'SOL/USDC',
+        chain_id: 1,
+        is_active: true,
+        round_duration_seconds: 300,
+        metadata: { pair_name: 'SOL/USDC', description: 'Solana / USDC Vault' },
+        sn_liquidity_manager_address: '0xMockPoolSOL',
+        target_ratio: 0.4,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+    },
+    {
+        job_id: 'job_arb_usdc',
+        pair_address: '0x...ARB',
+        fee_rate: 0.05,
+        target: 'ARB/USDC',
+        chain_id: 1,
+        is_active: true,
+        round_duration_seconds: 900,
+        metadata: { pair_name: 'ARB/USDC', description: 'Arbitrum / USDC Vault' },
+        sn_liquidity_manager_address: '0xMockPoolARB',
+        target_ratio: 0.6,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+    }
+];
+
 export default function PairDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: jobId } = use(params);
     const { data: jobs } = useJobs();
@@ -32,7 +106,8 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
     // Fetch miners for this specific job to show their vaults
     const { data: miners, isLoading: leaderboardLoading } = useLeaderboard(jobId);
 
-    const job = jobs?.find(j => j.job_id === jobId);
+    // Fallback to MOCK_JOBS if not found in API response
+    const job = jobs?.find(j => j.job_id === jobId) || MOCK_JOBS.find(j => j.job_id === jobId);
     const [token0Symbol, token1Symbol] = job?.metadata.pair_name.split('/') || ['Token0', 'Token1'];
 
     if (!job) {
@@ -55,8 +130,8 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
 
     return (
         <AdminLayout
-            title={job.metadata.pair_name}
-            description={`Pool: ${job.sn_liquidity_manager_address.slice(0, 12)}...${job.sn_liquidity_manager_address.slice(-8)}`}
+            title={`${token0Symbol} / ${token1Symbol} | Aerodrome | Base`}
+            description={`Pool — ${job.sn_liquidity_manager_address.slice(0, 12)}...${job.sn_liquidity_manager_address.slice(-8)}`}
             icon={<Terminal size={20} />}
         >
             <div className="space-y-6 pb-20">
@@ -88,40 +163,40 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                 </div>
 
 
-                {/* Pair Performance Metrics - Horizontal Terminal Card */}
-                <div className="bg-white p-8 rounded-[32px] border border-cream-dark shadow-sm hover:shadow-md transition-all duration-500 font-mono text-primary flex flex-col h-full overflow-hidden">
-                    <div className="border-t border-dashed border-primary/10 mb-4" />
-                    <div className="flex justify-between items-center mb-4 text-[14px] font-black uppercase tracking-tight">
-                        <span>PAIR PERFORMANCE — {token0Symbol} / {token1Symbol}</span>
-                    </div>
-                    <div className="border-t border-dashed border-primary/10 mb-6" />
+                {/* High Density Metric Row */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <MiniStatBox label="TVL (USD)" value={`$${((tvl?.tvl_usd || 0) / 1000000).toFixed(1)}M`} />
+                    <MiniStatBox label="Fees Earned (USD)" value={`$${((pnl?.pnl_usd || 0) / 1000).toFixed(0)}k`} />
+                    <MiniStatBox label={`APY ${token0Symbol} / ${token1Symbol}`} value={`${(apy?.apy_percent_token0 || 0).toFixed(1)}% / ${(apy?.apy_percent_token1 || 0).toFixed(1)}%`} />
+                    <MiniStatBox label="APY (USD)" value={`${(apy?.apy_percent || 0).toFixed(1)}%`} />
+                    <MiniStatBox label="Benchmark Market" value="22.5%" />
+                    <MiniStatBox label="Active Vault Jobs" value={stats?.total_miners?.toString() || '0'} />
+                </div>
 
-                    {/* Metrics Row */}
-                    <div className="flex justify-between mb-8 border-b border-dashed border-primary/10 pb-8 mt-2">
+                {/* Performance Chart Section */}
+                <div className="bg-white p-8 rounded-[32px] border border-cream-dark shadow-sm font-mono text-primary flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
                         <div className="flex flex-col">
-                            <span className="text-xl font-black text-blue-600">${((tvl?.tvl_usd || 0) / 1000000).toFixed(1)}M</span>
-                            <span className="text-[11px] font-bold opacity-40 uppercase tracking-tighter">TVL</span>
-                        </div>
-                        <div className="flex flex-col items-center">
-                            <span className="text-xl font-black text-blue-600">
-                                ${(pnl?.pnl_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            <span className="text-[13px] font-black uppercase tracking-tight">
+                                {token0Symbol}/{token1Symbol} Price | TVL | Fees Earned
                             </span>
-                            <span className="text-[11px] font-bold opacity-40 uppercase tracking-tighter">REVENUE</span>
+                            <span className="text-[10px] uppercase opacity-30 font-bold mt-1">Performance Over Time</span>
                         </div>
-                        <div className="flex flex-col items-end">
-                            <span className="text-xl font-black text-blue-600">{stats?.total_miners || 0}</span>
-                            <span className="text-[11px] font-bold opacity-40 uppercase tracking-tighter">ACTIVE VAULTS</span>
+                        <div className="flex items-center space-x-4 text-[10px] font-black uppercase bg-cream/20 px-4 py-2 rounded-xl">
+                            <span className="opacity-40">TF:</span>
+                            <button className="hover:text-blue-600 transition-colors">1D</button>
+                            <span>|</span>
+                            <button className="hover:text-blue-600 transition-colors">7D</button>
+                            <span>|</span>
+                            <button className="text-blue-600">30D</button>
+                            <span>|</span>
+                            <button className="hover:text-blue-600 transition-colors">All</button>
                         </div>
                     </div>
 
-                    {/* chart section */}
-                    <div className="border-t border-dashed border-primary/10 mb-2" />
-                    <div className="text-[11px] font-black uppercase mb-2 opacity-30">
-                        PERFORMANCE TREND (30D)
-                    </div>
-                    <div className="border-t border-dashed border-primary/10 mb-4" />
+                    <div className="border-t border-dashed border-primary/10 mb-8" />
 
-                    <div className="h-40 w-full mb-6 relative">
+                    <div className="h-64 w-full mb-6 relative">
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={Array.from({ length: 30 }, (_, i) => ({ day: i, value: (tvl?.tvl_usd || 1000000) * (0.9 + Math.random() * 0.2) }))}>
                                 <YAxis hide domain={['auto', 'auto']} />
@@ -147,6 +222,13 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                                 />
                             </LineChart>
                         </ResponsiveContainer>
+
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 -rotate-90 origin-left text-[9px] font-black opacity-20 uppercase tracking-widest -translate-x-4">
+                            USD
+                        </div>
+                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[9px] font-black opacity-20 uppercase tracking-widest translate-y-4">
+                            Time
+                        </div>
                     </div>
 
                     <div className="border-t border-dashed border-primary/10 pt-4 text-[10px] font-bold text-primary/40 flex justify-between uppercase">
@@ -157,93 +239,74 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                 </div>
 
-                {/* Miner Vault Cards Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
-                    {leaderboardLoading ? (
-                        [1, 2].map(i => (
-                            <div key={i} className="bg-white p-8 rounded-3xl border border-cream-dark shadow-sm h-64 animate-pulse" />
-                        ))
-                    ) : (
-                        miners?.map((miner, i) => (
-                            <div
-                                key={miner.miner_uid}
-                                className="bg-white p-8 rounded-3xl border border-cream-dark shadow-sm hover:shadow-md transition-all duration-500 font-mono text-primary relative overflow-hidden"
-                            >
-                                {/* Header */}
-                                <div className="border-t border-dashed border-primary/10 mb-4" />
-                                <div className="flex justify-between items-center mb-4 text-[13px] font-black uppercase tracking-tight">
-                                    <span>MINER #{miner.miner_uid} — {token0Symbol} / {token1Symbol}</span>
-                                </div>
-                                <div className="border-t border-dashed border-primary/10 mb-6" />
+                {/* Active Vaults Table (List View) */}
+                <div className="bg-white rounded-[32px] border border-cream-dark shadow-sm font-mono text-primary overflow-hidden">
+                    <div className="p-8 border-b border-cream flex items-center justify-between bg-cream/5">
+                        <div className="flex flex-col">
+                            <h3 className="text-[13px] font-black uppercase tracking-tight">Active Vaults</h3>
+                            <span className="text-[10px] uppercase opacity-30 font-bold mt-1">Live Execution Records</span>
+                        </div>
+                        <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase">
+                            {miners?.length || 0} ACTIVE
+                        </div>
+                    </div>
 
-                                {/* Subtitle */}
-                                <div className="space-y-1 mb-8">
-                                    <div className="flex text-xs font-bold space-x-2">
-                                        <span className="opacity-40 uppercase">Status:</span>
-                                        <span>ACTIVE</span>
-                                    </div>
-                                    <div className="flex text-xs font-bold space-x-2">
-                                        <span className="opacity-40 uppercase">Started:</span>
-                                        <span className="text-blue-600">Jan 25, 2026</span>
-                                    </div>
-                                </div>
-
-                                <div className="border-t border-dashed border-primary/10 mb-2" />
-                                <div className="text-[11px] font-black uppercase mb-2 opacity-30">
-                                    OUTCOME SUMMARY
-                                </div>
-                                <div className="border-t border-dashed border-primary/10 mb-4" />
-
-                                {/* Stats Section */}
-                                <div className="space-y-2 mb-8">
-                                    <div className="flex justify-between text-xs font-bold">
-                                        <span className="opacity-40 uppercase tracking-tighter">Total Revenue:</span>
-                                        <span className="text-blue-600">${(28400 - (i * 1200)).toLocaleString()}</span>
-                                    </div>
-                                    <div className="flex justify-between text-xs font-bold">
-                                        <span className="opacity-40 uppercase tracking-tighter">Fees Earned:</span>
-                                        <span className="text-blue-600">${(31200 - (i * 1500)).toLocaleString()}</span>
-                                    </div>
-                                    <div className="flex justify-between text-xs font-bold">
-                                        <span className="opacity-40 uppercase tracking-tighter">Rounds Completed:</span>
-                                        <span className="text-blue-600">{148 - (i * 10)}</span>
-                                    </div>
-                                </div>
-
-                                <div className="border-t border-dashed border-primary/10 mb-2" />
-                                <div className="text-[11px] font-black uppercase mb-2 opacity-30">
-                                    INVENTORY CHANGE
-                                </div>
-                                <div className="border-t border-dashed border-primary/10 mb-4" />
-
-                                {/* Inventory Section */}
-                                <div className="space-y-4">
-                                    <div>
-                                        <p className="text-[10px] font-black opacity-40 uppercase mb-2">Initial:</p>
-                                        <div className="flex justify-between text-xs font-bold">
-                                            <span>{token0Symbol} <span className="text-blue-600">100,000</span></span>
-                                            <span className="opacity-20">|</span>
-                                            <span>{token1Symbol} <span className="text-blue-600">1.000</span></span>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-black opacity-40 uppercase mb-2">Current:</p>
-                                        <div className="flex justify-between text-xs font-bold">
-                                            <span>{token0Symbol} <span className="text-blue-600">{(101147 - (i * 50)).toLocaleString()}</span></span>
-                                            <span className="opacity-20">|</span>
-                                            <span>{token1Symbol} <span className="text-blue-600">{(1.005 + (i * 0.001)).toFixed(3)}</span></span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Miner Footer */}
-                                <div className="mt-8 pt-4 border-t border-dashed border-primary/10 text-[10px] font-bold text-primary/40 flex justify-between uppercase">
-                                    <span>Miner #{miner.miner_uid}</span>
-                                    <span>Vault-v1.{miner.miner_uid}</span>
-                                </div>
-                            </div>
-                        ))
-                    )}
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-cream-dark/50 bg-cream/10">
+                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap">Vault No.</th>
+                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap">Miner</th>
+                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap text-right">TVL</th>
+                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap text-right">Fees USD</th>
+                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap text-right">Fees {token0Symbol}</th>
+                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap text-right">Fees {token1Symbol}</th>
+                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap text-right">APY {token0Symbol}</th>
+                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap text-right">APY {token1Symbol}</th>
+                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap text-right">APY (USD)</th>
+                                    <th className="px-6 py-4"></th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-cream/50">
+                                {leaderboardLoading ? (
+                                    [1, 2, 3].map(i => (
+                                        <tr key={i} className="animate-pulse">
+                                            <td colSpan={10} className="px-6 py-4"><div className="h-4 bg-cream rounded" /></td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    miners?.map((miner, i) => (
+                                        <tr
+                                            key={miner.miner_uid}
+                                            className="hover:bg-cream/20 transition-colors group cursor-pointer"
+                                            onClick={() => { }} // Navigate to individual vault page
+                                        >
+                                            <td className="px-6 py-4 text-xs font-bold text-primary/60">Vault #{miner.miner_uid}</td>
+                                            <td className="px-6 py-4">
+                                                <div className="text-xs font-black text-primary">{miner.miner_hotkey.substring(0, 8)}...</div>
+                                                <div className="text-[9px] font-bold text-primary/30 uppercase">UID: {miner.miner_uid}</div>
+                                            </td>
+                                            <td className="px-6 py-4 text-right text-xs font-bold text-blue-600">${(135000).toLocaleString()}</td>
+                                            <td className="px-6 py-4 text-right text-xs font-bold text-blue-600">${(72350 - (i * 1000)).toLocaleString()}</td>
+                                            <td className="px-6 py-4 text-right text-xs font-bold text-blue-600">{(1100587).toLocaleString()}</td>
+                                            <td className="px-6 py-4 text-right text-xs font-bold text-blue-600">{(4.7689).toFixed(4)}</td>
+                                            <td className="px-6 py-4 text-right text-xs font-bold text-blue-600">32.5%</td>
+                                            <td className="px-6 py-4 text-right text-xs font-bold text-blue-600">15.2%</td>
+                                            <td className="px-6 py-4 text-right text-xs font-bold text-blue-600">14%</td>
+                                            <td className="px-6 py-4 text-right">
+                                                <Link
+                                                    href={`/admin/miners/${miner.miner_uid}?pair=${jobId}`}
+                                                    className="text-blue-600 hover:underline text-xs font-black flex items-center justify-end"
+                                                >
+                                                    <span>→</span>
+                                                </Link>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 {/* Pair Configuration remains as reference */}
@@ -263,6 +326,20 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                 </div>
             </div>
         </AdminLayout>
+    );
+}
+
+
+function MiniStatBox({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="bg-white p-4 rounded-2xl border border-cream-dark shadow-sm font-mono flex flex-col justify-between h-full hover:bg-cream/5 transition-colors">
+            <span className="text-[9px] font-black text-primary/40 uppercase tracking-widest mb-2 leading-tight">
+                {label}
+            </span>
+            <span className="text-sm font-black text-primary tracking-tight">
+                {value}
+            </span>
+        </div>
     );
 }
 
