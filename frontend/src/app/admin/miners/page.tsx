@@ -55,16 +55,17 @@ export default function MinersPage() {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                         {filteredMiners?.map((miner, i) => (
-                            <div
+                            <Link
                                 key={miner.miner_uid}
-                                className="bg-white p-8 rounded-3xl border border-cream-dark shadow-sm hover:shadow-md transition-all duration-500 font-mono text-primary relative overflow-hidden"
+                                href={`/admin/miners/${miner.miner_uid}`}
+                                className="bg-white p-8 rounded-3xl border border-cream-dark shadow-sm hover:shadow-md transition-all duration-500 font-mono text-primary relative overflow-hidden block group"
                             >
                                 {/* Terminal Style Header */}
                                 <div className="border-t border-dashed border-primary/10 mb-4" />
 
                                 <div className="flex justify-between items-center mb-2">
-                                    <h4 className="text-sm font-black tracking-tight uppercase">
-                                        MINER PERFORMANCE — {miner.miner_hotkey.substring(0, 4)}...{miner.miner_hotkey.slice(-4)}
+                                    <h4 className="text-sm font-black tracking-tight uppercase group-hover:text-blue-600 transition-colors">
+                                        MINER ID: 5F0...{miner.miner_hotkey.slice(-4)}
                                     </h4>
                                     <div className={`w-2 h-2 rounded-full ${miner.is_eligible_for_live ? 'bg-green-500 animate-pulse' : 'bg-amber-500'} shadow-sm`}></div>
                                 </div>
@@ -75,15 +76,15 @@ export default function MinersPage() {
                                 <div className="space-y-2 mb-8">
                                     <div className="flex justify-between text-xs font-bold">
                                         <span className="opacity-40 uppercase tracking-tighter">Total Earnings:</span>
-                                        <span className="text-blue-600">${(18400 - (i * 120)).toLocaleString()}</span>
+                                        <span className="text-blue-600 group-hover:text-primary transition-colors">${(18400 - (i * 120)).toLocaleString()}</span>
                                     </div>
                                     <div className="flex justify-between text-xs font-bold">
                                         <span className="opacity-40 uppercase tracking-tighter">Alpha Earned:</span>
-                                        <span className="text-blue-600">{(92000 - (i * 600)).toLocaleString()}</span>
+                                        <span className="text-blue-600 group-hover:text-primary transition-colors">{(92000 - (i * 600)).toLocaleString()}</span>
                                     </div>
                                     <div className="flex justify-between text-xs font-bold">
                                         <span className="opacity-40 uppercase tracking-tighter">Jobs Participated:</span>
-                                        <span className="text-blue-600">{6 + (i % 3)}</span>
+                                        <span className="text-blue-600 group-hover:text-primary transition-colors">{6 + (i % 3)}</span>
                                     </div>
                                 </div>
 
@@ -105,20 +106,17 @@ export default function MinersPage() {
                                         return (
                                             <div
                                                 key={idx}
-                                                className="flex justify-between text-[11px] font-bold group/row"
+                                                className="flex justify-between text-[11px] font-bold"
                                             >
-                                                <button
-                                                    onClick={() => job.job_id && (window.location.href = `/admin/pairs/${job.job_id}`)}
-                                                    className="opacity-60 hover:opacity-100 hover:text-blue-600 transition-all text-left"
-                                                >
+                                                <span className="opacity-60 transition-all text-left">
                                                     {job.metadata?.pair_name || 'UNKNOWN'}
-                                                </button>
+                                                </span>
                                                 <span className="text-blue-600">${val.toLocaleString()}</span>
                                             </div>
                                         );
                                     })}
                                 </div>
-                            </div>
+                            </Link>
                         ))}
                     </div>
                 )}

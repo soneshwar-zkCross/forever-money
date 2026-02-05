@@ -1,339 +1,276 @@
 'use client';
 
-import { useState } from 'react';
-import { useParams } from 'next/navigation';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
-import { useMinerWinRate, useMinerDividends, useMinerJobEarnings } from '@/lib/metrics-hooks';
+import React, { useState } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
+import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip, AreaChart, Area } from 'recharts';
+import { useMinerWinRate } from '@/lib/metrics-hooks';
 import { useJobs, useMinerVaults } from '@/lib/api';
 import Link from 'next/link';
+import AdminLayout from '@/components/layout/AdminLayout';
+import { Terminal, ArrowLeft, Activity, Info, ChevronRight, LayoutGrid } from 'lucide-react';
 
 export default function MinerDetailsPage() {
     const params = useParams();
+    const searchParams = useSearchParams();
     const minerUid = parseInt(params?.uid as string) || 0;
+    const jobId = searchParams.get('pair');
 
-    const [selectedJobId, setSelectedJobId] = useState<string>('');
-
-    // Fetch data
-    const { data: winRateData, isLoading: winRateLoading } = useMinerWinRate(minerUid, selectedJobId);
-    const { data: dividendsData } = useMinerDividends(minerUid);
-    const { data: jobEarningsData } = useMinerJobEarnings(minerUid, selectedJobId);
+    const { data: winRateData, isLoading: winRateLoading } = useMinerWinRate(minerUid, jobId || undefined);
     const { data: jobs } = useJobs();
     const { data: minerVaults } = useMinerVaults(minerUid);
 
     if (winRateLoading || !minerUid) {
         return (
-            <div className="flex items-center justify-center h-screen">
-                <div className="text-gray-400">Loading miner details...</div>
-            </div>
+            <AdminLayout title="Loading..." description="Fetching performance details" icon={<Terminal size={20} />}>
+                <div className="flex items-center justify-center py-20">
+                    <div className="text-primary/40 animate-pulse font-mono uppercase font-black tracking-widest">
+                        Initializing Terminal...
+                    </div>
+                </div>
+            </AdminLayout>
         );
     }
 
-    // Select first job if none selected
-    if (!selectedJobId && jobs && jobs.length > 0) {
-        setSelectedJobId(jobs[0].job_id);
-    }
-
-    // Mock performance data for chart
-    const performanceData = [
-        { round: '1', score: 0.85, revenue: 120 },
-        { round: '2', score: 0.92, revenue: 150 },
-        { round: '3', score: 0.78, revenue: 100 },
-        { round: '4', score: 0.88, revenue: 130 },
-        { round: '5', score: 0.95, revenue: 180 },
-        { round: '6', score: 0.82, revenue: 110 },
-    ];
-
-    const winRatePercent = winRateData?.win_rate || 0;
-    const lossRatePercent = 100 - winRatePercent;
-
-    const winRateChartData = [
-        { name: 'Wins', value: winRatePercent, color: '#10b981' },
-        { name: 'Losses', value: lossRatePercent, color: '#ef4444' },
-    ];
+    // Determine if we are showing Page 3 (Vault Specific) or Page 4 (Miner Global)
+    const isVaultSpecific = !!jobId;
+    const selectedJob = jobs?.find(j => j.job_id === jobId);
+    const [token0Symbol, token1Symbol] = selectedJob?.metadata.pair_name.split('/') || ['T0', 'T1'];
 
     return (
-        <div className="p-8 bg-gray-950 min-h-screen text-white">
-            {/* Header */}
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold mb-2">Miner Details</h1>
-                <div className="flex items-center gap-4">
-                    <div className="text-gray-400">
-                        <span className="font-semibold">UID:</span> {minerUid}
-                    </div>
-                    <div className="text-gray-400 text-xs font-mono">
-                        {winRateData?.miner_hotkey.slice(0, 16)}...{winRateData?.miner_hotkey.slice(-8)}
-                    </div>
-                </div>
-            </div>
-
-            {/* Job Selector */}
-            <div className="mb-8">
-                <label className="block text-sm text-gray-400 mb-2">Select Vault</label>
-                <select
-                    value={selectedJobId}
-                    onChange={(e) => setSelectedJobId(e.target.value)}
-                    className="px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                    {jobs?.map(job => (
-                        <option key={job.job_id} value={job.job_id}>
-                            {job.metadata?.pair_name || job.job_id}
-                        </option>
-                    ))}
-                </select>
-            </div>
-
-            {/* Stats Grid */}
-            <div className="grid grid-cols-4 gap-6 mb-8">
-                {/* Win Rate */}
-                <div className="bg-gradient-to-br from-green-900/30 to-green-800/20 rounded-xl p-6 border border-green-800/50">
-                    <div className="text-sm text-green-300 mb-2">Win Rate</div>
-                    <div className="text-4xl font-bold">{winRatePercent.toFixed(1)}%</div>
-                    <div className="text-sm text-gray-400 mt-2">
-                        {winRateData?.total_wins}/{winRateData?.total_participations} rounds
-                    </div>
-                </div>
-
-                {/* Current Score */}
-                <div className="bg-gradient-to-br from-blue-900/30 to-blue-800/20 rounded-xl p-6 border border-blue-800/50">
-                    <div className="text-sm text-blue-300 mb-2">Current Score</div>
-                    <div className="text-4xl font-bold">{jobEarningsData?.score.toFixed(3) || '0.000'}</div>
-                    <div className="text-sm text-gray-400 mt-2">Job performance</div>
-                </div>
-
-                {/* Estimated Earnings */}
-                <div className="bg-gradient-to-br from-purple-900/30 to-purple-800/20 rounded-xl p-6 border border-purple-800/50">
-                    <div className="text-sm text-purple-300 mb-2">Job Earnings (Est.)</div>
-                    <div className="text-4xl font-bold">{jobEarningsData?.earnings_alpha.toFixed(2) || '0.00'}</div>
-                    <div className="text-sm text-gray-400 mt-2">α / ${jobEarningsData?.earnings_usd.toFixed(2) || '0.00'}</div>
-                </div>
-
-                {/* Current Dividends */}
-                <div className="bg-gradient-to-br from-amber-900/30 to-amber-800/20 rounded-xl p-6 border border-amber-800/50">
-                    <div className="text-sm text-amber-300 mb-2">Current Dividends</div>
-                    <div className="text-4xl font-bold">{dividendsData?.current_dividends_alpha.toFixed(2) || '0.00'}</div>
-                    <div className="text-sm text-gray-400 mt-2">α (claimable)</div>
-                </div>
-            </div>
-
-            {/* Charts Grid */}
-            <div className="grid grid-cols-2 gap-6 mb-8">
-                {/* Win Rate Pie Chart */}
-                <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-8 border border-gray-700">
-                    <h2 className="text-xl font-semibold mb-6">Win/Loss Distribution</h2>
-                    <div className="h-80">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={winRateChartData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={100}
-                                    fill="#8884d8"
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                    label={(entry) => `${entry.value.toFixed(1)}%`}
-                                >
-                                    {winRateChartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.color} />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                                    formatter={(value: number | undefined) => value !== undefined ? `${value.toFixed(1)}%` : 'N/A'}
-                                />
-                                <Legend />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 mt-6">
-                        <div className="text-center">
-                            <div className="text-2xl font-bold text-green-400">{winRateData?.total_wins || 0}</div>
-                            <div className="text-sm text-gray-400">Total Wins</div>
-                        </div>
-                        <div className="text-center">
-                            <div className="text-2xl font-bold text-red-400">
-                                {(winRateData?.total_participations || 0) - (winRateData?.total_wins || 0)}
-                            </div>
-                            <div className="text-sm text-gray-400">Total Losses</div>
+        <AdminLayout
+            title={isVaultSpecific
+                ? `Vault #${minerUid} | ${token0Symbol} / ${token1Symbol} | Aerodrome | Base`
+                : `Miner ID: 5F${minerUid.toString().padStart(6, '0')}`
+            }
+            description={isVaultSpecific ? `Start Date: 25/01/26` : `Global Miner Performance — Page 4`}
+            icon={<Terminal size={20} />}
+        >
+            <div className="space-y-6 pb-20 font-mono text-primary">
+                {/* Header Actions */}
+                <div className="flex items-center justify-between mb-2">
+                    <Link
+                        href={isVaultSpecific ? `/admin/miners/${minerUid}` : "/admin/miners"}
+                        className="flex items-center space-x-2 text-sm text-primary/60 hover:text-primary transition-colors"
+                    >
+                        <ArrowLeft size={16} />
+                        <span>Back to {isVaultSpecific ? 'Miner Board' : 'Miners'}</span>
+                    </Link>
+                    <div className="flex items-center space-x-4">
+                        <div className="px-3 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-black uppercase">
+                            Active
                         </div>
                     </div>
                 </div>
 
-                {/* Performance Over Time */}
-                <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-8 border border-gray-700">
-                    <h2 className="text-xl font-semibold mb-6">Recent Performance</h2>
-                    <div className="h-80">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={performanceData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                                <XAxis dataKey="round" stroke="#9ca3af" />
-                                <YAxis stroke="#9ca3af" />
-                                <Tooltip
-                                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                                    labelStyle={{ color: '#9ca3af' }}
-                                />
-                                <Legend />
-                                <Line
-                                    type="monotone"
-                                    dataKey="score"
-                                    stroke="#8b5cf6"
-                                    strokeWidth={3}
-                                    dot={{ fill: '#8b5cf6', r: 5 }}
-                                    activeDot={{ r: 7 }}
-                                    name="Score"
-                                />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-            </div>
-
-            {/* Earnings Breakdown */}
-            <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-8 border border-gray-700">
-                <h2 className="text-xl font-semibold mb-6">Job Earnings Breakdown</h2>
-
-                <div className="grid grid-cols-3 gap-6 mb-8">
-                    <div>
-                        <div className="text-sm text-gray-400 mb-2">Share of Emissions</div>
-                        <div className="text-2xl font-bold">{jobEarningsData?.share_percent.toFixed(2) || '0.00'}%</div>
-                    </div>
-                    <div>
-                        <div className="text-sm text-gray-400 mb-2">Alpha Earnings</div>
-                        <div className="text-2xl font-bold text-purple-400">
-                            {jobEarningsData?.earnings_alpha.toFixed(4) || '0.0000'} α
-                        </div>
-                    </div>
-                    <div>
-                        <div className="text-sm text-gray-400 mb-2">USD Value</div>
-                        <div className="text-2xl font-bold text-green-400">
-                            ${jobEarningsData?.earnings_usd.toFixed(2) || '0.00'}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Earnings Chart */}
-                <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={performanceData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                            <XAxis dataKey="round" stroke="#9ca3af" />
-                            <YAxis stroke="#9ca3af" />
-                            <Tooltip
-                                contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-                                labelStyle={{ color: '#9ca3af' }}
-                                formatter={(value: number | undefined) => value !== undefined ? `$${value.toFixed(2)}` : 'N/A'}
-                            />
-                            <Bar
-                                dataKey="revenue"
-                                fill="#8b5cf6"
-                                name="Revenue per Round"
-                                radius={[8, 8, 0, 0]}
-                            />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
-
-            {/* Miner's Vaults Section */}
-            <div className="mt-8 bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-8 border border-gray-700">
-                <h2 className="text-xl font-semibold mb-2">Miner's Vaults</h2>
-                <p className="text-sm text-gray-400 mb-6">
-                    Liquidity positions across different trading pairs
-                </p>
-
-                {minerVaults && minerVaults.total_vaults > 0 ? (
-                    <div className="space-y-4">
-                        <div className="flex gap-4 mb-6">
-                            <div className="px-4 py-2 bg-green-900/20 border border-green-800/50 rounded-lg">
-                                <span className="text-xs text-green-300">Total Vaults: </span>
-                                <span className="text-sm font-bold text-white">{minerVaults.total_vaults}</span>
-                            </div>
-                            <div className="px-4 py-2 bg-blue-900/20 border border-blue-800/50 rounded-lg">
-                                <span className="text-xs text-blue-300">Active: </span>
-                                <span className="text-sm font-bold text-white">{minerVaults.active_vaults}</span>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {minerVaults.vaults.map((vault) => (
-                                <Link
-                                    key={vault.vault_id}
-                                    href={`/admin/pairs/${vault.job_id}`}
-                                    className="block bg-gray-800/50 border border-gray-700 rounded-xl p-5 hover:border-purple-600 hover:bg-gray-800 transition-all group"
-                                >
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div>
-                                            <h3 className="text-lg font-bold text-white group-hover:text-purple-400 transition-colors">
-                                                {vault.pair_name}
-                                            </h3>
-                                            <p className="text-xs text-gray-500 font-mono mt-1">
-                                                {vault.pair_address.slice(0, 12)}...{vault.pair_address.slice(-8)}
-                                            </p>
-                                        </div>
-                                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${vault.is_eligible_for_live ? 'bg-green-900/30 text-green-400 border border-green-800' : 'bg-gray-700/30 text-gray-400 border border-gray-600'}`}>
-                                            {vault.is_eligible_for_live ? 'Active' : 'Inactive'}
-                                        </span>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-3 mb-4">
-                                        <div>
-                                            <p className="text-xs text-gray-400 mb-1">Combined Score</p>
-                                            <p className="text-lg font-bold text-purple-400">
-                                                {vault.combined_score.toFixed(3)}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p className="text-xs text-gray-400 mb-1">Revenue</p>
-                                            <p className="text-lg font-bold text-green-400">
-                                                ${vault.revenue_usd.toFixed(2)}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-3 gap-2 text-xs">
-                                        <div className="bg-gray-900/50 rounded px-2 py-1.5">
-                                            <p className="text-gray-500">Evaluations</p>
-                                            <p className="text-white font-bold">{vault.total_evaluations}</p>
-                                        </div>
-                                        <div className="bg-gray-900/50 rounded px-2 py-1.5">
-                                            <p className="text-gray-500">Live Rounds</p>
-                                            <p className="text-white font-bold">{vault.total_live_rounds}</p>
-                                        </div>
-                                        <div className="bg-gray-900/50 rounded px-2 py-1.5">
-                                            <p className="text-gray-500">Days</p>
-                                            <p className="text-white font-bold">{vault.participation_days}</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="mt-3 pt-3 border-t border-gray-700 flex items-center justify-between">
-                                        <div className="flex gap-3 text-xs text-gray-400">
-                                            <span>Eval: {vault.evaluation_score.toFixed(3)}</span>
-                                            <span>Live: {vault.live_score.toFixed(3)}</span>
-                                        </div>
-                                        <svg className="w-4 h-4 text-purple-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                        </svg>
-                                    </div>
-                                </Link>
-                            ))}
-                        </div>
-                    </div>
+                {isVaultSpecific ? (
+                    /* Page 3: Vault Performance View */
+                    <VaultPerformanceView
+                        minerUid={minerUid}
+                        token0Symbol={token0Symbol}
+                        token1Symbol={token1Symbol}
+                        winRateData={winRateData}
+                    />
                 ) : (
-                    <div className="text-center py-12">
-                        <p className="text-gray-400">No vaults found for this miner.</p>
-                    </div>
+                    /* Page 4: Global Miner Performance View */
+                    <MinerPerformanceView
+                        minerUid={minerUid}
+                        minerVaults={minerVaults}
+                        winRateData={winRateData}
+                    />
                 )}
             </div>
+        </AdminLayout>
+    );
+}
 
-            {/* Note about dividends */}
-            {dividendsData && (
-                <div className="mt-6 p-4 bg-blue-900/20 border border-blue-800/50 rounded-lg">
-                    <p className="text-sm text-blue-300">
-                        <span className="font-semibold">ℹ️ Note:</span> {dividendsData.note}
-                    </p>
+function MinerPerformanceView({ minerUid, minerVaults, winRateData }: any) {
+    return (
+        <div className="space-y-6">
+            {/* 6 High Density Stat Boxes - Page 4 Style */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <MiniStatBox label="Total TVL (USD)" value={`$173,498`} />
+                <MiniStatBox label="Fees Earned (USD)" value={`$3,675`} />
+                <MiniStatBox label="APY (USD)" value={`2.5%`} />
+                <MiniStatBox label="Benchmark Market" value="22.5%" />
+                <MiniStatBox label="Active Vaults" value={`${minerVaults?.active_vaults || 3}`} />
+                <MiniStatBox label="Rounds" value={`${winRateData?.total_participations || 148}`} />
+            </div>
+
+            {/* Global Performance Chart */}
+            <div className="bg-white p-8 rounded-[32px] border border-cream-dark shadow-sm font-mono text-primary flex flex-col">
+                <div className="flex justify-between items-center mb-6">
+                    <div className="flex flex-col">
+                        <span className="text-[13px] font-black uppercase tracking-tight">
+                            Earnings (USD) | Capital Deployed | Vault Value
+                        </span>
+                        <span className="text-[10px] uppercase opacity-30 font-bold mt-1">Performance Over Time</span>
+                    </div>
+                    <div className="flex items-center space-x-4 text-[10px] font-black uppercase bg-cream/20 px-4 py-2 rounded-xl">
+                        <span className="opacity-40">TF:</span>
+                        <button className="hover:text-blue-600 transition-colors">1D</button>
+                        <span>|</span>
+                        <button className="hover:text-blue-600 transition-colors">7D</button>
+                        <span>|</span>
+                        <button className="text-blue-600">30D</button>
+                        <span>|</span>
+                        <button className="hover:text-blue-600 transition-colors">All</button>
+                    </div>
                 </div>
-            )}
+                <div className="border-t border-dashed border-primary/10 mb-8" />
+                <div className="h-64 w-full mb-6 relative">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={Array.from({ length: 30 }, (_, i) => ({ day: i, value: i * 500 + Math.random() * 2000 }))}>
+                            <YAxis hide domain={['auto', 'auto']} />
+                            <Tooltip
+                                content={({ active, payload }) => (
+                                    active && payload ? <div className="bg-white px-2 py-1 border border-cream-dark text-[10px] shadow-sm">${(payload[0].value as number).toLocaleString()}</div> : null
+                                )}
+                            />
+                            <Area type="monotone" dataKey="value" stroke="#3b82f6" fill="#3b82f620" strokeWidth={3} dot={false} animationDuration={1500} />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 -rotate-90 origin-left text-[9px] font-black opacity-20 uppercase tracking-widest -translate-x-4">USD</div>
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[9px] font-black opacity-20 uppercase tracking-widest translate-y-4">Time</div>
+                </div>
+            </div>
+
+            {/* Active Vaults by Miner Table */}
+            <div className="bg-white p-8 rounded-[32px] border border-cream-dark shadow-sm text-primary">
+                <div className="flex items-center justify-between mb-6">
+                    <span className="text-[13px] font-black uppercase tracking-tight">Active Vaults by Miner</span>
+                    <LayoutGrid size={14} className="opacity-20" />
+                </div>
+                <div className="border-t border-dashed border-primary/10 mb-6" />
+
+                <table className="w-full text-[11px] font-mono">
+                    <thead>
+                        <tr className="text-primary/30 text-left border-b border-cream-dark">
+                            <th className="pb-3 font-black uppercase tracking-tighter">Vault No.</th>
+                            <th className="pb-3 font-black uppercase tracking-tighter">Pair</th>
+                            <th className="pb-3 font-black uppercase tracking-tighter">Chain</th>
+                            <th className="pb-3 font-black uppercase tracking-tighter">TVL USD</th>
+                            <th className="pb-3 font-black uppercase tracking-tighter">Fees USD</th>
+                            <th className="pb-3 font-black uppercase tracking-tighter">APY USD</th>
+                            <th className="pb-3 font-black uppercase tracking-tighter">Benchmark</th>
+                            <th className="pb-3"></th>
+                        </tr>
+                    </thead>
+                    <tbody className="text-primary">
+                        {(minerVaults?.vaults || []).map((vault: any, i: number) => (
+                            <tr key={i} className="hover:bg-cream/20 transition-colors border-b border-cream-dark/30 last:border-0 group cursor-pointer"
+                                onClick={() => window.location.href = `/admin/miners/${minerUid}?pair=${vault.job_id}`}>
+                                <td className="py-4 font-black">Vault #{vault.vault_id}</td>
+                                <td className="py-4 font-bold">{vault.pair_name}</td>
+                                <td className="py-4 opacity-60">Base</td>
+                                <td className="py-4 font-bold">${vault.revenue_usd.toLocaleString()}</td>
+                                <td className="py-4 font-bold text-blue-600">${(vault.revenue_usd * 0.05).toLocaleString()}</td>
+                                <td className="py-4 font-bold">42.5%</td>
+                                <td className="py-4 font-bold opacity-40">21.5%</td>
+                                <td className="py-4 text-right">
+                                    <ChevronRight size={14} className="text-primary/20 group-hover:text-primary transition-colors inline" />
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
+
+function VaultPerformanceView({ minerUid, token0Symbol, token1Symbol, winRateData }: any) {
+    return (
+        <div className="space-y-6">
+            {/* 6 High Density Metric Boxes - Page 3 Style */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <MiniStatBox label="Net Deposit (USD)" value={`$173,498`} />
+                <MiniStatBox label="Fees Earned (USD)" value={`$3,675`} />
+                <MiniStatBox label={`APY ${token0Symbol} / ${token1Symbol}`} value={`32.5% / 15.2%`} />
+                <MiniStatBox label="APY (USD)" value={`2.5%`} />
+                <MiniStatBox label="Benchmark Market" value="22.5%" />
+                <MiniStatBox label="Rounds" value={`${winRateData?.total_participations || 148}`} />
+            </div>
+
+            {/* Vault Performance Chart */}
+            <div className="bg-white p-8 rounded-[32px] border border-cream-dark shadow-sm font-mono text-primary flex flex-col">
+                <div className="flex justify-between items-center mb-6">
+                    <div className="flex flex-col">
+                        <span className="text-[13px] font-black uppercase tracking-tight">
+                            {token0Symbol}/{token1Symbol} Price | Vault Growth (USD)
+                        </span>
+                        <span className="text-[10px] uppercase opacity-30 font-bold mt-1">Performance Over Time</span>
+                    </div>
+                    <div className="flex items-center space-x-4 text-[10px] font-black uppercase bg-cream/20 px-4 py-2 rounded-xl">
+                        <span className="opacity-40">TF:</span>
+                        <button className="hover:text-blue-600 transition-colors">1D</button>
+                        <span>|</span>
+                        <button className="hover:text-blue-600 transition-colors">7D</button>
+                        <span>|</span>
+                        <button className="text-blue-600">30D</button>
+                        <span>|</span>
+                        <button className="hover:text-blue-600 transition-colors">All</button>
+                    </div>
+                </div>
+                <div className="border-t border-dashed border-primary/10 mb-8" />
+                <div className="h-64 w-full mb-6 relative">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={Array.from({ length: 30 }, (_, i) => ({ day: i, value: 50000 + (Math.sin(i / 2) * 5000) + (i * 200) }))}>
+                            <YAxis hide domain={['auto', 'auto']} />
+                            <Tooltip
+                                content={({ active, payload }) => (
+                                    active && payload ? <div className="bg-white px-2 py-1 border border-cream-dark text-[10px] shadow-sm">${(payload[0].value as number).toLocaleString()}</div> : null
+                                )}
+                            />
+                            <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={3} dot={false} animationDuration={1500} />
+                        </LineChart>
+                    </ResponsiveContainer>
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 -rotate-90 origin-left text-[9px] font-black opacity-20 uppercase tracking-widest -translate-x-4">USD</div>
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[9px] font-black opacity-20 uppercase tracking-widest translate-y-4">Time</div>
+                </div>
+            </div>
+
+            {/* Inventory Overview Card */}
+            <div className="bg-white p-8 rounded-[32px] border border-cream-dark shadow-sm text-primary flex flex-col">
+                <div className="border-t border-dashed border-primary/10 mb-4" />
+                <div className="flex items-center justify-between mb-4">
+                    <span className="text-[13px] font-black uppercase tracking-tight">Inventory Overview</span>
+                    <Info size={14} className="opacity-20" />
+                </div>
+                <div className="border-t border-dashed border-primary/10 mb-8" />
+                <div className="space-y-6">
+                    <InventoryRow label="Current:" tokens={`13,483 ${token0Symbol} / 1 ${token1Symbol}`} value={`$73,498`} />
+                    <InventoryRow label="Fees Earned:" tokens={`4,587 ${token0Symbol} / 0.23 ${token1Symbol}`} value={`$3,675`} />
+                    <InventoryRow label="APY:" tokens={`23.5% ${token0Symbol} / 20.45% ${token1Symbol}`} value={`17.3% USD`} />
+                    <div className="border-t border-dashed border-primary/10 py-2" />
+                    <InventoryRow label="Net Deposited:" tokens={`130,483 ${token0Symbol} / 10 ${token1Symbol}`} value={`$173,498`} />
+                    <InventoryRow label="Net Withdrawn:" tokens={`100,000 ${token0Symbol} / 9 ${token1Symbol}`} value={`$100,000`} />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function MiniStatBox({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="bg-white p-4 rounded-2xl border border-cream-dark shadow-sm font-mono flex flex-col justify-between h-full hover:bg-cream/5 transition-colors">
+            <span className="text-[9px] font-black text-primary/40 uppercase tracking-widest mb-2 leading-tight">
+                {label}
+            </span>
+            <span className="text-sm font-black text-primary tracking-tight">
+                {value}
+            </span>
+        </div>
+    );
+}
+
+function InventoryRow({ label, tokens, value }: { label: string; tokens: string; value: string }) {
+    return (
+        <div className="flex items-center justify-between text-xs font-bold font-mono">
+            <span className="opacity-40 uppercase w-32">{label}</span>
+            <div className="flex flex-grow justify-between items-center max-w-lg">
+                <span className="text-primary">{tokens}</span>
+                <span className="text-blue-600 font-black">{value}</span>
+            </div>
         </div>
     );
 }
