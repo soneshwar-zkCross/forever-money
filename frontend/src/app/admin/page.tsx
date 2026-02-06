@@ -19,6 +19,7 @@ import {
     Layers,
     RefreshCw,
     ChevronRight,
+    DollarSign,
 } from 'lucide-react';
 import {
     useJobs,
@@ -59,6 +60,9 @@ export default function DashboardPage() {
     const alphaPrice = emissions?.alpha_price_usd || 1;
     const revenueAlpha = (subnetRevenue?.total_revenue_usd || 0) / alphaPrice;
 
+    // Calculate Net Earnings
+    const netEarningsUsd = (subnetRevenue?.total_revenue_usd || 0) - (emissions?.total_emissions_usd || 0);
+
     // Mock chart data (Styled for light theme)
     const chartData = [
         { time: '00:00', value: 4000 },
@@ -92,13 +96,19 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                {/* Section 2: Top Metrics (5 Columns) */}
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                {/* Section 2: Top Metrics (6 Columns) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     <MetricCard label="TVL (USD)" value={`$${(subnetTVL?.total_tvl_usd || 12402156).toLocaleString()}`} icon={<Layers size={14} />} />
-                    <MetricCard label="Revenue (USD)" value={`$${(subnetRevenue?.total_revenue_usd || 183200).toLocaleString()}`} icon={<TrendingUp size={14} />} />
+                    <MetricCard label="Fees Earned (USD)" value={`$${(subnetRevenue?.total_revenue_usd || 183200).toLocaleString()}`} icon={<TrendingUp size={14} />} />
                     <MetricCard label="Emissions (USD)" value={`$${(emissions?.total_emissions_usd || 92500).toLocaleString()}`} icon={<Zap size={14} />} />
-                    <MetricCard label="Revenue (Alpha)" value={revenueAlpha ? revenueAlpha.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "1,249,865"} icon={<Activity size={14} />} />
+
+                    <MetricCard label="Fees Earned (Alpha)" value={revenueAlpha ? revenueAlpha.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "1,249,865"} icon={<Activity size={14} />} />
                     <MetricCard label="Emissions (Alpha)" value={emissions?.total_emissions_alpha ? emissions.total_emissions_alpha.toLocaleString() : "640,000"} icon={<RefreshCw size={14} />} />
+                    <MetricCard
+                        label="Net Earnings (USD)"
+                        value={`${netEarningsUsd >= 0 ? '$' : '-$'}${Math.abs(netEarningsUsd || 90700).toLocaleString()}`}
+                        icon={<DollarSign size={14} />}
+                    />
                 </div>
 
                 {/* Section 3: Performance Chart */}
@@ -137,7 +147,7 @@ export default function DashboardPage() {
                                         <th className="pb-3 font-black uppercase tracking-tighter">Earnings</th>
                                         <th className="pb-3 font-black uppercase tracking-tighter whitespace-nowrap">T1 (APY)</th>
                                         <th className="pb-3 font-black uppercase tracking-tighter whitespace-nowrap">T2 (APY)</th>
-                                        <th className="pb-3 font-black uppercase tracking-tighter whitespace-nowrap">Pool Share</th>
+                                        <th className="pb-3 font-black uppercase tracking-tighter whitespace-nowrap">Market Benchmark</th>
                                         <th className="pb-3"></th>
                                     </tr>
                                 </thead>
