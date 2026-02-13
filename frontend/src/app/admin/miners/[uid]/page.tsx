@@ -138,8 +138,8 @@ function VaultPerformanceView({ minerUid, token0Symbol, token1Symbol, winRateDat
                                 key={t}
                                 onClick={() => setTimeframe(t)}
                                 className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest transition-all ${timeframe === t
-                                        ? 'bg-primary text-white shadow-md'
-                                        : 'text-primary/30 hover:text-primary/50'
+                                    ? 'bg-primary text-white shadow-md'
+                                    : 'text-primary/30 hover:text-primary/50'
                                     }`}
                             >
                                 {t}
@@ -238,8 +238,8 @@ function VaultPerformanceView({ minerUid, token0Symbol, token1Symbol, winRateDat
                                     key={t}
                                     onClick={() => setTimeframe(t)}
                                     className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest transition-all ${timeframe === t
-                                            ? 'bg-primary text-white shadow-md'
-                                            : 'text-primary/30 hover:text-primary/50'
+                                        ? 'bg-primary text-white shadow-md'
+                                        : 'text-primary/30 hover:text-primary/50'
                                         }`}
                                 >
                                     {t}
@@ -338,9 +338,12 @@ function VaultPerformanceView({ minerUid, token0Symbol, token1Symbol, winRateDat
 }
 
 function MinerPerformanceView({ minerUid, minerVaults, winRateData, token0Symbol, token1Symbol }: any) {
+    const [timeframe, setTimeframe] = useState('30D');
+    const timeframes = ['1D', '7D', '30D', 'ALL'];
+
     return (
         <div className="space-y-6 animate-fade-in">
-            {/* Page 4 implementation (reuse patterns from above) */}
+            {/* Summary Metrics (6 boxes) */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                 <MiniStatBox label="Total TVL (USD)" value={`$173,498`} />
                 <MiniStatBox label="Fees Earned (USD)" value={`$3,675`} />
@@ -348,6 +351,152 @@ function MinerPerformanceView({ minerUid, minerVaults, winRateData, token0Symbol
                 <MiniStatBox label="Benchmark Market" value="22.5%" />
                 <MiniStatBox label="Active Vaults" value={`${minerVaults?.active_vaults || 3}`} />
                 <MiniStatBox label="Rounds" value={`${winRateData?.total_participations || 148}`} />
+            </div>
+
+            {/* Performance Over Time Chart */}
+            <div className="bg-white p-8 rounded-[40px] border border-cream-dark shadow-sm text-primary">
+                <div className="flex justify-between items-start mb-10">
+                    <div className="flex flex-col space-y-1">
+                        <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/30">Performance Over Time</span>
+                        <div className="flex items-center space-x-6 mt-4">
+                            <LegendItem color="bg-blue-500" label="Earnings (USD)" />
+                            <LegendItem color="bg-primary/10" label="Capital Deployed" />
+                            <LegendItem color="bg-primary/5" label="Vault Value" />
+                        </div>
+                    </div>
+                    <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm">
+                        {timeframes.map(t => (
+                            <button
+                                key={t}
+                                onClick={() => setTimeframe(t)}
+                                className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest transition-all ${timeframe === t
+                                    ? 'bg-primary text-white shadow-md'
+                                    : 'text-primary/30 hover:text-primary/50'
+                                    }`}
+                            >
+                                {t}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="h-80 w-full relative group">
+                    <span className="absolute -left-8 top-1/2 -rotate-90 text-[8px] font-black uppercase tracking-widest text-primary/10">USD</span>
+                    <span className="absolute bottom-[-20px] left-1/2 -translate-x-1/2 text-[8px] font-black uppercase tracking-widest text-primary/10">Time</span>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={getMockPerformanceData()}>
+                            <defs>
+                                <linearGradient id="colorEarnings" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
+                                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="#0C206005" />
+                            <XAxis hide />
+                            <YAxis hide />
+                            <Tooltip
+                                content={({ active, payload }) => (
+                                    active && payload ? (
+                                        <div className="bg-white p-3 border border-cream-dark rounded-xl shadow-xl text-[10px] font-bold">
+                                            <div className="text-primary/30 mb-1">MAR 01</div>
+                                            <div className="text-blue-600">${(payload[0].value as number).toLocaleString()}</div>
+                                        </div>
+                                    ) : null
+                                )}
+                            />
+                            <Area
+                                type="monotone"
+                                dataKey="value"
+                                stroke="#3b82f6"
+                                strokeWidth={3}
+                                fill="url(#colorEarnings)"
+                                animationDuration={2000}
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+
+            {/* Earnings Composition Over Time Chart */}
+            <div className="bg-white p-8 rounded-[40px] border border-cream-dark shadow-sm text-primary">
+                <div className="flex justify-between items-start mb-10">
+                    <div className="flex flex-col space-y-1">
+                        <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/30">Earnings Composition Over Time</span>
+                        <div className="flex items-center space-x-6 mt-4">
+                            <LegendItem color="bg-black" label="Fees" />
+                            <span className="text-[8px] font-black text-primary/10 uppercase tracking-widest italic">vs</span>
+                            <LegendItem color="bg-green-500" label="Emissions (USD)" />
+                        </div>
+                    </div>
+                    <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm">
+                        {timeframes.map(t => (
+                            <button
+                                key={t}
+                                onClick={() => setTimeframe(t)}
+                                className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest transition-all ${timeframe === t
+                                    ? 'bg-primary text-white shadow-md'
+                                    : 'text-primary/30 hover:text-primary/50'
+                                    }`}
+                            >
+                                {t}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="h-80 w-full relative">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={getMockGrowthData()}>
+                            <defs>
+                                <linearGradient id="colorComposition" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#0C2060" stopOpacity={0.05} />
+                                    <stop offset="95%" stopColor="#0C2060" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid vertical={false} strokeDasharray="4 4" stroke="#0C206010" />
+                            <XAxis
+                                dataKey="time"
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fontSize: 9, fontWeight: 900, fill: '#0C206020' }}
+                                dy={10}
+                            />
+                            <YAxis
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fontSize: 9, fontWeight: 900, fill: '#0C206020' }}
+                                tickFormatter={(val) => `$${val / 1000}k`}
+                            />
+                            <YAxis
+                                yAxisId="right"
+                                orientation="right"
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fontSize: 9, fontWeight: 900, fill: '#22c55e20' }}
+                                tickFormatter={(val) => `$${val / 1000}k`}
+                            />
+                            <Tooltip
+                                content={({ active, payload }) => (
+                                    active && payload ? (
+                                        <div className="bg-white p-3 border border-cream-dark rounded-xl shadow-xl text-[10px] font-bold">
+                                            <div className="text-primary/30 mb-2">{payload[0].payload.time}</div>
+                                            <div className="flex justify-between items-center space-x-4 mb-1">
+                                                <span className="uppercase tracking-widest opacity-40">Fees:</span>
+                                                <span className="text-black">${(payload[0].value as number).toLocaleString()}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center space-x-4">
+                                                <span className="uppercase tracking-widest opacity-40">Emissions:</span>
+                                                <span className="text-green-500">${(payload[1].value as number).toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                    ) : null
+                                )}
+                            />
+                            <Area type="monotone" dataKey="usd" name="Fees" stroke="#000" strokeWidth={2} fill="url(#colorComposition)" dot={false} />
+                            <Area type="monotone" dataKey="t2" name="Emissions" stroke="#22c55e" strokeWidth={2} fill="transparent" dot={false} yAxisId="right" />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
             </div>
 
             <div className="bg-white p-8 rounded-[40px] border border-cream-dark shadow-sm text-primary">
@@ -377,8 +526,8 @@ function MinerPerformanceView({ minerUid, minerVaults, winRateData, token0Symbol
                                 <td className="py-5 font-black">Vault #{vault.vault_id}</td>
                                 <td className="py-5 uppercase tracking-wide">{vault.pair_name}</td>
                                 <td className="py-5 opacity-40 uppercase">Base</td>
-                                <td className="py-5">$73,498</td>
-                                <td className="py-5 text-blue-600">$3,675</td>
+                                <td className="py-5 font-black">$0</td>
+                                <td className="py-5 text-blue-600 font-black">$0</td>
                                 <td className="py-5">42.5%</td>
                                 <td className="py-5 opacity-30">21.5%</td>
                                 <td className="py-5 text-right">
@@ -428,6 +577,12 @@ function LegendItem({ color, label }: { color: string; label: string }) {
 }
 
 // Mock Data Generators
+function getMockPerformanceData() {
+    return Array.from({ length: 40 }, (_, i) => ({
+        value: 1000 + (Math.sin(i / 5) * 200) + (i * 100)
+    }));
+}
+
 function getMockGrowthData() {
     return [
         { time: '00:00', usd: 4200, t1: 4400, t2: 4100 },
