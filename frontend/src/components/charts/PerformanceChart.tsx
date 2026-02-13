@@ -17,21 +17,22 @@ interface PerformanceChartProps {
 }
 
 export default function PerformanceChart({ data, lightTheme }: PerformanceChartProps) {
-    const primaryColor = lightTheme ? '#0D1117' : '#ffffff';
-    const gridColor = lightTheme ? '#E5E7EB' : '#333333';
-    const textColor = lightTheme ? '#4B5563' : '#666666';
+    const blueColor = '#3B82F6';
+    const blackColor = '#0D1117';
+    const gridColor = '#F2EDE4';
+    const textColor = '#9CA3AF';
 
     return (
         <div className="w-full h-full min-h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
                     data={data}
-                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                    margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
                 >
                     <defs>
-                        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={primaryColor} stopOpacity={lightTheme ? 0.05 : 0.1} />
-                            <stop offset="95%" stopColor={primaryColor} stopOpacity={0} />
+                        <linearGradient id="colorBlue" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={blueColor} stopOpacity={0.1} />
+                            <stop offset="95%" stopColor={blueColor} stopOpacity={0} />
                         </linearGradient>
                     </defs>
                     <CartesianGrid
@@ -43,34 +44,45 @@ export default function PerformanceChart({ data, lightTheme }: PerformanceChartP
                         dataKey="time"
                         axisLine={false}
                         tickLine={false}
-                        tick={{ fill: textColor, fontSize: 10 }}
+                        tick={{ fill: textColor, fontSize: 10, fontWeight: 600 }}
                         dy={10}
                     />
                     <YAxis
                         axisLine={false}
                         tickLine={false}
-                        tick={{ fill: textColor, fontSize: 10 }}
+                        tick={{ fill: textColor, fontSize: 10, fontWeight: 600 }}
                         tickFormatter={(value) => `$${value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value}`}
                     />
                     <Tooltip
                         contentStyle={{
-                            backgroundColor: lightTheme ? '#ffffff' : '#000000',
+                            backgroundColor: '#ffffff',
                             border: `1px solid ${gridColor}`,
-                            borderRadius: '8px',
+                            borderRadius: '12px',
                             fontSize: '11px',
-                            color: lightTheme ? '#0D1117' : '#ffffff',
-                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                            fontWeight: 700,
+                            color: '#0D1117',
+                            boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'
                         }}
-                        itemStyle={{ color: lightTheme ? '#0D1117' : '#ffffff' }}
+                        itemStyle={{ padding: '2px 0' }}
                     />
                     <Area
                         type="monotone"
                         dataKey="value"
-                        stroke={primaryColor}
-                        strokeWidth={2}
+                        name="TVL"
+                        stroke={blueColor}
+                        strokeWidth={2.5}
                         fillOpacity={1}
-                        fill="url(#colorValue)"
+                        fill="url(#colorBlue)"
                         animationDuration={1500}
+                    />
+                    <Area
+                        type="monotone"
+                        dataKey="value2"
+                        name="Revenue"
+                        stroke={blackColor}
+                        strokeWidth={2.5}
+                        fill="transparent"
+                        animationDuration={2000}
                     />
                 </AreaChart>
             </ResponsiveContainer>

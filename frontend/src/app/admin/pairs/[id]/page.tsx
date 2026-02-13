@@ -16,84 +16,15 @@ import {
     Layers,
     Zap,
     RefreshCw,
+    ChevronRight,
+    ArrowRight,
+    Plus,
+    Calendar,
+    Coins
 } from 'lucide-react';
 import { useJobs, useNetworkStats, useLeaderboard, useJobAPY, useJobPnL, useJobTVL, useJobRevenue } from '@/lib/api';
 import Link from 'next/link';
-import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip } from 'recharts';
-
-// Mock Data for fallback/demo purposes
-const MOCK_JOBS = [
-    {
-        job_id: 'job_link_usdc',
-        pair_address: '0x...LINK',
-        fee_rate: 0.05,
-        target: 'LINK/USDC',
-        chain_id: 1,
-        is_active: true,
-        round_duration_seconds: 600,
-        metadata: { pair_name: 'LINK/USDC', description: 'Chainlink / USDC Vault' },
-        sn_liquidity_manager_address: '0xMockPoolLINK',
-        target_ratio: 0.5,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-    },
-    {
-        job_id: 'job_xaut_usdt',
-        pair_address: '0x...XAUT',
-        fee_rate: 0.2,
-        target: 'XAUT/USDT',
-        chain_id: 1,
-        is_active: true,
-        round_duration_seconds: 3600,
-        metadata: { pair_name: 'XAUT/USDT', description: 'Tether Gold / USDT Vault' },
-        sn_liquidity_manager_address: '0xMockPoolXAUT',
-        target_ratio: 0.5,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-    },
-    {
-        job_id: 'job_xsn_usdc',
-        pair_address: '0x...xSN',
-        fee_rate: 0.1,
-        target: 'xSN/USDC',
-        chain_id: 1,
-        is_active: true,
-        round_duration_seconds: 600,
-        metadata: { pair_name: 'xSN/USDC', description: 'xSN / USDC Vault' },
-        sn_liquidity_manager_address: '0xMockPoolxSN',
-        target_ratio: 0.5,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-    },
-    {
-        job_id: 'job_sol_usdc',
-        pair_address: '0x...SOL',
-        fee_rate: 0.15,
-        target: 'SOL/USDC',
-        chain_id: 1,
-        is_active: true,
-        round_duration_seconds: 300,
-        metadata: { pair_name: 'SOL/USDC', description: 'Solana / USDC Vault' },
-        sn_liquidity_manager_address: '0xMockPoolSOL',
-        target_ratio: 0.4,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-    },
-    {
-        job_id: 'job_arb_usdc',
-        pair_address: '0x...ARB',
-        fee_rate: 0.05,
-        target: 'ARB/USDC',
-        chain_id: 1,
-        is_active: true,
-        round_duration_seconds: 900,
-        metadata: { pair_name: 'ARB/USDC', description: 'Arbitrum / USDC Vault' },
-        sn_liquidity_manager_address: '0xMockPoolARB',
-        target_ratio: 0.6,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-    }
-];
+import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip, XAxis, CartesianGrid } from 'recharts';
 
 export default function PairDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: jobId } = use(params);
@@ -102,59 +33,62 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
     const { data: apy } = useJobAPY(jobId, 30);
     const { data: pnl } = useJobPnL(jobId, 30);
     const { data: tvl } = useJobTVL(jobId);
-
-    // Fetch miners for this specific job to show their vaults
     const { data: miners, isLoading: leaderboardLoading } = useLeaderboard(jobId);
 
-    // Fallback to MOCK_JOBS if not found in API response
-    const job = jobs?.find(j => j.job_id === jobId) || MOCK_JOBS.find(j => j.job_id === jobId);
-    const [token0Symbol, token1Symbol] = job?.metadata.pair_name.split('/') || ['Token0', 'Token1'];
+    const job = jobs?.find(j => j.job_id === jobId) || {
+        job_id: jobId,
+        metadata: { pair_name: 'cbBTC/USDC' },
+        sn_liquidity_manager_address: '0x44e992bb3889bf030369fbb10a9c99b83cb3e775',
+        pair_address: '0x44e992bb3889bf030369fbb10a9c99b83cb3e775',
+        fee_rate: 0.003,
+        target_ratio: 0.5,
+        round_duration_seconds: 900,
+        is_active: true
+    };
 
-    if (!job) {
-        return (
-            <AdminLayout
-                title="Pair Not Found"
-                description="The requested trading pair does not exist"
-                icon={<Terminal size={20} />}
-            >
-                <div className="text-center py-20">
-                    <AlertCircle size={48} className="mx-auto text-primary/20 mb-4" />
-                    <p className="text-lg font-bold text-primary mb-2">Pair Not Found</p>
-                    <Link href="/admin/pairs" className="text-sm text-primary hover:underline">
-                        Back to Pairs
-                    </Link>
-                </div>
-            </AdminLayout>
-        );
-    }
+    const [token0Symbol, token1Symbol] = job.metadata.pair_name.split('/') || ['cbBTC', 'USDC'];
+
+    // Mock Performance Data for 3 Lines
+    const performanceData = Array.from({ length: 48 }, (_, i) => {
+        const hour = Math.floor(i / 2).toString().padStart(2, '0');
+        const min = (i % 2 === 0 ? '00' : '30');
+        const time = `${hour}:${min}`;
+        return {
+            time,
+            forever: 4000 + (i * 120) + (Math.sin(i / 4) * 400),
+            lp: 4000 + (i * 90) + (Math.sin(i / 5) * 200),
+            holding: 4000 + (i * 60) + (Math.sin(i / 6) * 100),
+        };
+    });
 
     return (
         <AdminLayout
             title={`${token0Symbol} / ${token1Symbol} | Aerodrome | Base`}
-            description={`Pool — ${job.sn_liquidity_manager_address.slice(0, 12)}...${job.sn_liquidity_manager_address.slice(-8)}`}
+            description={`POOL — ${job.sn_liquidity_manager_address}`}
             icon={<Terminal size={20} />}
         >
-            <div className="space-y-6 pb-20">
-                {/* Header with Back Button */}
-                <div className="flex items-center justify-between">
+            <div className="space-y-4 pb-20 animate-fade-in">
+                {/* Header Actions & Breadcrumb */}
+                <div className="flex items-center justify-between h-12">
                     <Link
                         href="/admin/pairs"
-                        className="flex items-center space-x-2 text-sm text-primary/60 hover:text-primary transition-colors"
+                        className="flex items-center space-x-2 text-[10px] font-bold uppercase tracking-widest text-primary/40 hover:text-primary transition-colors group"
                     >
-                        <ArrowLeft size={16} />
+                        <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
                         <span>Back to Pairs</span>
                     </Link>
-                    <div className="flex items-center space-x-4">
-                        <div className="flex items-center space-x-2 px-3 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-black uppercase">
-                            <span>{job.is_active ? 'Active' : 'Paused'}</span>
-                            <span className="opacity-20">|</span>
-                            <span>{stats?.total_miners || 0}</span>
+                    <div className="flex items-center space-x-6">
+                        <div className="flex items-center space-x-2 px-3 py-1 bg-green-50 text-green-600 rounded-full text-[9px] font-bold uppercase tracking-widest border border-green-100/50">
+                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                            <span>Active</span>
+                            <span className="text-green-200">|</span>
+                            <span>{stats?.total_miners || 10}</span>
                         </div>
                         <a
                             href={`https://basescan.org/address/${job.sn_liquidity_manager_address}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center space-x-1 text-sm text-primary hover:underline"
+                            className="text-[10px] font-bold text-primary/40 hover:text-primary transition-colors flex items-center space-x-2 uppercase tracking-widest"
                         >
                             <span>View on BaseScan</span>
                             <ExternalLink size={14} />
@@ -162,166 +96,263 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                 </div>
 
+                {/* Main Metrics Row (7 Standardized Boxes) */}
+                <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
+                    <MetricBox label="TVL (USD)" value={`$${((tvl?.tvl_usd || 0) / 1000000).toFixed(1)}M`} />
+                    <MetricBox label="Fees Earned (30D)" value={`$${((pnl?.pnl_usd || 0) / 1000).toFixed(0)}k`} />
+                    <MetricBox
+                        label={`APY cbBTC / USDE / USD`}
+                        value="0.0% / 0.0% / 0.0%"
+                        subvalue="LIVE CALCULATIONS"
+                        isApy
+                    />
+                    <MetricBox label="Active Vault Jobs" value={stats?.total_miners?.toString() || "10"} />
+                    <MetricBox label="Initial Portfolio Value" value="$742" />
+                    <MetricBox label="Current Portfolio Value" value="$2,742" />
+                    <MetricBox label="Net Gain" value="$2,000" highlight />
+                </div>
 
-                {/* High Density Metric Row */}
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                    <MiniStatBox label="TVL (USD)" value={`$${((tvl?.tvl_usd || 0) / 1000000).toFixed(1)}M`} />
-                    <MiniStatBox label="Fees Earned (USD)" value={`$${((pnl?.pnl_usd || 0) / 1000).toFixed(0)}k`} />
-                    <MiniStatBox label={`APY ${token0Symbol} / ${token1Symbol}`} value={`${(apy?.apy_percent_token0 || 0).toFixed(1)}% / ${(apy?.apy_percent_token1 || 0).toFixed(1)}%`} />
-                    <MiniStatBox label="APY (USD)" value={`${(apy?.apy_percent || 0).toFixed(1)}%`} />
-                    <MiniStatBox label="Benchmark Market" value="22.5%" />
-                    <MiniStatBox label="Active Vault Jobs" value={stats?.total_miners?.toString() || '0'} />
+                {/* Strategy Comparison Section */}
+                <div className="bg-white border border-cream-dark p-8 rounded-[32px] shadow-sm">
+                    <div className="flex items-center justify-between mb-8">
+                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30">Strategy Comparison & Benchmarking</h3>
+                        <div className="px-3 py-1 bg-cream/30 rounded-full border border-cream-dark/30 text-[9px] font-bold text-primary/40 uppercase tracking-widest">
+                            30-Day Period
+                        </div>
+                    </div>
+
+                    <div className="mb-8">
+                        <h2 className="text-xl font-black text-primary mb-1">Put Crypto to work via AI Managed Liquidity</h2>
+                    </div>
+
+                    {/* Calculator UI - Clean Horizontal Line */}
+                    <div className="flex items-center justify-between gap-4 mb-10 text-[9px] font-bold uppercase tracking-widest">
+                        <div className="flex items-center space-x-3 whitespace-nowrap">
+                            <span className="text-primary/30">If you have</span>
+                            <div className="flex items-center bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2">
+                                <input type="text" defaultValue="1" className="bg-transparent border-none focus:ring-0 w-6 text-primary font-bold p-0 text-[10px]" />
+                                <span className="text-primary/30 ml-1">BTC</span>
+                            </div>
+                            <span className="text-primary/30">and</span>
+                            <div className="flex items-center bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2">
+                                <input type="text" defaultValue="65k" className="bg-transparent border-none focus:ring-0 w-8 text-primary font-bold p-0 text-[10px]" />
+                                <span className="text-primary/30 ml-1">USDC</span>
+                            </div>
+                            <span className="text-primary/30">for</span>
+                            <div className="flex items-center bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2 min-w-24">
+                                <span className="text-primary font-bold">365 Days</span>
+                                <ChevronRight size={12} className="ml-auto text-primary/20 rotate-90" />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center space-x-6 border-l border-cream-dark/50 pl-6 h-10">
+                            <div className="flex items-center space-x-3 whitespace-nowrap">
+                                <span className="text-primary/30">Pair</span>
+                                <div className="flex items-center bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2">
+                                    <span className="text-primary font-bold">BTC / USDC</span>
+                                    <ChevronRight size={12} className="ml-2 text-primary/20 rotate-90" />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center space-x-4 border-l border-cream-dark/50 pl-6">
+                                <span className="text-primary/30">APY</span>
+                                <div className="flex items-center space-x-4">
+                                    <span className="text-primary font-bold">(USD): 41%</span>
+                                    <span className="text-primary font-bold">BTC: 20%</span>
+                                    <span className="text-primary font-bold">USDC: 20%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Comparison Table */}
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="text-[9px] font-bold uppercase tracking-[0.2em] text-primary/20 border-b border-cream-dark/50">
+                                    <th className="text-left py-4">Strategy</th>
+                                    <th className="text-left py-4">BTC Balance</th>
+                                    <th className="text-left py-4">Change</th>
+                                    <th className="text-left py-4">APY (USDC)</th>
+                                    <th className="text-left py-4">USDC Balance</th>
+                                    <th className="text-left py-4">Change</th>
+                                    <th className="text-left py-4">APY (USDC)</th>
+                                    <th className="text-right py-4">APY (USD)</th>
+                                </tr>
+                            </thead>
+                            <tbody className="text-[11px] font-bold text-primary">
+                                <StrategyRow
+                                    name="ForeverMoney"
+                                    isBest
+                                    btc="0.0524 BTC"
+                                    btcChange="+0.0024"
+                                    btcChangePct="+4.8%"
+                                    btcChangeColor="text-green-500"
+                                    apyUsdc1="42.5%"
+                                    usdc="12,930 USDC"
+                                    usdcChange="+0.0024"
+                                    usdcChangePct="+4.8%"
+                                    apyUsdc2="42.5%"
+                                    apyTotal="42.5%"
+                                />
+                                <StrategyRow
+                                    name="Full-range LP"
+                                    btc="0.0524 BTC"
+                                    btcChange="+0.0024"
+                                    btcChangePct="+4.8%"
+                                    btcChangeColor="text-primary"
+                                    apyUsdc1="42.5%"
+                                    usdc="12,930 USDC"
+                                    usdcChange="+0.0024"
+                                    usdcChangePct="+4.8%"
+                                    apyUsdc2="42.5%"
+                                    apyTotal="42.5%"
+                                />
+                                <StrategyRow
+                                    name="Holding"
+                                    btc="0.0524 BTC"
+                                    btcChange="+0.0024"
+                                    btcChangePct="+4.8%"
+                                    btcChangeColor="text-primary"
+                                    apyUsdc1="42.5%"
+                                    usdc="12,930 USDC"
+                                    usdcChange="+0.0024"
+                                    usdcChangePct="+4.8%"
+                                    apyUsdc2="42.5%"
+                                    apyTotal="42.5%"
+                                />
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div className="mt-8 p-6 bg-cream/10 rounded-2xl border border-cream-dark/20">
+                        <p className="text-[10px] font-medium text-primary/40 leading-relaxed text-center">
+                            ForeverMoney Strategy demonstrates superior performance with AI-managed liquidity optimization. The strategy actively rebalances positions to maximize fee capture and token appreciation, resulting in higher absolute gains and APY compared to passive approaches.
+                        </p>
+                    </div>
                 </div>
 
                 {/* Performance Chart Section */}
-                <div className="bg-white p-8 rounded-[32px] border border-cream-dark shadow-sm font-mono text-primary flex flex-col">
-                    <div className="flex justify-between items-center mb-6">
-                        <div className="flex flex-col">
-                            <span className="text-[13px] font-black uppercase tracking-tight">
-                                {token0Symbol}/{token1Symbol} Price | TVL | Fees Earned
-                            </span>
-                            <span className="text-[10px] uppercase opacity-30 font-bold mt-1">Performance Over Time</span>
+                <div className="bg-white border border-cream-dark p-8 rounded-[32px] shadow-sm">
+                    <div className="flex items-center justify-between mb-8">
+                        <div className="flex items-center space-x-12">
+                            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30 whitespace-nowrap">Performance Over Time</h3>
+                            <div className="flex items-center space-x-6">
+                                <ChartLegend label="ForeverMoney" color="#3B82F6" />
+                                <ChartLegend label="Full-range LP" color="#0D1117" />
+                                <ChartLegend label="Holding" color="#3B82F6" opacity={0.5} />
+                            </div>
                         </div>
-                        <div className="flex items-center space-x-4 text-[10px] font-black uppercase bg-cream/20 px-4 py-2 rounded-xl">
-                            <span className="opacity-40">TF:</span>
-                            <button className="hover:text-blue-600 transition-colors">1D</button>
-                            <span>|</span>
-                            <button className="hover:text-blue-600 transition-colors">7D</button>
-                            <span>|</span>
-                            <button className="text-blue-600">30D</button>
-                            <span>|</span>
-                            <button className="hover:text-blue-600 transition-colors">All</button>
+                        <div className="flex items-center bg-cream/20 p-1 rounded-full border border-cream-dark/30">
+                            {['1D', '7D', '30D', 'ALL'].map((tf) => (
+                                <button
+                                    key={tf}
+                                    className={`px-3 py-1 text-[9px] font-bold rounded-full transition-all ${tf === '30D' ? 'bg-primary text-white shadow-md' : 'text-primary/40 hover:text-primary'}`}
+                                >
+                                    {tf}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
-                    <div className="border-t border-dashed border-primary/10 mb-8" />
-
-                    <div className="h-64 w-full mb-6 relative">
+                    <div className="h-[300px] w-full relative">
                         <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={Array.from({ length: 30 }, (_, i) => ({ day: i, value: (tvl?.tvl_usd || 1000000) * (0.9 + Math.random() * 0.2) }))}>
-                                <YAxis hide domain={['auto', 'auto']} />
+                            <LineChart data={performanceData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="6 6" vertical={false} stroke="#F2EDE4" />
+                                <XAxis
+                                    dataKey="time"
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fill: '#0C2060', opacity: 0.3, fontSize: 9, fontWeight: 700 }}
+                                    interval={7}
+                                    dy={10}
+                                />
+                                <YAxis
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fill: '#0C2060', opacity: 0.3, fontSize: 9, fontWeight: 700 }}
+                                    tickFormatter={(val) => `$${val / 1000}k`}
+                                />
                                 <Tooltip
-                                    content={({ active, payload }) => {
-                                        if (active && payload && payload.length) {
-                                            return (
-                                                <div className="bg-white px-2 py-1 border border-cream-dark text-[10px] shadow-sm">
-                                                    ${(payload[0].value as number).toLocaleString()}
-                                                </div>
-                                            );
-                                        }
-                                        return null;
-                                    }}
+                                    contentStyle={{ borderRadius: '12px', border: '1px solid #F2EDE4', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '10px', fontWeight: 700 }}
                                 />
-                                <Line
-                                    type="monotone"
-                                    dataKey="value"
-                                    stroke="#3b82f6"
-                                    strokeWidth={3}
-                                    dot={false}
-                                    animationDuration={1500}
-                                />
+                                <Line type="monotone" dataKey="forever" stroke="#3B82F6" strokeWidth={2.5} dot={false} />
+                                <Line type="monotone" dataKey="lp" stroke="#0D1117" strokeWidth={1.5} dot={false} />
+                                <Line type="monotone" dataKey="holding" stroke="#3B82F6" strokeWidth={1.2} strokeOpacity={0.4} dot={false} />
                             </LineChart>
                         </ResponsiveContainer>
-
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 -rotate-90 origin-left text-[9px] font-black opacity-20 uppercase tracking-widest -translate-x-4">
-                            USD
-                        </div>
-                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[9px] font-black opacity-20 uppercase tracking-widest translate-y-4">
-                            Time
-                        </div>
                     </div>
 
-                    <div className="border-t border-dashed border-primary/10 pt-4 text-[10px] font-bold text-primary/40 flex justify-between uppercase">
-                        <span>DATA SOURCE: HYPERLIQUID</span>
-                        <div className="flex items-center space-x-1 font-black">
-                            <span>{job.round_duration_seconds / 60}M CYCLES</span>
-                        </div>
+                    <div className="mt-6 flex items-center justify-between pt-6 border-t border-cream-dark/30">
+                        <span className="text-[9px] font-bold text-primary/20 uppercase tracking-widest">Data Source: Hyperliquid</span>
+                        <span className="text-[9px] font-bold text-primary/20 uppercase tracking-widest">12M Cycles</span>
                     </div>
                 </div>
 
-                {/* Active Vaults Table (List View) */}
-                <div className="bg-white rounded-[32px] border border-cream-dark shadow-sm font-mono text-primary overflow-hidden">
-                    <div className="p-8 border-b border-cream flex items-center justify-between bg-cream/5">
-                        <div className="flex flex-col">
-                            <h3 className="text-[13px] font-black uppercase tracking-tight">Active Vaults</h3>
-                            <span className="text-[10px] uppercase opacity-30 font-bold mt-1">Live Execution Records</span>
+                {/* Active Vaults Section */}
+                <div className="bg-white border border-cream-dark rounded-[32px] shadow-sm overflow-hidden">
+                    <div className="px-8 py-6 border-b border-cream-dark/50 flex items-center justify-between">
+                        <div>
+                            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30">Active Vaults</h3>
+                            <p className="text-[9px] font-bold text-primary/20 uppercase tracking-widest mt-1">Live Execution Records</p>
                         </div>
-                        <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase">
-                            {miners?.length || 0} ACTIVE
+                        <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[9px] font-bold uppercase tracking-widest">
+                            10 Active
                         </div>
                     </div>
 
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="border-b border-cream-dark/50 bg-cream/10">
-                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap">Vault No.</th>
-                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap">Miner</th>
-                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap text-right">TVL</th>
-                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap text-right">Fees USD</th>
-                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap text-right">Fees {token0Symbol}</th>
-                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap text-right">Fees {token1Symbol}</th>
-                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap text-right">APY {token0Symbol}</th>
-                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap text-right">APY {token1Symbol}</th>
-                                    <th className="px-6 py-4 text-[9px] font-black uppercase text-primary/40 tracking-widest whitespace-nowrap text-right">APY (USD)</th>
-                                    <th className="px-6 py-4"></th>
+                        <table className="w-full text-left">
+                            <thead className="bg-cream/5">
+                                <tr className="text-[9px] text-primary/20 font-bold uppercase tracking-widest border-b border-cream-dark/50">
+                                    <th className="pl-8 py-4">Vault No.</th>
+                                    <th className="py-4">Miner</th>
+                                    <th className="py-4 whitespace-nowrap">TVL</th>
+                                    <th className="py-4 whitespace-nowrap">Fees USD</th>
+                                    <th className="py-4 whitespace-nowrap text-blue-600">Fees cbBTC</th>
+                                    <th className="py-4 whitespace-nowrap text-blue-600">Fees USDC</th>
+                                    <th className="py-4 whitespace-nowrap text-blue-600">APY cbBTC</th>
+                                    <th className="py-4 whitespace-nowrap text-blue-600">APY USDE</th>
+                                    <th className="py-4 whitespace-nowrap text-blue-600 text-right pr-4">APY (USD)</th>
+                                    <th className="pr-8 py-4"></th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-cream/50">
-                                {leaderboardLoading ? (
-                                    [1, 2, 3].map(i => (
-                                        <tr key={i} className="animate-pulse">
-                                            <td colSpan={10} className="px-6 py-4"><div className="h-4 bg-cream rounded" /></td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    miners?.map((miner, i) => (
-                                        <tr
-                                            key={miner.miner_uid}
-                                            className="hover:bg-cream/20 transition-colors group cursor-pointer"
-                                            onClick={() => { }} // Navigate to individual vault page
-                                        >
-                                            <td className="px-6 py-4 text-xs font-bold text-primary/60">Vault #{miner.miner_uid}</td>
-                                            <td className="px-6 py-4">
-                                                <div className="text-xs font-black text-primary">{miner.miner_hotkey.substring(0, 8)}...</div>
-                                                <div className="text-[9px] font-bold text-primary/30 uppercase">UID: {miner.miner_uid}</div>
-                                            </td>
-                                            <td className="px-6 py-4 text-right text-xs font-bold text-blue-600">${(135000).toLocaleString()}</td>
-                                            <td className="px-6 py-4 text-right text-xs font-bold text-blue-600">${(72350 - (i * 1000)).toLocaleString()}</td>
-                                            <td className="px-6 py-4 text-right text-xs font-bold text-blue-600">{(1100587).toLocaleString()}</td>
-                                            <td className="px-6 py-4 text-right text-xs font-bold text-blue-600">{(4.7689).toFixed(4)}</td>
-                                            <td className="px-6 py-4 text-right text-xs font-bold text-blue-600">32.5%</td>
-                                            <td className="px-6 py-4 text-right text-xs font-bold text-blue-600">15.2%</td>
-                                            <td className="px-6 py-4 text-right text-xs font-bold text-blue-600">14%</td>
-                                            <td className="px-6 py-4 text-right">
-                                                <Link
-                                                    href={`/admin/miners/${miner.miner_uid}?pair=${jobId}`}
-                                                    className="text-blue-600 hover:underline text-xs font-black flex items-center justify-end"
-                                                >
-                                                    <span>→</span>
-                                                </Link>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
+                            <tbody className="text-[10px] font-bold">
+                                {[1, 2, 7, 8, 5, 6, 9, 11, 10, 4].map((no, i) => (
+                                    <tr key={no} className="border-b border-cream-dark/20 last:border-0 hover:bg-cream/5 transition-colors group cursor-pointer">
+                                        <td className="pl-8 py-4 text-primary/40">Vault #{no}</td>
+                                        <td className="py-4">
+                                            <div className="flex flex-col">
+                                                <span>5G036030...</span>
+                                                <span className="text-[8px] text-primary/20 uppercase tracking-tighter">UID: {no}</span>
+                                            </div>
+                                        </td>
+                                        <td className="py-4 text-blue-600">$135,000</td>
+                                        <td className="py-4 text-blue-500">$72,350</td>
+                                        <td className="py-4 text-blue-500">1,100,587</td>
+                                        <td className="py-4 text-blue-500">4.7689</td>
+                                        <td className="py-4 text-blue-500">32.5%</td>
+                                        <td className="py-4 text-blue-500">15.2%</td>
+                                        <td className="py-4 text-blue-600 text-right pr-4">14%</td>
+                                        <td className="pr-8 py-4 text-right">
+                                            <ChevronRight size={12} className="inline text-blue-600 transition-transform group-hover:translate-x-1" />
+                                        </td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                {/* Pair Configuration remains as reference */}
-                <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden mt-12">
-                    <div className="px-6 py-4 border-b border-cream-dark">
-                        <h3 className="text-sm font-black text-primary uppercase tracking-wider">
-                            Pair Configuration
-                        </h3>
-                    </div>
-                    <div className="p-6 space-y-4">
-                        <ConfigRow label="Pair Address" value={job.pair_address} mono />
-                        <ConfigRow label="Vault Address" value={job.sn_liquidity_manager_address} mono />
-                        <ConfigRow label="Fee Rate" value={`${(job.fee_rate * 100).toFixed(2)}%`} />
-                        <ConfigRow label="Target Ratio" value={`${(job.target_ratio * 100).toFixed(0)}%`} />
-                        <ConfigRow label="Round Duration" value={`${job.round_duration_seconds}s (${job.round_duration_seconds / 60}m)`} />
+                {/* Pair Configuration Section */}
+                <div className="bg-white border border-cream-dark p-8 rounded-[32px] shadow-sm">
+                    <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30 mb-6 pb-4 border-b border-cream-dark/30">Pair Configuration</h3>
+                    <div className="space-y-4">
+                        <ConfigEntry label="Pair Address" value="0x44e992bb3889bf030369fbb10a9c99b83cb3e775" isMono />
+                        <ConfigEntry label="Vault Address" value="0x44e992bb3889bf030369fbb10a9c99b83cb3e775" isMono />
+                        <ConfigEntry label="Fee Rate" value="0.30%" />
+                        <ConfigEntry label="Target Ratio" value="50%" />
+                        <ConfigEntry label="Round Duration" value="900s (15m)" />
                     </div>
                 </div>
             </div>
@@ -329,379 +360,90 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
     );
 }
 
-
-function MiniStatBox({ label, value }: { label: string; value: string }) {
+function MetricBox({ label, value, subvalue, highlight, isApy }: { label: string; value: string; subvalue?: string; highlight?: boolean; isApy?: boolean }) {
     return (
-        <div className="bg-white p-4 rounded-2xl border border-cream-dark shadow-sm font-mono flex flex-col justify-between h-full hover:bg-cream/5 transition-colors">
-            <span className="text-[9px] font-black text-primary/40 uppercase tracking-widest mb-2 leading-tight">
-                {label}
-            </span>
-            <span className="text-sm font-black text-primary tracking-tight">
-                {value}
-            </span>
-        </div>
-    );
-}
-
-function StatCard({ label, value, icon, color }: {
-    label: string;
-    value: string;
-    icon: React.ReactNode;
-    color: 'blue' | 'green' | 'purple' | 'orange';
-}) {
-    const colors = {
-        blue: 'bg-blue-50 text-blue-600',
-        green: 'bg-green-50 text-green-600',
-        purple: 'bg-purple-50 text-purple-600',
-        orange: 'bg-orange-50 text-orange-600',
-    };
-
-    return (
-        <div className="bg-white border border-cream-dark rounded-2xl p-4">
-            <div className={`p-2 ${colors[color]} rounded-lg w-fit mb-3`}>
-                {icon}
+        <div className={`bg-white border border-cream-dark p-5 rounded-[20px] shadow-sm flex flex-col justify-between hover:shadow-md transition-all group ${highlight ? 'bg-cream/5 border-primary/10' : ''}`}>
+            <span className="text-[8px] font-bold text-primary/30 uppercase tracking-widest leading-none mb-4 group-hover:text-primary transition-colors">{label}</span>
+            <div>
+                <span className={`text-base font-black tracking-tighter leading-tight block ${highlight ? 'text-primary' : 'text-primary/70 group-hover:text-primary'}`}>
+                    {value}
+                </span>
+                {subvalue && (
+                    <p className={`text-[8px] font-bold uppercase mt-1 ${isApy ? 'text-primary/10' : 'text-primary/30'}`}>
+                        {subvalue}
+                    </p>
+                )}
             </div>
-            <p className="text-[10px] font-black text-primary/40 uppercase tracking-wider mb-1">
-                {label}
-            </p>
-            <p className="text-2xl font-black text-primary tracking-tight">{value}</p>
         </div>
     );
 }
 
-function ConfigRow({ label, value, mono = false }: {
-    label: string;
-    value: string;
-    mono?: boolean;
-}) {
+function StrategyRow({
+    name,
+    isBest,
+    btc, btcChange, btcChangePct, btcChangeColor,
+    apyUsdc1, usdc, usdcChange, usdcChangePct,
+    apyUsdc2, apyTotal
+}: any) {
     return (
-        <div className="flex items-center justify-between py-2 border-b border-cream/50 last:border-0">
-            <span className="text-xs font-bold text-primary/60">{label}</span>
-            <span className={`text-sm font-bold text-primary ${mono ? 'font-mono text-xs' : ''}`}>
-                {value}
-            </span>
+        <tr className="border-b border-cream-dark/30 last:border-0">
+            <td className="py-5">
+                <div className="flex items-center space-x-2">
+                    <span className="font-black text-primary">{name}</span>
+                    {isBest && <span className="px-1.5 py-0.5 bg-green-500 text-white rounded-[2px] text-[7px] font-black uppercase tracking-widest">Best</span>}
+                </div>
+                {isBest && <p className="text-[8px] font-bold text-primary/20 uppercase mt-0.5">AI Managed Liquidity</p>}
+            </td>
+            <td className="py-5 whitespace-nowrap">{btc}</td>
+            <td className="py-5">
+                <div className="flex flex-col">
+                    <span className={btcChangeColor}>{btcChange}</span>
+                    <span className="text-[8px] text-green-500 opacity-60 font-bold">{btcChangePct}</span>
+                </div>
+            </td>
+            <td className="py-5">
+                <div className="flex items-center space-x-1.5">
+                    <TrendingUp size={10} className="text-green-500" />
+                    <span className="text-green-500">{apyUsdc1}</span>
+                </div>
+            </td>
+            <td className="py-5 whitespace-nowrap">{usdc}</td>
+            <td className="py-5">
+                <div className="flex flex-col">
+                    <span className="text-green-600">{usdcChange}</span>
+                    <span className="text-[8px] text-green-600/60 font-bold">{usdcChangePct}</span>
+                </div>
+            </td>
+            <td className="py-5">
+                <div className="flex items-center space-x-1.5">
+                    <TrendingUp size={10} className="text-green-600" />
+                    <span className="text-green-600">{apyUsdc2}</span>
+                </div>
+            </td>
+            <td className="py-5 text-right">
+                <div className="flex items-center justify-end space-x-1.5">
+                    <TrendingUp size={12} className="text-green-600" />
+                    <span className="text-lg text-green-600">{apyTotal}</span>
+                </div>
+            </td>
+        </tr>
+    );
+}
+
+function ConfigEntry({ label, value, isMono }: { label: string; value: string; isMono?: boolean }) {
+    return (
+        <div className="flex items-center justify-between text-[10px] font-bold text-primary">
+            <span className="text-primary/20 uppercase tracking-widest">{label}</span>
+            <span className={isMono ? 'font-mono' : ''}>{value}</span>
         </div>
     );
 }
 
-function ActivityStatusBadge({ status }: { status: string }) {
-    const config: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
-        success: {
-            bg: 'bg-green-100',
-            text: 'text-green-700',
-            icon: <CheckCircle2 size={12} />,
-        },
-        pending: {
-            bg: 'bg-yellow-100',
-            text: 'text-yellow-700',
-            icon: <Clock size={12} />,
-        },
-        failed: {
-            bg: 'bg-red-100',
-            text: 'text-red-700',
-            icon: <XCircle size={12} />,
-        },
-    };
-
-    const { bg, text, icon } = config[status] || config.pending;
-
+function ChartLegend({ label, color, opacity = 1 }: { label: string; color: string; opacity?: number }) {
     return (
-        <span className={`${bg} ${text} px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider flex items-center space-x-1 w-fit`}>
-            {icon}
-            <span>{status}</span>
-        </span>
-    );
-}
-
-function RoundCard({ round }: { round: any }) {
-    const execution = round.execution;
-    const isLive = round.round_type === 'live';
-    const predictions = round.predictions || [];
-    const executions = round.executions || [];
-
-    return (
-        <div className={`rounded-xl p-4 border transition-colors ${isLive
-            ? 'bg-green-50/30 border-green-200 hover:bg-green-50/50'
-            : 'bg-cream/20 border-cream-dark hover:bg-cream/30'
-            }`}>
-            {/* Round Header */}
-            <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center space-x-3">
-                    <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${isLive
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-600'
-                        }`}>
-                        {round.round_type}
-                    </span>
-                    <div>
-                        <p className="text-sm font-bold text-primary">
-                            Round #{round.round_number}
-                        </p>
-                        <p className="text-xs text-primary/40">
-                            {round.participants_count} participants
-                        </p>
-                    </div>
-                </div>
-                <div className="text-right">
-                    {round.end_time && (
-                        <p className="text-xs text-primary/40">
-                            {new Date(round.end_time).toLocaleString()}
-                        </p>
-                    )}
-                </div>
-            </div>
-
-
-
-            {/* All Miner Predictions */}
-            {predictions.length > 0 && (
-                <div className="bg-white rounded-lg p-3 mb-3">
-                    <p className="text-[10px] font-black text-primary/40 uppercase tracking-wider mb-3">
-                        Miner Predictions ({predictions.length})
-                    </p>
-                    <div className="space-y-2">
-                        {predictions.map((pred: any, idx: number) => {
-                            const predData = pred.prediction_data;
-                            const strategyInfo = predData?.strategy || {};
-                            const execution = executions.find((e: any) => e.miner_uid === pred.miner_uid);
-                            const action = strategyInfo.action || strategyInfo.name || (predData?.should_rebalance ? 'REBALANCE' : 'HOLD');
-
-                            return (
-                                <div
-                                    key={idx}
-                                    className="p-3 rounded-lg border bg-gray-50 border-gray-200"
-                                >
-                                    <div className="flex items-start justify-between mb-2">
-                                        <div className="flex-1">
-                                            <div className="flex items-center space-x-2 mb-1">
-                                                <p className="text-xs font-bold text-primary">
-                                                    Miner UID {pred.miner_uid}
-                                                    {idx === 0 && (
-                                                        <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[8px] font-black uppercase rounded">
-                                                            Initial Entry
-                                                        </span>
-                                                    )}
-                                                </p>
-                                                {execution && (
-                                                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${execution.tx_status === 'success'
-                                                        ? 'bg-green-100 text-green-700'
-                                                        : 'bg-red-100 text-red-700'
-                                                        }`}>
-                                                        {execution.tx_status}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <p className="text-[10px] font-mono text-primary/40">
-                                                Vault: vault_{pred.miner_uid}_{round.round_id?.split('_')[0]}_{round.round_id?.split('_')[1]}
-                                            </p>
-                                        </div>
-                                        <div className="flex flex-col items-end space-y-2">
-                                            <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${action === 'REBALANCE' || action?.toUpperCase().includes('REBALANCE')
-                                                ? 'bg-purple-100 text-purple-700'
-                                                : 'bg-gray-200 text-gray-600'
-                                                }`}>
-                                                {action}
-                                            </span>
-                                            {execution?.tx_hash && (
-                                                <a
-                                                    href={`https://basescan.org/tx/${execution.tx_hash}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="font-mono text-[9px] text-primary/40 hover:text-primary hover:underline flex items-center space-x-1"
-                                                >
-                                                    <span>{execution.tx_hash.slice(0, 8)}...</span>
-                                                    <ExternalLink size={8} />
-                                                </a>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-3 gap-2 text-[10px]">
-                                        <div>
-                                            <span className="text-primary/40">Range:</span>
-                                            <p className="font-mono text-primary font-bold">
-                                                ${predData?.lower_price_bound?.toFixed(4)} - ${predData?.upper_price_bound?.toFixed(4)}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <span className="text-primary/40">Liquidity:</span>
-                                            <p className="font-mono text-primary font-bold">
-                                                ${predData?.liquidity_amount?.toFixed(0)}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <span className="text-primary/40">Threshold:</span>
-                                            <p className="font-mono text-primary font-bold">
-                                                {(strategyInfo.rebalance_threshold * 100).toFixed(0)}%
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {execution?.actual_performance && (
-                                        <div className="mt-2 pt-2 border-t border-gray-200 text-[10px]">
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <span className="text-primary/40">Success:</span>
-                                                    <span className={`ml-2 font-bold ${execution.actual_performance.success ? 'text-green-600' : 'text-red-600'
-                                                        }`}>
-                                                        {execution.actual_performance.success ? 'Yes' : 'No'}
-                                                    </span>
-                                                </div>
-                                                {execution.actual_performance.error && (
-                                                    <span className="text-red-600 text-[9px]">
-                                                        {execution.actual_performance.error}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
-
-        </div>
-    );
-}
-
-function StrategyCard({ round }: { round: any }) {
-    const execution = round.execution;
-    if (!execution) return null;
-
-    const rebalance = execution.actual_performance?.rebalance;
-    const strategy = execution.strategy_data;
-
-    return (
-        <div className="bg-cream/20 rounded-xl p-4 hover:bg-cream/30 transition-colors">
-            <div className="flex items-start justify-between mb-3">
-                <div>
-                    <p className="text-sm font-bold text-primary mb-1">
-                        Round #{round.round_number} Execution Details
-                    </p>
-                </div>
-                <ActivityStatusBadge status={execution.tx_status || 'pending'} />
-            </div>
-
-            {/* Proposed Strategy */}
-            {strategy && (
-                <div className="bg-white rounded-lg p-3 mt-3">
-                    <p className="text-[10px] font-black text-primary/40 uppercase tracking-wider mb-2">
-                        Proposed Strategy
-                    </p>
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div>
-                            <span className="text-primary/40">New Range:</span>
-                            <p className="font-mono text-primary font-bold">
-                                [{strategy.lower_tick?.toLocaleString()}, {strategy.upper_tick?.toLocaleString()}]
-                            </p>
-                        </div>
-                        <div>
-                            <span className="text-primary/40">Liquidity:</span>
-                            <p className="font-mono text-primary">
-                                {strategy.liquidity_token0?.toFixed(2)} / {strategy.liquidity_token1?.toFixed(2)}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* What Actually Happened (Rebalance) */}
-            {rebalance && (
-                <div className="bg-white rounded-lg p-3 mt-3">
-                    <p className="text-[10px] font-black text-primary/40 uppercase tracking-wider mb-3">
-                        Rebalance Executed
-                    </p>
-
-                    {/* Position Change */}
-                    <div className="space-y-2 text-xs mb-3">
-                        <div className="flex items-center justify-between">
-                            <span className="text-primary/40">Old Position:</span>
-                            <span className="font-mono text-red-600 font-bold">
-                                [{rebalance.old_lower_tick?.toLocaleString()}, {rebalance.old_upper_tick?.toLocaleString()}]
-                            </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <span className="text-primary/40">New Position:</span>
-                            <span className="font-mono text-green-600 font-bold">
-                                [{rebalance.new_lower_tick?.toLocaleString()}, {rebalance.new_upper_tick?.toLocaleString()}]
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Fees Collected */}
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-2 mb-3">
-                        <p className="text-[10px] font-black text-green-700 uppercase tracking-wider mb-1">
-                            Fees Collected
-                        </p>
-                        <div className="flex items-center justify-between text-xs">
-                            <span className="font-mono text-green-600 font-bold">
-                                {rebalance.fees_collected_0?.toFixed(4)} token0
-                            </span>
-                            <span className="font-mono text-green-600 font-bold">
-                                {rebalance.fees_collected_1?.toFixed(4)} token1
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Tokens Moved */}
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="bg-red-50 rounded p-2">
-                            <p className="text-[9px] font-black text-red-700 uppercase mb-1">Removed</p>
-                            <p className="font-mono text-red-600 text-[10px]">
-                                {rebalance.tokens_removed_0?.toFixed(2)} t0
-                            </p>
-                            <p className="font-mono text-red-600 text-[10px]">
-                                {rebalance.tokens_removed_1?.toFixed(2)} t1
-                            </p>
-                        </div>
-                        <div className="bg-green-50 rounded p-2">
-                            <p className="text-[9px] font-black text-green-700 uppercase mb-1">Added</p>
-                            <p className="font-mono text-green-600 text-[10px]">
-                                {rebalance.tokens_added_0?.toFixed(2)} t0
-                            </p>
-                            <p className="font-mono text-green-600 text-[10px]">
-                                {rebalance.tokens_added_1?.toFixed(2)} t1
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Impact Metrics */}
-                    {execution.actual_performance && (
-                        <div className="mt-3 pt-3 border-t border-cream flex items-center justify-between text-xs">
-                            <div>
-                                <span className="text-primary/40">Price Impact:</span>
-                                <span className={`ml-2 font-mono font-bold ${Math.abs(execution.actual_performance.price_impact || 0) > 0.01 ? 'text-orange-600' : 'text-green-600'}`}>
-                                    {((execution.actual_performance.price_impact || 0) * 100).toFixed(3)}%
-                                </span>
-                            </div>
-                            <div>
-                                <span className="text-primary/40">Slippage:</span>
-                                <span className="ml-2 font-mono font-bold text-primary">
-                                    {((execution.actual_performance.slippage || 0) * 100).toFixed(3)}%
-                                </span>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {execution.tx_hash && (
-                <div className="mt-3 flex items-center justify-between text-xs">
-                    <span className="text-primary/40">Transaction:</span>
-                    <a
-                        href={`https://basescan.org/tx/${execution.tx_hash}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-primary hover:underline flex items-center space-x-1"
-                    >
-                        <span>{execution.tx_hash.slice(0, 16)}...</span>
-                        <ExternalLink size={10} />
-                    </a>
-                </div>
-            )}
+        <div className="flex items-center space-x-2" style={{ opacity }}>
+            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-primary/30">{label}</span>
         </div>
     );
 }
