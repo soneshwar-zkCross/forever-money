@@ -125,7 +125,11 @@ function PairRow({ job, index }: { job: Job, index: number }) {
             className="group hover:bg-cream/30 transition-colors border-b border-cream-dark/30 last:border-0 cursor-pointer"
         >
             <td className="py-5 font-black text-primary/20">{index}</td>
-            <td className="py-5 font-black">{job.metadata?.pair_name || job.target}</td>
+            <td className="py-5 font-black">
+                <Link href={`/admin/pairs/${job.job_id}`} className="hover:underline hover:text-blue-600 transition-all">
+                    {job.metadata?.pair_name || job.target}
+                </Link>
+            </td>
             <td className="py-5 font-bold text-primary/60">${((tvl?.tvl_usd || 4200000) / 1000000).toFixed(1)}M</td>
             <td className="py-5 font-bold text-primary/60">${(revenue?.revenue_usd || 72350).toLocaleString()}</td>
             <td className="py-5 font-bold text-primary/30">45.6%</td>

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import AdminLayout from '@/components/layout/AdminLayout';
 import {
     LayoutDashboard,
@@ -38,6 +39,7 @@ import EarningsChart from '@/components/charts/EarningsChart';
 
 export default function DashboardPage() {
     const { data: jobs, isLoading: jobsLoading } = useJobs();
+    const router = useRouter();
     const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
     React.useEffect(() => {
@@ -152,17 +154,17 @@ export default function DashboardPage() {
                     </div>
                     <div className="mt-8 flex flex-wrap items-center gap-6 pt-8 border-t border-cream-dark/50">
                         <span className="text-[10px] font-black uppercase tracking-widest text-primary/30">Top Miners</span>
-                        <MinerTag rank={1} hotkey="5F087687363" color="#020617" />
-                        <MinerTag rank={2} hotkey="5F087687363" color="#0C2060" />
-                        <MinerTag rank={3} hotkey="5F087687363" color="#1A3485" />
-                        <MinerTag rank={4} hotkey="5F087687363" color="#1E40AF" />
-                        <MinerTag rank={5} hotkey="5F087687363" color="#3B82F6" />
+                        <MinerTag rank={1} hotkey="5F087687363" uid={7} color="#020617" />
+                        <MinerTag rank={2} hotkey="5F087687363" uid={7} color="#0C2060" />
+                        <MinerTag rank={3} hotkey="5F087687363" uid={7} color="#1A3485" />
+                        <MinerTag rank={4} hotkey="5F087687363" uid={7} color="#1E40AF" />
+                        <MinerTag rank={5} hotkey="5F087687363" uid={7} color="#3B82F6" />
                     </div>
                 </div>
 
                 {/* Section 5: Performance Tables */}
                 <div className="flex flex-col gap-6">
-                    <Panel title="Top Pairs by Revenue">
+                    <Panel title="Top Pairs by Revenue" href="/admin/pairs">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left">
                                 <thead>
@@ -182,15 +184,20 @@ export default function DashboardPage() {
                                 </thead>
                                 <tbody className="text-xs">
                                     {[
-                                        { pair: 'cbBTC/USDC', tvl: '$4.2M', fees: '$72,350', t1: '45.6%', t2: '32.5%', usd: '38.2%', hodl: '54%', range: '54%', vaults: '12' },
-                                        { pair: 'cbBTC/USDC', tvl: '$3.8M', fees: '$70,350', t1: '42.1%', t2: '35.8%', usd: '39.0%', hodl: '52%', range: '54%', vaults: '8' },
-                                        { pair: 'cbBTC/USDC', tvl: '$3.5M', fees: '$68,350', t1: '48.3%', t2: '31.2%', usd: '40.1%', hodl: '55%', range: '54%', vaults: '15' },
-                                        { pair: 'cbBTC/USDC', tvl: '$3.5M', fees: '$68,350', t1: '48.3%', t2: '31.2%', usd: '40.1%', hodl: '55%', range: '54%', vaults: '15' },
-                                        { pair: 'cbBTC/USDC', tvl: '$3.5M', fees: '$68,350', t1: '48.3%', t2: '31.2%', usd: '40.1%', hodl: '55%', range: '54%', vaults: '15' },
+                                        { pair: 'cbBTC/USDC', jobId: '1', tvl: '$4.2M', fees: '$72,350', t1: '45.6%', t2: '32.5%', usd: '38.2%', hodl: '54%', range: '54%', vaults: '12' },
+                                        { pair: 'cbBTC/USDC', jobId: '1', tvl: '$3.8M', fees: '$70,350', t1: '42.1%', t2: '35.8%', usd: '39.0%', hodl: '52%', range: '54%', vaults: '8' },
+                                        { pair: 'cbBTC/USDC', jobId: '1', tvl: '$3.5M', fees: '$68,350', t1: '48.3%', t2: '31.2%', usd: '40.1%', hodl: '55%', range: '54%', vaults: '15' },
+                                        { pair: 'cbBTC/USDC', jobId: '1', tvl: '$3.5M', fees: '$68,350', t1: '48.3%', t2: '31.2%', usd: '40.1%', hodl: '55%', range: '54%', vaults: '15' },
+                                        { pair: 'cbBTC/USDC', jobId: '1', tvl: '$3.5M', fees: '$68,350', t1: '48.3%', t2: '31.2%', usd: '40.1%', hodl: '55%', range: '54%', vaults: '15' },
                                     ].map((row, i) => (
-                                        <tr key={i} className="group hover:bg-cream/30 transition-colors border-b border-cream-dark/30 last:border-0 cursor-pointer">
+                                        <tr key={i} className="group hover:bg-cream/30 transition-colors border-b border-cream-dark/30 last:border-0 cursor-pointer"
+                                            onClick={() => router.push(`/admin/pairs/${row.jobId}`)}>
                                             <td className="py-5 font-black text-primary/20">{i + 1}</td>
-                                            <td className="py-5 font-black">{row.pair}</td>
+                                            <td className="py-5 font-black">
+                                                <Link href={`/admin/pairs/${row.jobId}`} className="hover:underline hover:text-blue-600 transition-all font-black" onClick={(e) => e.stopPropagation()}>
+                                                    {row.pair}
+                                                </Link>
+                                            </td>
                                             <td className="py-5 font-bold text-primary/60">{row.tvl}</td>
                                             <td className="py-5 font-bold text-primary/60">{row.fees}</td>
                                             <td className="py-5 font-bold text-primary/30">{row.t1}</td>
@@ -209,7 +216,7 @@ export default function DashboardPage() {
                         </div>
                     </Panel>
 
-                    <Panel title="Top Miners by Earnings">
+                    <Panel title="Top Miners by Earnings" href="/admin/miners">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left">
                                 <thead>
@@ -224,9 +231,14 @@ export default function DashboardPage() {
                                 </thead>
                                 <tbody className="text-xs">
                                     {[1, 2, 3, 4, 5].map((i) => (
-                                        <tr key={i} className="group hover:bg-cream/30 transition-colors border-b border-cream-dark/30 last:border-0 cursor-pointer">
+                                        <tr key={i} className="group hover:bg-cream/30 transition-colors border-b border-cream-dark/30 last:border-0 cursor-pointer"
+                                            onClick={() => router.push(`/admin/miners/7`)}>
                                             <td className="py-5 font-black text-primary/20">{i}</td>
-                                            <td className="py-5 font-bold text-primary/60">5F087687363</td>
+                                            <td className="py-5 font-bold text-primary/60">
+                                                <Link href="/admin/miners/7" className="hover:underline hover:text-blue-600 transition-all" onClick={(e) => e.stopPropagation()}>
+                                                    5F087687363
+                                                </Link>
+                                            </td>
                                             <td className="py-5 font-black text-primary">$150</td>
                                             <td className="py-5 font-black text-primary">$350</td>
                                             <td className="py-5 font-black text-primary text-2xl tracking-tighter text-right pr-4">$72,350</td>
@@ -292,23 +304,25 @@ function ChartLegend({ label, color, active }: { label: string, color: string, a
     );
 }
 
-function MinerTag({ rank, hotkey, color }: { rank: number, hotkey: string, color: string }) {
+function MinerTag({ rank, hotkey, uid, color }: { rank: number, hotkey: string, uid: number, color: string }) {
     return (
-        <div className="flex items-center space-x-2">
-            <span className="text-[10px] font-black text-primary/20">#{rank}</span>
-            <span className="text-[10px] font-mono font-bold uppercase tracking-tight" style={{ color }}>{hotkey}</span>
-        </div>
+        <Link href={`/admin/miners/${uid}`} className="flex items-center space-x-2 group/tag cursor-pointer">
+            <span className="text-[10px] font-black text-primary/20 group-hover/tag:text-primary/40 transition-colors">#{rank}</span>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-tight group-hover/tag:underline transition-all" style={{ color }}>{hotkey}</span>
+        </Link>
     );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, href, children }: { title: string; href?: string; children: React.ReactNode }) {
     return (
         <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden shadow-sm flex flex-col h-full hover:shadow-md transition-shadow">
             <div className="px-8 py-6 border-b border-cream-dark flex items-center justify-between">
                 <h3 className="text-[10px] font-black text-primary/30 uppercase tracking-[0.2em]">{title}</h3>
-                <span className="text-[10px] font-black text-primary/40 uppercase tracking-widest cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5">
-                    View all <ArrowRight size={12} />
-                </span>
+                {href && (
+                    <Link href={href} className="text-[10px] font-black text-primary/40 uppercase tracking-widest cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5">
+                        View all <ArrowRight size={12} />
+                    </Link>
+                )}
             </div>
             <div className="p-8 flex-1">{children}</div>
         </div>

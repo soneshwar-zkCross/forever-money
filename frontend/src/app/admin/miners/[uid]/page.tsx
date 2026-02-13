@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import {
     LineChart,
     Line,
@@ -340,6 +340,7 @@ function VaultPerformanceView({ minerUid, token0Symbol, token1Symbol, winRateDat
 function MinerPerformanceView({ minerUid, minerVaults, winRateData, token0Symbol, token1Symbol }: any) {
     const [timeframe, setTimeframe] = useState('30D');
     const timeframes = ['1D', '7D', '30D', 'ALL'];
+    const router = useRouter();
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -522,9 +523,14 @@ function MinerPerformanceView({ minerUid, minerVaults, winRateData, token0Symbol
                     <tbody className="text-primary">
                         {(minerVaults?.vaults || []).map((vault: any, i: number) => (
                             <tr key={i} className="hover:bg-cream/20 transition-colors border-b border-cream-dark/10 last:border-0 group cursor-pointer"
-                                onClick={() => window.location.href = `/admin/miners/${minerUid}?pair=${vault.job_id}`}>
+                                onClick={() => router.push(`/admin/miners/${minerUid}?pair=${vault.job_id}`)}>
                                 <td className="py-5 font-black">Vault #{vault.vault_id}</td>
-                                <td className="py-5 uppercase tracking-wide">{vault.pair_name}</td>
+                                <td className="py-5 uppercase tracking-wide">
+                                    <Link href={`/admin/pairs/${vault.job_id}`} className="hover:underline hover:text-blue-600 transition-all"
+                                        onClick={(e) => e.stopPropagation()}>
+                                        {vault.pair_name}
+                                    </Link>
+                                </td>
                                 <td className="py-5 opacity-40 uppercase">Base</td>
                                 <td className="py-5 font-black">$0</td>
                                 <td className="py-5 text-blue-600 font-black">$0</td>

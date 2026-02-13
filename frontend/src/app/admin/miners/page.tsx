@@ -72,8 +72,8 @@ export default function MinersPage() {
                                 key={t}
                                 onClick={() => setTimeframe(t)}
                                 className={`px-4 py-1.5 rounded-lg text-[10px] font-black tracking-widest transition-all ${timeframe === t
-                                        ? 'bg-primary text-white shadow-md'
-                                        : 'text-primary/30 hover:text-primary/50'
+                                    ? 'bg-primary text-white shadow-md'
+                                    : 'text-primary/30 hover:text-primary/50'
                                     }`}
                             >
                                 {t}
@@ -97,9 +97,11 @@ export default function MinersPage() {
                                 {/* Card Header */}
                                 <div className="flex justify-between items-center mb-5 shrink-0">
                                     <div className="flex items-center space-x-2">
-                                        <h4 className="text-sm font-black tracking-tight uppercase">
-                                            Miner ID: 5f0...{miner.miner_hotkey.slice(-3)}
-                                        </h4>
+                                        <Link href={`/admin/miners/${miner.miner_uid}`} className="hover:underline transition-all">
+                                            <h4 className="text-sm font-black tracking-tight uppercase">
+                                                Miner ID: 5f0...{miner.miner_hotkey.slice(-3)}
+                                            </h4>
+                                        </Link>
                                         <span className="w-1.5 h-1.5 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
                                     </div>
                                     <Link
@@ -144,9 +146,9 @@ export default function MinersPage() {
                                     </div>
 
                                     <div className="space-y-2.5">
-                                        <ContributionRow label="cbBTC/USDC" value="$6,800" />
-                                        <ContributionRow label="USDC/WETH" value="$4,100" />
-                                        <ContributionRow label="xTAO/USDC" value="$3,900" />
+                                        <ContributionRow label="cbBTC/USDC" value="$6,800" href={`/admin/miners/${miner.miner_uid}?pair=1`} />
+                                        <ContributionRow label="USDC/WETH" value="$4,100" href={`/admin/miners/${miner.miner_uid}?pair=2`} />
+                                        <ContributionRow label="xTAO/USDC" value="$3,900" href={`/admin/miners/${miner.miner_uid}?pair=3`} />
                                     </div>
                                 </div>
                             </div>
@@ -178,12 +180,18 @@ function ChainBadge({ name, icon }: { name: string; icon: string }) {
     );
 }
 
-function ContributionRow({ label, value }: { label: string; value: string }) {
-    return (
-        <div className="flex justify-between items-center text-[9px] font-bold">
-            <span className="text-primary/30 uppercase tracking-[0.1em] leading-none">{label}</span>
-            <span className="text-blue-600 leading-none">{value}</span>
+function ContributionRow({ label, value, href }: { label: string; value: string; href?: string }) {
+    const content = (
+        <div className="flex justify-between items-center text-[9px] font-bold py-1 group/row transition-all">
+            <span className="text-primary/30 uppercase tracking-[0.1em] leading-none group-hover/row:text-primary transition-colors">{label}</span>
+            <span className="text-blue-600 leading-none group-hover/row:underline">{value}</span>
         </div>
     );
+
+    if (href) {
+        return <Link href={href} className="block">{content}</Link>;
+    }
+
+    return content;
 }
 
