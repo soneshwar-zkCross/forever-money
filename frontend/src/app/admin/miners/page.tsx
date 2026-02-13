@@ -3,120 +3,153 @@
 import React, { useState } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
     Users,
-    Activity,
-    Search,
-    Grid
+    ChevronDown,
+    ArrowRight,
+    ExternalLink,
+    Terminal
 } from 'lucide-react';
 import { useJobs, useLeaderboard } from '@/lib/api';
 
 export default function MinersPage() {
     const { data: jobs } = useJobs();
-    const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState('Miner ID');
+    const [isSortOpen, setIsSortOpen] = useState(false);
+    const [timeframe, setTimeframe] = useState('30D');
 
-    // Use the first job ID as default, but we'll hide the selector
+    // Use the first job ID as default for data fetching
     const selectedJobId = jobs?.[0]?.job_id || '';
-
     const { data: miners, isLoading } = useLeaderboard(selectedJobId);
 
-    const filteredMiners = miners?.filter(m =>
-        m.miner_hotkey.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        m.miner_uid.toString().includes(searchQuery)
-    );
-
-    const headerActions = (
-        <div className="relative group">
-            <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-primary/30 group-focus-within:text-primary transition-colors" />
-            <input
-                type="text"
-                placeholder="Search miners..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-cream/50 border border-cream-dark pl-11 pr-4 py-2 rounded-xl text-[11px] font-bold text-primary w-[300px] focus:outline-none focus:ring-2 focus:ring-primary/5 transition-all focus:bg-white"
-            />
-        </div>
-    );
+    const sortOptions = ['Miner ID', 'TVL (USD)', 'Fees Earned', 'Net APY', 'Active Vaults', 'Chains'];
+    const timeframes = ['1D', '7D', '30D', 'ALL'];
 
     return (
         <AdminLayout
             title="Miners"
-            description="Global validator performance across all protocol jobs."
+            description="GLOBAL VALIDATOR PERFORMANCE ACROSS ALL PROTOCOLS"
             icon={<Users size={20} />}
-            headerActions={headerActions}
         >
-            <div className="space-y-10 animate-fade-in pb-20">
-                {/* Main View - Grid Only */}
+            <div className="space-y-6 animate-fade-in pb-20">
+                {/* Top Bar - Sort & Timeframe */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4 text-[10px] font-bold uppercase tracking-widest text-primary">
+                        <span className="text-primary/40">Sort By</span>
+                        <div className="relative">
+                            <button
+                                onClick={() => setIsSortOpen(!isSortOpen)}
+                                className="bg-white border border-cream-dark px-4 py-2 rounded-xl flex items-center space-x-2 hover:border-primary/20 transition-all shadow-sm"
+                            >
+                                <span>{sortBy}</span>
+                                <ChevronDown size={14} className={`text-primary/20 transition-transform ${isSortOpen ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            {isSortOpen && (
+                                <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-cream-dark rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-2">
+                                    {sortOptions.map(option => (
+                                        <button
+                                            key={option}
+                                            onClick={() => {
+                                                setSortBy(option);
+                                                setIsSortOpen(false);
+                                            }}
+                                            className="w-full text-left px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest hover:bg-cream/30 transition-colors text-primary"
+                                        >
+                                            {option}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Timeframe Toggle */}
+                    <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm">
+                        {timeframes.map(t => (
+                            <button
+                                key={t}
+                                onClick={() => setTimeframe(t)}
+                                className={`px-4 py-1.5 rounded-lg text-[10px] font-black tracking-widest transition-all ${timeframe === t
+                                        ? 'bg-primary text-white shadow-md'
+                                        : 'text-primary/30 hover:text-primary/50'
+                                    }`}
+                            >
+                                {t}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Main View - 3-Column Grid */}
                 {isLoading ? (
-                    <div className="bg-white rounded-[40px] border border-cream-dark shadow-sm p-8 animate-pulse">
-                        <div className="h-10 bg-cream/50 rounded-xl mb-4 w-full"></div>
-                        {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-20 bg-cream/30 rounded-xl mb-3 w-full"></div>)}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
+                        {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-[480px] bg-white border border-cream-dark rounded-[32px]"></div>)}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                        {filteredMiners?.map((miner, i) => (
-                            <Link
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {miners?.map((miner, i) => (
+                            <div
                                 key={miner.miner_uid}
-                                href={`/admin/miners/${miner.miner_uid}`}
-                                className="bg-white p-8 rounded-3xl border border-cream-dark shadow-sm hover:shadow-md transition-all duration-500 font-mono text-primary relative overflow-hidden block group"
+                                className="bg-white p-6 rounded-[32px] border border-cream-dark shadow-sm hover:shadow-md transition-all duration-500 font-bold text-primary group flex flex-col h-full"
                             >
-                                {/* Terminal Style Header */}
-                                <div className="border-t border-dashed border-primary/10 mb-4" />
-
-                                <div className="flex justify-between items-center mb-2">
-                                    <h4 className="text-sm font-black tracking-tight uppercase group-hover:text-blue-600 transition-colors">
-                                        MINER ID: 5F0...{miner.miner_hotkey.slice(-4)}
-                                    </h4>
-                                    <div className={`w-2 h-2 rounded-full ${miner.is_eligible_for_live ? 'bg-green-500 animate-pulse' : 'bg-amber-500'} shadow-sm`}></div>
-                                </div>
-
-                                <div className="border-t border-dashed border-primary/10 mb-6" />
-
-                                {/* Main Stats */}
-                                <div className="space-y-2 mb-8">
-                                    <div className="flex justify-between text-xs font-bold">
-                                        <span className="opacity-40 uppercase tracking-tighter">Total Earnings:</span>
-                                        <span className="text-blue-600 group-hover:text-primary transition-colors">${(18400 - (i * 120)).toLocaleString()}</span>
+                                {/* Card Header */}
+                                <div className="flex justify-between items-center mb-5 shrink-0">
+                                    <div className="flex items-center space-x-2">
+                                        <h4 className="text-sm font-black tracking-tight uppercase">
+                                            Miner ID: 5f0...{miner.miner_hotkey.slice(-3)}
+                                        </h4>
+                                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
                                     </div>
-                                    <div className="flex justify-between text-xs font-bold">
-                                        <span className="opacity-40 uppercase tracking-tighter">Alpha Earned:</span>
-                                        <span className="text-blue-600 group-hover:text-primary transition-colors">{(92000 - (i * 600)).toLocaleString()}</span>
+                                    <Link
+                                        href={`/admin/miners/${miner.miner_uid}`}
+                                        className="flex items-center space-x-1.5 text-[9px] font-bold uppercase tracking-wider text-primary/40 hover:text-primary transition-colors group/link"
+                                    >
+                                        <span>Go to Vault</span>
+                                        <ArrowRight size={12} className="group-hover/link:translate-x-1 transition-transform" />
+                                    </Link>
+                                </div>
+
+                                {/* Main Stats - Dashed List */}
+                                <div className="space-y-3.5 pt-5 border-t border-dashed border-cream-dark/50 flex-1">
+                                    <StatRow label="Total Earnings:" value={`$${(18400 - (i * 120)).toLocaleString()}`} isBlue />
+                                    <StatRow label="Alpha Earned:" value={(92000 - (i * 600)).toLocaleString()} isBlue />
+                                    <StatRow label="Jobs Participated:" value={(2742 - i).toLocaleString()} isBlue />
+                                    <StatRow label="TVL (USD):" value={`$${(2742 - i).toLocaleString()}`} isBlue />
+                                    <StatRow label="Net APY:" value={`$${(2742 - i).toLocaleString()}`} isBlue />
+
+                                    <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-widest pt-1">
+                                        <span className="text-primary/20">Chains:</span>
+                                        <div className="flex items-center space-x-2">
+                                            <ChainBadge name="BASE" icon="/images/base-logo.svg" />
+                                            <ChainBadge name="ETH" icon="/images/eth-logo.svg" />
+                                        </div>
                                     </div>
-                                    <div className="flex justify-between text-xs font-bold">
-                                        <span className="opacity-40 uppercase tracking-tighter">Jobs Participated:</span>
-                                        <span className="text-blue-600 group-hover:text-primary transition-colors">{6 + (i % 3)}</span>
+
+                                    <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-widest pt-1">
+                                        <span className="text-primary/20">Active Vaults:</span>
+                                        <span className="text-blue-600">3</span>
                                     </div>
                                 </div>
 
-                                {/* Contributions Section */}
-                                <div className="border-t border-dashed border-primary/10 mb-2" />
-                                <div className="text-[11px] font-black uppercase mb-2 opacity-30">
-                                    Top Jobs Contributions
-                                </div>
-                                <div className="border-t border-dashed border-primary/10 mb-4" />
+                                {/* Contributions Sub-section */}
+                                <div className="mt-6 pt-6 border-t border-dashed border-cream-dark/50 shrink-0">
+                                    <div className="flex justify-between items-center mb-5">
+                                        <h5 className="text-[9px] font-black uppercase tracking-[0.2em] text-primary/20">Top Jobs Contributions</h5>
+                                        <div className="flex items-center space-x-1.5 text-primary/40 font-mono text-[10px]">
+                                            <span>0xa23...df45</span>
+                                            <ExternalLink size={10} className="cursor-pointer hover:text-primary transition-colors" />
+                                        </div>
+                                    </div>
 
-                                <div className="space-y-2">
-                                    {(jobs && jobs.length > 0 ? jobs.slice(0, 3) : [
-                                        { metadata: { pair_name: 'BID/WETH' }, job_id: 'mock-1' },
-                                        { metadata: { pair_name: 'TAO/USDC' }, job_id: 'mock-2' },
-                                        { metadata: { pair_name: 'ETH/USDC' }, job_id: 'mock-3' }
-                                    ]).map((job, idx) => {
-                                        const mockValues = [6800, 4100, 3900];
-                                        const val = (mockValues[idx] || 2000) - (i * 50);
-                                        return (
-                                            <div
-                                                key={idx}
-                                                className="flex justify-between text-[11px] font-bold"
-                                            >
-                                                <span className="opacity-60 transition-all text-left">
-                                                    {job.metadata?.pair_name || 'UNKNOWN'}
-                                                </span>
-                                                <span className="text-blue-600">${val.toLocaleString()}</span>
-                                            </div>
-                                        );
-                                    })}
+                                    <div className="space-y-2.5">
+                                        <ContributionRow label="cbBTC/USDC" value="$6,800" />
+                                        <ContributionRow label="USDC/WETH" value="$4,100" />
+                                        <ContributionRow label="xTAO/USDC" value="$3,900" />
+                                    </div>
                                 </div>
-                            </Link>
+                            </div>
                         ))}
                     </div>
                 )}
@@ -124,3 +157,33 @@ export default function MinersPage() {
         </AdminLayout>
     );
 }
+
+function StatRow({ label, value, isBlue }: { label: string; value: string; isBlue?: boolean }) {
+    return (
+        <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-widest">
+            <span className="text-primary/20">{label}</span>
+            <span className={isBlue ? 'text-blue-600' : 'text-primary'}>{value}</span>
+        </div>
+    );
+}
+
+function ChainBadge({ name, icon }: { name: string; icon: string }) {
+    return (
+        <div className="bg-cream/20 border border-cream-dark/50 px-2 py-1 rounded-lg flex items-center space-x-1.5">
+            <div className="w-3.5 h-3.5 relative">
+                <Image src={icon} alt={name} fill className="object-contain" />
+            </div>
+            <span className="text-[8px] font-black text-primary/60">{name}</span>
+        </div>
+    );
+}
+
+function ContributionRow({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="flex justify-between items-center text-[9px] font-bold">
+            <span className="text-primary/30 uppercase tracking-[0.1em] leading-none">{label}</span>
+            <span className="text-blue-600 leading-none">{value}</span>
+        </div>
+    );
+}
+

@@ -19,7 +19,7 @@ import {
     Layers,
     RefreshCw,
     ChevronRight,
-    DollarSign,
+    ArrowRight
 } from 'lucide-react';
 import {
     useJobs,
@@ -34,6 +34,7 @@ import {
     usePairPerformance
 } from '@/lib/api';
 import PerformanceChart from '@/components/charts/PerformanceChart';
+import EarningsChart from '@/components/charts/EarningsChart';
 
 export default function DashboardPage() {
     const { data: jobs, isLoading: jobsLoading } = useJobs();
@@ -45,33 +46,31 @@ export default function DashboardPage() {
         }
     }, [jobs, selectedJobId]);
 
-    const { data: stats } = useNetworkStats(selectedJobId || '');
     const { data: emissions, isLoading: emissionsLoading } = useSubnetEmissions();
-    const { data: executions } = useExecutions(selectedJobId || '');
     const { data: subnetTVL } = useSubnetTVL();
     const { data: subnetRevenue } = useSubnetRevenue(30);
-    const { data: pairPerformance } = usePairPerformance();
 
     const [timeframe, setTimeframe] = useState('30D');
 
-    const activeJobs = jobs?.filter(j => j.is_active) || [];
+    // Mock chart data (Styled to match the image)
+    const performanceData = [
+        { time: '00:00', value: 4000, value2: 4500 },
+        { time: '04:00', value: 6500, value2: 5800 },
+        { time: '08:00', value: 5500, value2: 5200 },
+        { time: '12:00', value: 7200, value2: 6500 },
+        { time: '16:00', value: 8100, value2: 8500 },
+        { time: '20:00', value: 9500, value2: 9800 },
+        { time: '23:59', value: 12402, value2: 11000 },
+    ];
 
-    // Calculate Alpha Revenue
-    const alphaPrice = emissions?.alpha_price_usd || 1;
-    const revenueAlpha = (subnetRevenue?.total_revenue_usd || 0) / alphaPrice;
-
-    // Calculate Net Earnings
-    const netEarningsUsd = (subnetRevenue?.total_revenue_usd || 0) - (emissions?.total_emissions_usd || 0);
-
-    // Mock chart data (Styled for light theme)
-    const chartData = [
-        { time: '00:00', value: 4000 },
-        { time: '04:00', value: 5500 },
-        { time: '08:00', value: 4800 },
-        { time: '12:00', value: 7200 },
-        { time: '16:00', value: 8100 },
-        { time: '20:00', value: 9500 },
-        { time: '23:59', value: 12402 },
+    const earningsData = [
+        { time: '00:00', m1: 1000, m2: 2000, m3: 800, m4: 500, m5: 300 },
+        { time: '04:00', m1: 1500, m2: 2200, m3: 1200, m4: 700, m5: 400 },
+        { time: '08:00', m1: 1200, m2: 2400, m3: 1100, m4: 600, m5: 500 },
+        { time: '12:00', m1: 1800, m2: 2800, m3: 1500, m4: 900, m5: 700 },
+        { time: '16:00', m1: 2200, m2: 3200, m3: 1800, m4: 1100, m5: 800 },
+        { time: '20:00', m1: 2600, m2: 3800, m3: 2200, m4: 1300, m5: 1000 },
+        { time: '23:59', m1: 3000, m2: 4200, m3: 2500, m4: 1500, m5: 1200 },
     ];
 
     return (
@@ -80,96 +79,127 @@ export default function DashboardPage() {
             description="Subnet Performance & Real-time Execution Monitoring"
             icon={<LayoutDashboard size={20} />}
         >
-            <div className="space-y-8 animate-fade-in pb-20">
+            <div className="space-y-6 animate-fade-in pb-20">
                 {/* Section 1: System Status Bar */}
-                <div className="bg-white border border-cream-dark shadow-sm rounded-2xl p-5">
-                    <div className="flex flex-wrap items-center justify-between gap-6">
-                        <div className="flex flex-wrap items-center gap-8">
+                <div className="bg-white border border-cream-dark shadow-sm rounded-2xl p-6">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-12">
                             <StatusIndicator label="API Service" status="online" detail="Latency: 42ms" />
                             <StatusIndicator label="Network DB" status={jobs ? "online" : "offline"} detail={`${jobs?.length || 0} Indexes Synced`} />
                             <StatusIndicator label="Metagraph" status={emissions ? "online" : "syncing"} detail={emissionsLoading ? "Syncing..." : "Live"} />
                             <StatusIndicator label="Emissions" status={emissions && emissions.miner_ratio > 0 ? "online" : "offline"} detail={`${((emissions?.burn_ratio || 0) * 100).toFixed(0)}% Burn Rate`} />
                         </div>
-                        <div className="text-[10px] text-primary/30 font-bold uppercase tracking-widest bg-cream px-3 py-1 rounded-full">
+                        <div className="text-[10px] text-primary/30 font-bold uppercase tracking-[0.2em] bg-cream/50 px-4 py-1.5 rounded-full border border-cream-dark/50 whitespace-nowrap">
                             Last Updated: {new Date().toLocaleTimeString()}
                         </div>
                     </div>
                 </div>
 
-                {/* Section 2: Top Metrics (6 Columns) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                    <MetricCard label="TVL (USD)" value={`$${(subnetTVL?.total_tvl_usd || 12402156).toLocaleString()}`} icon={<Layers size={14} />} />
-                    <MetricCard label="Fees Earned (USD)" value={`$${(subnetRevenue?.total_revenue_usd || 183200).toLocaleString()}`} icon={<TrendingUp size={14} />} />
-                    <MetricCard label="Emissions (USD)" value={`$${(emissions?.total_emissions_usd || 92500).toLocaleString()}`} icon={<Zap size={14} />} />
-
-                    <MetricCard label="Fees Earned (Alpha)" value={revenueAlpha ? revenueAlpha.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "1,249,865"} icon={<Activity size={14} />} />
-                    <MetricCard label="Emissions (Alpha)" value={emissions?.total_emissions_alpha ? emissions.total_emissions_alpha.toLocaleString() : "640,000"} icon={<RefreshCw size={14} />} />
-                    <MetricCard
-                        label="Net Earnings (USD)"
-                        value={`${netEarningsUsd >= 0 ? '$' : '-$'}${Math.abs(netEarningsUsd || 90700).toLocaleString()}`}
-                        icon={<DollarSign size={14} />}
-                    />
+                {/* Section 2: Top Metrics (4 Columns to match image) */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <MetricCard label="TVL (USD)" value={`$${(subnetTVL?.total_tvl_usd || 12402156).toLocaleString()}`} change="+4.2%" trend="up" />
+                    <MetricCard label="Fees Earned (USD)" value={`$${(subnetRevenue?.total_revenue_usd || 183200).toLocaleString()}`} change="+12.5%" trend="up" />
+                    <MetricCard label="Emissions (USD)" value={`$${(emissions?.total_emissions_usd || 0).toLocaleString()}`} change="0%" trend="neutral" />
+                    <MetricCard label="Emissions (Alpha)" value={emissions?.total_emissions_alpha ? emissions.total_emissions_alpha.toLocaleString() : "0"} change="-2.1%" trend="down" />
                 </div>
 
                 {/* Section 3: Performance Chart */}
-                <div className="bg-white border border-cream-dark shadow-sm p-8 rounded-2xl">
-                    <div className="flex items-center justify-between mb-8">
-                        <div className="flex items-center space-x-4">
-                            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-primary/40">Performance Graph</h3>
+                <div className="bg-white border border-cream-dark shadow-sm p-10 rounded-2xl hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-10">
+                        <div className="flex items-center space-x-6">
+                            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-primary/30">Performance Graph</h3>
                             <div className="h-4 w-px bg-cream-dark"></div>
-                            <span className="text-[11px] font-bold text-primary">TVL | Revenue | Emissions</span>
+                            <div className="flex items-center space-x-6">
+                                <ChartLegend label="TVL" color="#3B82F6" active />
+                                <ChartLegend label="Revenue (USD)" color="#0D1117" />
+                                <ChartLegend label="Emissions (USD)" color="#9CA3AF" />
+                            </div>
                         </div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center bg-cream/50 p-1 rounded-full border border-cream-dark/50">
                             {['1D', '7D', '30D', 'ALL'].map((tf) => (
                                 <button
                                     key={tf}
                                     onClick={() => setTimeframe(tf)}
-                                    className={`px-3 py-1 text-[10px] font-bold rounded-full transition-all ${timeframe === tf ? 'bg-primary text-white' : 'text-primary/40 hover:bg-cream'}`}
+                                    className={`px-4 py-1.5 text-[10px] font-black rounded-full transition-all duration-300 ${timeframe === tf ? 'bg-primary text-white shadow-md' : 'text-primary/40 hover:text-primary'}`}
                                 >
                                     {tf}
                                 </button>
                             ))}
                         </div>
                     </div>
-                    <div className="h-[350px] w-full">
-                        <PerformanceChart data={chartData} lightTheme />
+                    <div className="h-[400px] w-full">
+                        <PerformanceChart data={performanceData} />
                     </div>
                 </div>
 
-                {/* Section 4: Performance Tables (Wireframe Style) */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Section 4: Miner Earnings Chart */}
+                <div className="bg-white border border-cream-dark shadow-sm p-10 rounded-2xl hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-10">
+                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-primary/30">Miner Earnings (USD)</h3>
+                        <div className="flex items-center bg-cream/50 p-1 rounded-full border border-cream-dark/50">
+                            {['1D', '7D', '30D', 'ALL'].map((tf) => (
+                                <button
+                                    key={tf}
+                                    className={`px-4 py-1.5 text-[10px] font-black rounded-full transition-all ${tf === '30D' ? 'bg-primary text-white shadow-md' : 'text-primary/40'}`}
+                                >
+                                    {tf}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="h-[400px] w-full">
+                        <EarningsChart data={earningsData} />
+                    </div>
+                    <div className="mt-8 flex flex-wrap items-center gap-6 pt-8 border-t border-cream-dark/50">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-primary/30">Top Miners</span>
+                        <MinerTag rank={1} hotkey="5F087687363" color="#020617" />
+                        <MinerTag rank={2} hotkey="5F087687363" color="#0C2060" />
+                        <MinerTag rank={3} hotkey="5F087687363" color="#1A3485" />
+                        <MinerTag rank={4} hotkey="5F087687363" color="#1E40AF" />
+                        <MinerTag rank={5} hotkey="5F087687363" color="#3B82F6" />
+                    </div>
+                </div>
+
+                {/* Section 5: Performance Tables */}
+                <div className="flex flex-col gap-6">
                     <Panel title="Top Pairs by Revenue">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-[11px]">
+                            <table className="w-full text-left">
                                 <thead>
-                                    <tr className="text-primary/30 text-left border-b border-cream-dark">
-                                        <th className="pb-3 font-black uppercase tracking-tighter">Pair</th>
-                                        <th className="pb-3 font-black uppercase tracking-tighter">Earnings</th>
-                                        <th className="pb-3 font-black uppercase tracking-tighter whitespace-nowrap">T1 (APY)</th>
-                                        <th className="pb-3 font-black uppercase tracking-tighter whitespace-nowrap">T2 (APY)</th>
-                                        <th className="pb-3 font-black uppercase tracking-tighter whitespace-nowrap">Market Benchmark</th>
-                                        <th className="pb-3"></th>
+                                    <tr className="text-[10px] text-primary/30 font-black uppercase tracking-[0.2em] border-b border-cream-dark">
+                                        <th className="pb-4">#</th>
+                                        <th className="pb-4">Pair</th>
+                                        <th className="pb-4">TVL</th>
+                                        <th className="pb-4">Fees Collected</th>
+                                        <th className="pb-4">T1 APY</th>
+                                        <th className="pb-4">T2 APY</th>
+                                        <th className="pb-4">USD APY</th>
+                                        <th className="pb-4">vs HODL</th>
+                                        <th className="pb-4">vs FULL RANGE</th>
+                                        <th className="pb-4">Vaults</th>
+                                        <th className="pb-4"></th>
                                     </tr>
                                 </thead>
-                                <tbody className="text-primary">
-                                    {(activeJobs.length > 0 ? activeJobs.slice(0, 5) : [
-                                        { metadata: { pair_name: 'BID/WETH' }, job_id: 'mock-1' },
-                                        { metadata: { pair_name: 'xTAO/USDC' }, job_id: 'mock-2' },
-                                        { metadata: { pair_name: 'WETH/USDC' }, job_id: 'mock-3' },
-                                        { metadata: { pair_name: 'xSN34/USDC' }, job_id: 'mock-4' },
-                                        { metadata: { pair_name: 'xSN8/USDC' }, job_id: 'mock-5' },
-                                    ]).map((p, i) => (
-                                        <tr
-                                            key={i}
-                                            onClick={() => p.job_id && (window.location.href = `/admin/pairs/${p.job_id}`)}
-                                            className="hover:bg-cream/50 transition-colors border-b border-cream-dark/30 last:border-0 cursor-pointer group"
-                                        >
-                                            <td className="py-4 font-black">{p.metadata?.pair_name || 'UNKNOWN'}</td>
-                                            <td className="py-4 font-mono font-bold">${(72350 - (i * 2000)).toLocaleString()}</td>
-                                            <td className="py-4 font-mono text-primary/60">45.6%</td>
-                                            <td className="py-4 font-mono text-primary/60">32.5%</td>
-                                            <td className="py-4 font-mono text-primary/60">54%</td>
-                                            <td className="py-4 text-right">
+                                <tbody className="text-xs">
+                                    {[
+                                        { pair: 'cbBTC/USDC', tvl: '$4.2M', fees: '$72,350', t1: '45.6%', t2: '32.5%', usd: '38.2%', hodl: '54%', range: '54%', vaults: '12' },
+                                        { pair: 'cbBTC/USDC', tvl: '$3.8M', fees: '$70,350', t1: '42.1%', t2: '35.8%', usd: '39.0%', hodl: '52%', range: '54%', vaults: '8' },
+                                        { pair: 'cbBTC/USDC', tvl: '$3.5M', fees: '$68,350', t1: '48.3%', t2: '31.2%', usd: '40.1%', hodl: '55%', range: '54%', vaults: '15' },
+                                        { pair: 'cbBTC/USDC', tvl: '$3.5M', fees: '$68,350', t1: '48.3%', t2: '31.2%', usd: '40.1%', hodl: '55%', range: '54%', vaults: '15' },
+                                        { pair: 'cbBTC/USDC', tvl: '$3.5M', fees: '$68,350', t1: '48.3%', t2: '31.2%', usd: '40.1%', hodl: '55%', range: '54%', vaults: '15' },
+                                    ].map((row, i) => (
+                                        <tr key={i} className="group hover:bg-cream/30 transition-colors border-b border-cream-dark/30 last:border-0 cursor-pointer">
+                                            <td className="py-5 font-black text-primary/20">{i + 1}</td>
+                                            <td className="py-5 font-black">{row.pair}</td>
+                                            <td className="py-5 font-bold text-primary/60">{row.tvl}</td>
+                                            <td className="py-5 font-bold text-primary/60">{row.fees}</td>
+                                            <td className="py-5 font-bold text-primary/30">{row.t1}</td>
+                                            <td className="py-5 font-bold text-primary/30">{row.t2}</td>
+                                            <td className="py-5 font-black text-primary">{row.usd}</td>
+                                            <td className="py-5 font-bold text-primary/30">{row.hodl}</td>
+                                            <td className="py-5 font-bold text-primary/30">{row.range}</td>
+                                            <td className="py-5 font-bold text-primary/60">{row.vaults}</td>
+                                            <td className="py-5 text-right">
                                                 <ChevronRight size={14} className="text-primary/20 group-hover:text-primary transition-colors inline" />
                                             </td>
                                         </tr>
@@ -181,24 +211,27 @@ export default function DashboardPage() {
 
                     <Panel title="Top Miners by Earnings">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-xs">
-                                <tbody className="text-primary">
-                                    {[
-                                        { hotkey: '5F087687363', earnings: 72350 },
-                                        { hotkey: '5F087687363', earnings: 61837 },
-                                        { hotkey: '5F087687363', earnings: 59971 },
-                                        { hotkey: '5F087687363', earnings: 49112 },
-                                        { hotkey: '5F087687363', earnings: 32874 },
-                                    ].map((m, i) => (
-                                        <tr key={i} className="hover:bg-cream/50 transition-colors border-b border-cream-dark/30 last:border-0">
-                                            <td className="py-4 font-black font-mono text-primary/60 tracking-tighter">
-                                                {m.hotkey}
-                                            </td>
-                                            <td className="py-4 text-right font-black font-mono text-sm">
-                                                ${m.earnings.toLocaleString()}
-                                            </td>
-                                            <td className="py-4 text-right">
-                                                <ChevronRight size={14} className="text-primary/20 inline ml-4" />
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="text-[10px] text-primary/30 font-black uppercase tracking-[0.2em] border-b border-cream-dark">
+                                        <th className="pb-4">#</th>
+                                        <th className="pb-4">Miner</th>
+                                        <th className="pb-4">Fees</th>
+                                        <th className="pb-4">Emissions(USD)</th>
+                                        <th className="pb-4 text-right pr-4">TVL</th>
+                                        <th className="pb-4"></th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-xs">
+                                    {[1, 2, 3, 4, 5].map((i) => (
+                                        <tr key={i} className="group hover:bg-cream/30 transition-colors border-b border-cream-dark/30 last:border-0 cursor-pointer">
+                                            <td className="py-5 font-black text-primary/20">{i}</td>
+                                            <td className="py-5 font-bold text-primary/60">5F087687363</td>
+                                            <td className="py-5 font-black text-primary">$150</td>
+                                            <td className="py-5 font-black text-primary">$350</td>
+                                            <td className="py-5 font-black text-primary text-2xl tracking-tighter text-right pr-4">$72,350</td>
+                                            <td className="py-5 text-right">
+                                                <ChevronRight size={14} className="text-primary/20 group-hover:text-primary transition-colors inline" />
                                             </td>
                                         </tr>
                                     ))}
@@ -207,49 +240,77 @@ export default function DashboardPage() {
                         </div>
                     </Panel>
                 </div>
-
-                {/* Section 5 & 6 (Monitoring Panels and Execution Stream) hidden for now as requested */}
             </div>
         </AdminLayout>
     );
 }
 
 function StatusIndicator({ label, status, detail }: { label: string, status: 'online' | 'offline' | 'syncing', detail: string }) {
-    const dots = { online: 'bg-green-500', offline: 'bg-red-500', syncing: 'bg-yellow-500' };
+    const dots = { online: 'bg-green-500 shadow-green-200', offline: 'bg-red-500 shadow-red-200', syncing: 'bg-yellow-500 shadow-yellow-200' };
     return (
-        <div className="flex items-center space-x-4 border-r border-cream-dark last:border-0 pr-8">
-            <div className={`w-2.5 h-2.5 rounded-full ${dots[status]} ${status === 'online' ? 'animate-pulse' : ''} shadow-sm`}></div>
+        <div className="flex items-center space-x-4 border-r border-cream-dark last:border-0 pr-12">
+            <div className={`w-2 h-2 rounded-full ${dots[status]} ${status === 'online' ? 'animate-pulse' : ''} shadow-lg ring-4 ring-white`}></div>
             <div>
-                <p className="text-[10px] font-black text-primary/30 uppercase tracking-[0.2em] leading-none mb-1.5">{label}</p>
+                <p className="text-[9px] font-black text-primary/20 uppercase tracking-[0.2em] leading-none mb-1.5">{label}</p>
                 <div className="flex items-center gap-2">
-                    <p className="text-[11px] text-primary font-black uppercase tracking-tighter leading-none">{status}</p>
-                    <span className="text-[9px] text-primary/20 font-mono">{detail}</span>
+                    <p className="text-[11px] text-primary font-black uppercase tracking-tight leading-none">{status}</p>
+                    <span className="text-[9px] text-primary/30 font-bold uppercase tracking-widest">{detail}</span>
                 </div>
             </div>
         </div>
     );
 }
 
-function MetricCard({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
+function MetricCard({ label, value, change, trend }: { label: string; value: string; change: string; trend: 'up' | 'down' | 'neutral' }) {
     return (
-        <div className="bg-white border border-cream-dark p-6 rounded-2xl shadow-sm hover:translate-y-[-2px] transition-all group">
-            <div className="flex items-center justify-between mb-3 text-primary/20 group-hover:text-primary transition-colors">
-                <p className="text-[10px] font-black uppercase tracking-[0.15em]">{label}</p>
-                {icon}
+        <div className="bg-white border border-cream-dark p-8 rounded-2xl shadow-sm hover:shadow-md hover:-translate-y-1 transition-all group">
+            <div className="flex items-center justify-between mb-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/20 group-hover:text-primary/40 transition-colors">{label}</p>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center bg-cream/50`}>
+                    <Zap size={10} className="text-primary/20" />
+                </div>
             </div>
-            <p className="text-xl font-black tracking-tighter text-primary">{value}</p>
+            <div className="flex items-end justify-between">
+                <p className="text-2xl font-black tracking-tighter text-primary">{value}</p>
+                {/* Visual sparkline icon placeholder could go here if needed, matching the image's small gray curves */}
+                <div className="h-4 w-10 opacity-20">
+                    <svg viewBox="0 0 40 16" className="w-full h-full stroke-primary" fill="none">
+                        <path d="M0 12 Q 10 0, 20 8 T 40 4" strokeWidth="2" />
+                    </svg>
+                </div>
+            </div>
         </div>
     );
 }
 
-function Panel({ title, detail, children }: { title: string; detail?: string; children: React.ReactNode }) {
+function ChartLegend({ label, color, active }: { label: string, color: string, active?: boolean }) {
     return (
-        <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden shadow-sm flex flex-col h-full">
-            <div className="px-6 py-4 border-b border-cream-dark flex items-center justify-between bg-cream/10">
-                <h3 className="text-[11px] font-black text-primary/40 uppercase tracking-[0.2em]">{title}</h3>
-                {detail && <span className="text-[10px] text-primary/30 font-bold uppercase tracking-widest">{detail}</span>}
+        <div className="flex items-center space-x-2 cursor-pointer group">
+            <div className={`w-3 h-3 rounded-full border-2 border-white shadow-sm`} style={{ backgroundColor: color }}></div>
+            <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${active ? 'text-primary' : 'text-primary/30 group-hover:text-primary/60'}`}>{label}</span>
+        </div>
+    );
+}
+
+function MinerTag({ rank, hotkey, color }: { rank: number, hotkey: string, color: string }) {
+    return (
+        <div className="flex items-center space-x-2">
+            <span className="text-[10px] font-black text-primary/20">#{rank}</span>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-tight" style={{ color }}>{hotkey}</span>
+        </div>
+    );
+}
+
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+    return (
+        <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden shadow-sm flex flex-col h-full hover:shadow-md transition-shadow">
+            <div className="px-8 py-6 border-b border-cream-dark flex items-center justify-between">
+                <h3 className="text-[10px] font-black text-primary/30 uppercase tracking-[0.2em]">{title}</h3>
+                <span className="text-[10px] font-black text-primary/40 uppercase tracking-widest cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5">
+                    View all <ArrowRight size={12} />
+                </span>
             </div>
-            <div className="p-6 flex-1">{children}</div>
+            <div className="p-8 flex-1">{children}</div>
         </div>
     );
 }
