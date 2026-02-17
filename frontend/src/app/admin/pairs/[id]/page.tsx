@@ -126,37 +126,37 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
 
                     {/* Calculator UI - Clean Horizontal Line */}
-                    <div className="flex items-center justify-between gap-4 mb-10 text-[9px] font-bold uppercase tracking-widest">
-                        <div className="flex items-center space-x-3 whitespace-nowrap">
+                    <div className="flex flex-col xl:flex-row items-center justify-between gap-6 mb-10 text-[9px] font-bold uppercase tracking-widest bg-cream/5 p-4 rounded-2xl border border-cream-dark/10 xl:bg-transparent xl:p-0 xl:border-none">
+                        <div className="flex flex-wrap items-center justify-center gap-3 whitespace-nowrap w-full xl:w-auto">
                             <span className="text-primary/30">If you have</span>
-                            <div className="flex items-center bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2">
-                                <input type="text" defaultValue="1" className="bg-transparent border-none focus:ring-0 w-6 text-primary font-bold p-0 text-[10px]" />
+                            <div className="flex items-center bg-white xl:bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2">
+                                <input type="text" defaultValue="1" className="bg-transparent border-none focus:ring-0 w-6 text-primary font-bold p-0 text-[10px] text-center" />
                                 <span className="text-primary/30 ml-1">BTC</span>
                             </div>
                             <span className="text-primary/30">and</span>
-                            <div className="flex items-center bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2">
-                                <input type="text" defaultValue="65k" className="bg-transparent border-none focus:ring-0 w-8 text-primary font-bold p-0 text-[10px]" />
+                            <div className="flex items-center bg-white xl:bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2">
+                                <input type="text" defaultValue="65k" className="bg-transparent border-none focus:ring-0 w-8 text-primary font-bold p-0 text-[10px] text-center" />
                                 <span className="text-primary/30 ml-1">USDC</span>
                             </div>
                             <span className="text-primary/30">for</span>
-                            <div className="flex items-center bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2 min-w-24">
+                            <div className="flex items-center bg-white xl:bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2 min-w-24 justify-between">
                                 <span className="text-primary font-bold">365 Days</span>
-                                <ChevronRight size={12} className="ml-auto text-primary/20 rotate-90" />
+                                <ChevronRight size={12} className="ml-2 text-primary/20 rotate-90" />
                             </div>
                         </div>
 
-                        <div className="flex items-center space-x-6 border-l border-cream-dark/50 pl-6 h-10">
-                            <div className="flex items-center space-x-3 whitespace-nowrap">
+                        <div className="flex flex-col md:flex-row items-center gap-4 xl:gap-6 xl:border-l border-cream-dark/50 xl:pl-6 w-full xl:w-auto">
+                            <div className="flex items-center space-x-3 whitespace-nowrap justify-center w-full md:w-auto">
                                 <span className="text-primary/30">Pair</span>
-                                <div className="flex items-center bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2">
+                                <div className="flex items-center bg-white xl:bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2 w-full md:w-auto justify-between">
                                     <span className="text-primary font-bold">BTC / USDC</span>
                                     <ChevronRight size={12} className="ml-2 text-primary/20 rotate-90" />
                                 </div>
                             </div>
 
-                            <div className="flex items-center space-x-4 border-l border-cream-dark/50 pl-6">
-                                <span className="text-primary/30">APY</span>
-                                <div className="flex items-center space-x-4">
+                            <div className="flex flex-wrap justify-center items-center gap-4 md:border-l border-cream-dark/50 md:pl-6 w-full md:w-auto">
+                                <span className="text-primary/30 hidden md:inline">APY</span>
+                                <div className="flex items-center justify-center space-x-4 w-full md:w-auto">
                                     <span className="text-primary font-bold">(USD): 41%</span>
                                     <span className="text-primary font-bold">BTC: 20%</span>
                                     <span className="text-primary font-bold">USDC: 20%</span>
@@ -166,8 +166,8 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
 
                     {/* Comparison Table */}
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
+                    <div className="overflow-x-auto pb-2">
+                        <table className="w-full min-w-[800px]">
                             <thead>
                                 <tr className="text-[9px] font-bold uppercase tracking-[0.2em] text-primary/20 border-b border-cream-dark/50">
                                     <th className="text-left py-4">Strategy</th>
@@ -233,21 +233,21 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                 </div>
 
                 {/* Performance Chart Section */}
-                <div className="bg-white border border-cream-dark p-8 rounded-[32px] shadow-sm">
-                    <div className="flex items-center justify-between mb-8">
-                        <div className="flex items-center space-x-12">
+                <div className="bg-white border border-cream-dark p-4 md:p-8 rounded-[32px] shadow-sm">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                        <div className="flex flex-col space-y-4">
                             <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30 whitespace-nowrap">Performance Over Time</h3>
-                            <div className="flex items-center space-x-6">
+                            <div className="flex flex-wrap items-center gap-4 md:gap-6">
                                 <ChartLegend label="ForeverMoney" color="#3B82F6" />
                                 <ChartLegend label="Full-range LP" color="#0D1117" />
                                 <ChartLegend label="Holding" color="#3B82F6" opacity={0.5} />
                             </div>
                         </div>
-                        <div className="flex items-center bg-cream/20 p-1 rounded-full border border-cream-dark/30">
+                        <div className="flex bg-cream/20 p-1 rounded-full border border-cream-dark/30 self-start md:self-auto overflow-x-auto max-w-full">
                             {['1D', '7D', '30D', 'ALL'].map((tf) => (
                                 <button
                                     key={tf}
-                                    className={`px-3 py-1 text-[9px] font-bold rounded-full transition-all ${tf === '30D' ? 'bg-primary text-white shadow-md' : 'text-primary/40 hover:text-primary'}`}
+                                    className={`px-3 py-1 text-[9px] font-bold rounded-full transition-all whitespace-nowrap ${tf === '30D' ? 'bg-primary text-white shadow-md' : 'text-primary/40 hover:text-primary'}`}
                                 >
                                     {tf}
                                 </button>
@@ -432,9 +432,9 @@ function StrategyRow({
 
 function ConfigEntry({ label, value, isMono }: { label: string; value: string; isMono?: boolean }) {
     return (
-        <div className="flex items-center justify-between text-[10px] font-bold text-primary">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[10px] font-bold text-primary gap-1 sm:gap-0">
             <span className="text-primary/20 uppercase tracking-widest">{label}</span>
-            <span className={isMono ? 'font-mono' : ''}>{value}</span>
+            <span className={`${isMono ? 'font-mono' : ''} truncate max-w-full sm:max-w-none`}>{value}</span>
         </div>
     );
 }

@@ -254,113 +254,296 @@ export interface MinerWinRate {
 }
 
 // API Functions
+// API Functions
 async function fetchJobs(): Promise<Job[]> {
-    const res = await fetch(`${API_BASE_URL}/jobs/`);
-    if (!res.ok) throw new Error('Failed to fetch jobs');
-    const data = await res.json();
-    return data.jobs;
+    try {
+        const res = await fetch(`${API_BASE_URL}/jobs/`);
+        if (!res.ok) throw new Error('Failed to fetch jobs');
+        const data = await res.json();
+        return data.jobs;
+    } catch (error) {
+        console.warn('API Error (fetchJobs):', error);
+        return [];
+    }
 }
 
 async function fetchLeaderboard(jobId: string): Promise<MinerScore[]> {
-    const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/leaderboard?limit=10`);
-    if (!res.ok) throw new Error('Failed to fetch leaderboard');
-    const data = await res.json();
-    return data.leaderboard;
+    try {
+        const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/leaderboard?limit=10`);
+        if (!res.ok) throw new Error('Failed to fetch leaderboard');
+        const data = await res.json();
+        return data.leaderboard;
+    } catch (error) {
+        console.warn('API Error (fetchLeaderboard):', error);
+        return [];
+    }
 }
 
 async function fetchJobStats(jobId: string): Promise<any> {
-    const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/stats`);
-    if (!res.ok) throw new Error('Failed to fetch stats');
-    return res.json();
+    try {
+        const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/stats`);
+        if (!res.ok) throw new Error('Failed to fetch stats');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchJobStats):', error);
+        return {};
+    }
 }
 
 async function fetchExecutions(jobId: string): Promise<LiveExecution[]> {
-    const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/executions?limit=20`);
-    if (!res.ok) throw new Error('Failed to fetch executions');
-    const data = await res.json();
-    return data.executions;
+    try {
+        const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/executions?limit=20`);
+        if (!res.ok) throw new Error('Failed to fetch executions');
+        const data = await res.json();
+        return data.executions;
+    } catch (error) {
+        console.warn('API Error (fetchExecutions):', error);
+        return [];
+    }
 }
 
 // Metrics API Functions
 async function fetchSubnetRevenue(lookbackDays: number = 30): Promise<SubnetRevenue> {
-    const res = await fetch(`${API_BASE_URL}/metrics/subnet/revenue?lookback_days=${lookbackDays}`);
-    if (!res.ok) throw new Error('Failed to fetch subnet revenue');
-    return res.json();
+    try {
+        const res = await fetch(`${API_BASE_URL}/metrics/subnet/revenue?lookback_days=${lookbackDays}`);
+        if (!res.ok) throw new Error('Failed to fetch subnet revenue');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchSubnetRevenue):', error);
+        return {
+            total_revenue_usd: 0,
+            lookback_days: lookbackDays,
+            vault_count: 0,
+            vault_revenues: [],
+            updated_at: new Date().toISOString(),
+            error: 'Connection Failed'
+        };
+    }
 }
 
 async function fetchSubnetEmissions(): Promise<SubnetEmissions> {
-    const res = await fetch(`${API_BASE_URL}/metrics/subnet/emissions`);
-    if (!res.ok) throw new Error('Failed to fetch subnet emissions');
-    return res.json();
+    try {
+        const res = await fetch(`${API_BASE_URL}/metrics/subnet/emissions`);
+        if (!res.ok) throw new Error('Failed to fetch subnet emissions');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchSubnetEmissions):', error);
+        return {
+            total_emissions_alpha: 0,
+            total_emissions_usd: 0,
+            burn_ratio: 0,
+            miner_ratio: 0,
+            burn_alpha: 0,
+            burn_usd: 0,
+            miner_alpha: 0,
+            miner_usd: 0,
+            alpha_price_usd: 0,
+            vault_revenue_usd: 0,
+            profit_ratio: 0,
+            updated_at: new Date().toISOString(),
+            error: 'Connection Failed'
+        };
+    }
 }
 
 async function fetchTopEarners(limit: number = 10): Promise<TopEarner[]> {
-    const res = await fetch(`${API_BASE_URL}/metrics/top-earners?limit=${limit}`);
-    if (!res.ok) throw new Error('Failed to fetch top earners');
-    return res.json();
+    try {
+        const res = await fetch(`${API_BASE_URL}/metrics/top-earners?limit=${limit}`);
+        if (!res.ok) throw new Error('Failed to fetch top earners');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchTopEarners):', error);
+        return [];
+    }
 }
 
 async function fetchPairPerformance(): Promise<PairPerformance[]> {
-    const res = await fetch(`${API_BASE_URL}/metrics/pairs/performance`);
-    if (!res.ok) throw new Error('Failed to fetch pair performance');
-    return res.json();
+    try {
+        const res = await fetch(`${API_BASE_URL}/metrics/pairs/performance`);
+        if (!res.ok) throw new Error('Failed to fetch pair performance');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchPairPerformance):', error);
+        return [];
+    }
 }
 
+
+// ...
 async function fetchJobRevenue(jobId: string, lookbackDays: number = 30): Promise<JobRevenue> {
-    const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/revenue?lookback_days=${lookbackDays}`);
-    if (!res.ok) throw new Error('Failed to fetch job revenue');
-    return res.json();
+    try {
+        const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/revenue?lookback_days=${lookbackDays}`);
+        if (!res.ok) throw new Error('Failed to fetch job revenue');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchJobRevenue):', error);
+        return {
+            job_id: jobId,
+            vault_address: '',
+            pair_address: '',
+            revenue_usd: 0,
+            revenue_token0: 0,
+            revenue_token1: 0,
+            lookback_days: lookbackDays,
+            updated_at: new Date().toISOString()
+        };
+    }
 }
-
-async function fetchPoolPrice(jobId: string): Promise<PoolPrice> {
-    const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/price`);
-    if (!res.ok) throw new Error('Failed to fetch pool price');
-    return res.json();
-}
-
-async function fetchAllRounds(jobId: string, limit: number = 50, offset: number = 0): Promise<{ job_id: string; total_rounds: number; rounds: RoundWithExecution[] }> {
-    const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/rounds?limit=${limit}&offset=${offset}`);
-    if (!res.ok) throw new Error('Failed to fetch rounds');
-    return res.json();
-}
-
-async function fetchJobTVL(jobId: string): Promise<JobTVL> {
-    const res = await fetch(`${API_BASE_URL}/metrics/jobs/${jobId}/tvl`);
-    if (!res.ok) throw new Error('Failed to fetch job TVL');
-    return res.json();
-}
-
+// ...
 async function fetchJobPnL(jobId: string, lookbackDays: number = 30): Promise<JobPnL> {
-    const res = await fetch(`${API_BASE_URL}/metrics/jobs/${jobId}/pnl?lookback_days=${lookbackDays}`);
-    if (!res.ok) throw new Error('Failed to fetch job PnL');
-    return res.json();
+    try {
+        const res = await fetch(`${API_BASE_URL}/metrics/jobs/${jobId}/pnl?lookback_days=${lookbackDays}`);
+        if (!res.ok) throw new Error('Failed to fetch job PnL');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchJobPnL):', error);
+        return {
+            job_id: jobId,
+            pnl_usd: 0,
+            pnl_token0: 0,
+            pnl_token1: 0,
+            initial_tvl_usd: 0,
+            current_tvl_usd: 0,
+            lookback_days: lookbackDays,
+            updated_at: new Date().toISOString()
+        };
+    }
 }
 
 async function fetchJobAPY(jobId: string, lookbackDays: number = 30): Promise<JobAPY> {
-    const res = await fetch(`${API_BASE_URL}/metrics/jobs/${jobId}/apy?lookback_days=${lookbackDays}`);
-    if (!res.ok) throw new Error('Failed to fetch job APY');
-    return res.json();
+    try {
+        const res = await fetch(`${API_BASE_URL}/metrics/jobs/${jobId}/apy?lookback_days=${lookbackDays}`);
+        if (!res.ok) throw new Error('Failed to fetch job APY');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchJobAPY):', error);
+        return {
+            job_id: jobId,
+            apy_percent: 0,
+            apy_percent_token0: 0,
+            apy_percent_token1: 0,
+            revenue_usd: 0,
+            revenue_token0: 0,
+            revenue_token1: 0,
+            avg_tvl_usd: 0,
+            avg_tvl_token0: 0,
+            avg_tvl_token1: 0,
+            lookback_days: lookbackDays,
+            updated_at: new Date().toISOString()
+        };
+    }
 }
+//...
+async function fetchSubnetPnL(lookbackDays: number = 30): Promise<SubnetPnL> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/metrics/subnet/pnl?lookback_days=${lookbackDays}`);
+        if (!res.ok) throw new Error('Failed to fetch subnet PnL');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchSubnetPnL):', error);
+        return {
+            total_pnl_usd: 0,
+            vault_count: 0,
+            vault_pnls: [],
+            lookback_days: lookbackDays,
+            updated_at: new Date().toISOString()
+        };
+    }
+}
+
+async function fetchPoolPrice(jobId: string): Promise<PoolPrice> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/price`);
+        if (!res.ok) throw new Error('Failed to fetch pool price');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchPoolPrice):', error);
+        return {
+            current_price: null,
+            price_24h_ago: null,
+            price_24h_high: null,
+            price_24h_low: null,
+            price_change_24h: null,
+            price_change_24h_percent: null,
+            volume_24h_usd: null,
+            swap_count_24h: 0,
+            last_swap_timestamp: null,
+            current_position: null
+        };
+    }
+}
+
+async function fetchAllRounds(jobId: string, limit: number = 50, offset: number = 0): Promise<{ job_id: string; total_rounds: number; rounds: RoundWithExecution[] }> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/rounds?limit=${limit}&offset=${offset}`);
+        if (!res.ok) throw new Error('Failed to fetch rounds');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchAllRounds):', error);
+        return { job_id: jobId, total_rounds: 0, rounds: [] };
+    }
+}
+
+async function fetchJobTVL(jobId: string): Promise<JobTVL> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/metrics/jobs/${jobId}/tvl`);
+        if (!res.ok) throw new Error('Failed to fetch job TVL');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchJobTVL):', error);
+        return {
+            job_id: jobId,
+            tvl_token0: 0,
+            tvl_token1: 0,
+            tvl_usd: 0,
+            token0_price_usd: 0,
+            token1_price_usd: 0,
+            updated_at: new Date().toISOString()
+        };
+    }
+}
+
+
+
+
 
 async function fetchSubnetTVL(): Promise<SubnetTVL> {
-    const res = await fetch(`${API_BASE_URL}/metrics/subnet/tvl`);
-    if (!res.ok) throw new Error('Failed to fetch subnet TVL');
-    return res.json();
+    try {
+        const res = await fetch(`${API_BASE_URL}/metrics/subnet/tvl`);
+        if (!res.ok) throw new Error('Failed to fetch subnet TVL');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchSubnetTVL):', error);
+        return {
+            total_tvl_usd: 0,
+            vault_count: 0,
+            vault_tvls: [],
+            updated_at: new Date().toISOString()
+        };
+    }
 }
 
-async function fetchSubnetPnL(lookbackDays: number = 30): Promise<SubnetPnL> {
-    const res = await fetch(`${API_BASE_URL}/metrics/subnet/pnl?lookback_days=${lookbackDays}`);
-    if (!res.ok) throw new Error('Failed to fetch subnet PnL');
-    return res.json();
-}
+
 
 async function fetchMinerWinRate(uid: number, jobId?: string): Promise<MinerWinRate> {
-    const url = jobId
-        ? `${API_BASE_URL}/miners/${uid}/win-rate?job_id=${jobId}`
-        : `${API_BASE_URL}/miners/${uid}/win-rate`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Failed to fetch miner win rate');
-    return res.json();
+    try {
+        const url = jobId
+            ? `${API_BASE_URL}/miners/${uid}/win-rate?job_id=${jobId}`
+            : `${API_BASE_URL}/miners/${uid}/win-rate`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Failed to fetch miner win rate');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchMinerWinRate):', error);
+        return {
+            miner_uid: uid,
+            miner_hotkey: '',
+            win_rate: 0,
+            total_wins: 0,
+            total_participations: 0,
+            job_id: jobId || null
+        };
+    }
 }
 
 // Hooks
@@ -434,7 +617,8 @@ export function useJobRevenue(jobId: string, lookbackDays: number = 30) {
         queryKey: ['job-revenue', jobId, lookbackDays],
         queryFn: () => fetchJobRevenue(jobId, lookbackDays),
         enabled: !!jobId,
-        refetchInterval: 60000, // Refresh every 60s
+        refetchInterval: 60000,
+        retry: 1,
     });
 }
 
@@ -443,7 +627,8 @@ export function usePoolPrice(jobId: string) {
         queryKey: ['pool-price', jobId],
         queryFn: () => fetchPoolPrice(jobId),
         enabled: !!jobId,
-        refetchInterval: 30000, // Refresh every 30s for price data
+        refetchInterval: 30000,
+        retry: 1,
     });
 }
 
@@ -452,7 +637,8 @@ export function useAllRounds(jobId: string, limit: number = 50, offset: number =
         queryKey: ['all-rounds', jobId, limit, offset],
         queryFn: () => fetchAllRounds(jobId, limit, offset),
         enabled: !!jobId,
-        refetchInterval: 60000, // Refresh every 60s
+        refetchInterval: 60000,
+        retry: 1,
     });
 }
 
@@ -461,7 +647,8 @@ export function useJobTVL(jobId: string) {
         queryKey: ['job-tvl', jobId],
         queryFn: () => fetchJobTVL(jobId),
         enabled: !!jobId,
-        refetchInterval: 60000, // Refresh every 60s
+        refetchInterval: 60000,
+        retry: 1,
     });
 }
 
@@ -470,7 +657,8 @@ export function useJobPnL(jobId: string, lookbackDays: number = 30) {
         queryKey: ['job-pnl', jobId, lookbackDays],
         queryFn: () => fetchJobPnL(jobId, lookbackDays),
         enabled: !!jobId,
-        refetchInterval: 60000, // Refresh every 60s
+        refetchInterval: 60000,
+        retry: 1,
     });
 }
 
@@ -479,7 +667,8 @@ export function useJobAPY(jobId: string, lookbackDays: number = 30) {
         queryKey: ['job-apy', jobId, lookbackDays],
         queryFn: () => fetchJobAPY(jobId, lookbackDays),
         enabled: !!jobId,
-        refetchInterval: 60000, // Refresh every 60s
+        refetchInterval: 60000,
+        retry: 1,
     });
 }
 
@@ -487,7 +676,8 @@ export function useSubnetTVL() {
     return useQuery({
         queryKey: ['subnet-tvl'],
         queryFn: fetchSubnetTVL,
-        refetchInterval: 60000, // Refresh every 60s
+        refetchInterval: 60000,
+        retry: 1,
     });
 }
 
@@ -495,7 +685,8 @@ export function useSubnetPnL(lookbackDays: number = 30) {
     return useQuery({
         queryKey: ['subnet-pnl', lookbackDays],
         queryFn: () => fetchSubnetPnL(lookbackDays),
-        refetchInterval: 60000, // Refresh every 60s
+        refetchInterval: 60000,
+        retry: 1,
     });
 }
 
@@ -504,7 +695,8 @@ export function useMinerWinRate(uid: number, jobId?: string) {
         queryKey: ['miner-win-rate', uid, jobId],
         queryFn: () => fetchMinerWinRate(uid, jobId),
         enabled: !!uid,
-        refetchInterval: 60000, // Refresh every 60s
+        refetchInterval: 60000,
+        retry: 1,
     });
 }
 
@@ -528,9 +720,29 @@ export interface PoolDataStats {
 }
 
 async function fetchPoolDataStats(jobId: string, lookbackHours: number = 24): Promise<PoolDataStats> {
-    const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/pool-data/stats?lookback_hours=${lookbackHours}`);
-    if (!res.ok) throw new Error('Failed to fetch pool data stats');
-    return res.json();
+    try {
+        const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/pool-data/stats?lookback_hours=${lookbackHours}`);
+        if (!res.ok) throw new Error('Failed to fetch pool data stats');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchPoolDataStats):', error);
+        return {
+            start_ts: 0,
+            end_ts: 0,
+            total_swaps: 0,
+            volume0: 0,
+            volume1: 0,
+            fees0: 0,
+            fees1: 0,
+            open_price: 0,
+            close_price: 0,
+            high_price: 0,
+            low_price: 0,
+            price_change_pct: 0,
+            token0_symbol: 'T0',
+            token1_symbol: 'T1'
+        };
+    }
 }
 
 export function usePoolDataStats(jobId: string, lookbackHours: number = 24) {
@@ -544,11 +756,16 @@ export function usePoolDataStats(jobId: string, lookbackHours: number = 24) {
 }
 
 async function syncPoolData(jobId: string, lookbackHours: number = 24) {
-    const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/sync-pool-data?lookback_hours=${lookbackHours}`, {
-        method: 'POST',
-    });
-    if (!res.ok) throw new Error('Failed to sync pool data');
-    return res.json();
+    try {
+        const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/sync-pool-data?lookback_hours=${lookbackHours}`, {
+            method: 'POST',
+        });
+        if (!res.ok) throw new Error('Failed to sync pool data');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (syncPoolData):', error);
+        return { status: 'failed' };
+    }
 }
 
 export function useSyncPoolData() {
@@ -588,9 +805,20 @@ export interface MinerVaultsResponse {
 }
 
 async function fetchMinerVaults(uid: number): Promise<MinerVaultsResponse> {
-    const res = await fetch(`${API_BASE_URL}/miners/${uid}/vaults`);
-    if (!res.ok) throw new Error('Failed to fetch miner vaults');
-    return res.json();
+    try {
+        const res = await fetch(`${API_BASE_URL}/miners/${uid}/vaults`);
+        if (!res.ok) throw new Error('Failed to fetch miner vaults');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchMinerVaults):', error);
+        return {
+            miner_uid: uid,
+            miner_hotkey: null,
+            total_vaults: 0,
+            active_vaults: 0,
+            vaults: []
+        };
+    }
 }
 
 export function useMinerVaults(uid: number) {
@@ -598,6 +826,7 @@ export function useMinerVaults(uid: number) {
         queryKey: ['miner-vaults', uid],
         queryFn: () => fetchMinerVaults(uid),
         enabled: !!uid,
-        refetchInterval: 60000, // Refresh every 60s
+        refetchInterval: 60000,
+        retry: 1,
     });
 }

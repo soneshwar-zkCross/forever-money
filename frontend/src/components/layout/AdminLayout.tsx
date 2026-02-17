@@ -9,12 +9,14 @@ import {
     Bell,
     UserCircle,
     Monitor,
-    Loader2
+    Loader2,
+    Menu,
+    X
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 interface AdminLayoutProps {
     children: React.ReactNode;
@@ -29,6 +31,12 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, titl
     const pathname = usePathname();
     const router = useRouter();
     const { isAuthenticated, loading, logout, user } = useAuth();
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+    // Close mobile menu on route change
+    useEffect(() => {
+        setIsMobileMenuOpen(false);
+    }, [pathname]);
 
     const isActive = (path: string) => {
         if (path === '/admin' && pathname === '/admin') return true;
@@ -46,13 +54,35 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, titl
 
     return (
         <div className={`flex h-screen bg-cream text-primary selection:bg-primary-light selection:text-white ${className || ''}`}>
+            {/* Mobile Backdrop */}
+            {isMobileMenuOpen && (
+                <div
+                    className="fixed inset-0 bg-primary/20 backdrop-blur-sm z-40 md:hidden animate-fade-in"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                />
+            )}
+
             {/* Sidebar */}
-            <aside className="w-[210px] bg-white border-r border-cream-dark flex flex-col h-full z-20 transition-all duration-300">
-                <div className="p-6 pb-8 flex items-center space-x-3 group">
-                    <div className="bg-primary/5 p-2 rounded-xl group-hover:bg-primary transition-all duration-500">
-                        <LogoMark width={20} height={16} className="group-hover:filter group-hover:invert transition-all" />
+            <aside className={`
+                fixed md:static inset-y-0 left-0 z-50
+                w-[280px] md:w-[210px] bg-white border-r border-cream-dark flex flex-col h-full 
+                transform transition-transform duration-300 ease-in-out md:transform-none shadow-2xl md:shadow-none
+                ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+            `}>
+                <div className="p-6 pb-8 flex items-center justify-between md:justify-start space-x-3 group">
+                    <div className="flex items-center space-x-3">
+                        <div className="bg-primary/5 p-2 rounded-xl group-hover:bg-primary transition-all duration-500">
+                            <LogoMark width={20} height={16} className="group-hover:filter group-hover:invert transition-all" />
+                        </div>
+                        <span className="text-[11px] font-black tracking-tighter text-primary uppercase">ForeverConsole</span>
                     </div>
-                    <span className="text-[11px] font-black tracking-tighter text-primary uppercase">ForeverConsole</span>
+                    {/* Mobile Close Button */}
+                    <button
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="md:hidden p-2 text-primary/50 hover:text-primary transition-colors"
+                    >
+                        <X size={20} />
+                    </button>
                 </div>
 
                 <nav className="flex-1 overflow-y-auto px-4 space-y-1">
@@ -71,33 +101,41 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, titl
             </aside>
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+            <div className="flex-1 flex flex-col h-full overflow-hidden relative w-full">
                 {/* Header */}
-                <header className="h-20 bg-cream/30 px-6 lg:px-10 flex items-center justify-between sticky top-0 z-10 shrink-0">
-                    <div className="flex items-center space-x-5">
-                        <div className="w-10 h-10 rounded-xl bg-white border border-cream-dark flex items-center justify-center text-primary/40 shadow-sm">
-                            {icon || <LayoutDashboard size={18} />}
+                <header className="h-16 md:h-20 bg-cream/30 px-4 md:px-6 lg:px-10 flex items-center justify-between sticky top-0 z-30 shrink-0 backdrop-blur-sm border-b border-white/5 md:border-none">
+                    <div className="flex items-center space-x-3 md:space-x-5">
+                        {/* Mobile Hamburger */}
+                        <button
+                            onClick={() => setIsMobileMenuOpen(true)}
+                            className="md:hidden p-2 -ml-2 text-primary/50 hover:text-primary transition-colors hover:bg-white/50 rounded-lg"
+                        >
+                            <Menu size={20} />
+                        </button>
+
+                        <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-white border border-cream-dark flex items-center justify-center text-primary/40 shadow-sm">
+                            {icon || <LayoutDashboard size={16} className="md:w-[18px] md:h-[18px]" />}
                         </div>
                         <div className="flex flex-col">
                             {title ? (
                                 <>
-                                    <span className="text-base font-black text-primary tracking-tight leading-none mb-1">{title}</span>
+                                    <span className="text-sm md:text-base font-black text-primary tracking-tight leading-none mb-0.5 md:mb-1 truncate max-w-[150px] md:max-w-none">{title}</span>
                                     {description && (
-                                        <span className="text-[10px] font-bold text-ink-muted/40 uppercase tracking-widest leading-none truncate max-w-[400px]">
+                                        <span className="hidden md:block text-[10px] font-bold text-ink-muted/40 uppercase tracking-widest leading-none truncate max-w-[400px]">
                                             {description}
                                         </span>
                                     )}
                                 </>
                             ) : (
                                 <>
-                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/30 leading-none mb-1">SN98 Forever</span>
-                                    <span className="text-sm font-black text-primary tracking-tight">Main Terminal</span>
+                                    <span className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-primary/30 leading-none mb-0.5 md:mb-1">SN98 Forever</span>
+                                    <span className="text-xs md:text-sm font-black text-primary tracking-tight">Main Terminal</span>
                                 </>
                             )}
                         </div>
                     </div>
 
-                    <div className="flex items-center space-x-8">
+                    <div className="flex items-center space-x-4 md:space-x-8">
                         {headerActions && (
                             <div className="flex items-center space-x-3 mr-4">
                                 {headerActions}
@@ -111,22 +149,22 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children, headerActions, titl
                             </button>
                         </div>
 
-                        <div className="flex items-center space-x-4 pl-2">
-                            <div className="text-right hidden md:block">
+                        <div className="flex items-center space-x-3 md:space-x-4 pl-2">
+                            <div className="text-right hidden lg:block">
                                 <p className="text-[10px] font-black text-primary uppercase tracking-wider leading-none mb-1">Current Admin</p>
                                 <p className="text-[10px] font-mono text-ink-muted/40 uppercase leading-none">
                                     {user?.wallet_address ? `${user.wallet_address.slice(0, 6)}...${user.wallet_address.slice(-4)}` : 'DX0000...0000'}
                                 </p>
                             </div>
-                            <div className="w-10 h-10 rounded-full bg-white border border-cream-dark flex items-center justify-center text-primary/40 shadow-sm hover:shadow-md transition-all cursor-pointer">
-                                <UserCircle size={24} />
+                            <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white border border-cream-dark flex items-center justify-center text-primary/40 shadow-sm hover:shadow-md transition-all cursor-pointer">
+                                <UserCircle size={20} className="md:w-6 md:h-6" />
                             </div>
                         </div>
                     </div>
                 </header>
 
                 {/* Content */}
-                <main className="flex-1 overflow-y-auto p-6 lg:p-10 scroll-smooth bg-cream/10">
+                <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-10 scroll-smooth bg-cream/10">
                     <div className="max-w-[1600px] mx-auto">
                         {children}
                     </div>

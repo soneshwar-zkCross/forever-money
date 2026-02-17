@@ -55,7 +55,7 @@ export default function LeaderboardPage() {
             <div className="space-y-6 animate-fade-in pb-20 font-mono text-primary">
                 {/* High Density Leaderboard Table */}
                 <div className="bg-white rounded-[40px] border border-cream-dark shadow-sm overflow-hidden min-h-[600px]">
-                    <div className="p-8 border-b border-cream flex items-center justify-between bg-cream/5">
+                    <div className="p-4 md:p-8 border-b border-cream flex flex-col md:flex-row md:items-center justify-between bg-cream/5 gap-4">
                         <div className="flex items-center space-x-4">
                             <h4 className="text-[13px] font-black text-primary tracking-tight uppercase">Miners Ranking</h4>
                             <span className="px-3 py-1 bg-cream-dark/30 rounded-full text-[9px] font-black text-primary/40 uppercase tracking-widest">
@@ -64,13 +64,13 @@ export default function LeaderboardPage() {
                         </div>
 
                         {/* Timeframe Toggle Moved Here */}
-                        <div className="flex items-center space-x-4 text-[10px] font-black uppercase bg-cream-dark/10 px-4 py-2 rounded-xl border border-cream-dark/30">
+                        <div className="flex items-center space-x-4 text-[10px] font-black uppercase bg-cream-dark/10 px-4 py-2 rounded-xl border border-cream-dark/30 self-start md:self-auto overflow-x-auto max-w-full">
                             <span className="opacity-40">TF:</span>
                             {['1D', '7D', '30D', 'All'].map((tf) => (
                                 <button
                                     key={tf}
                                     onClick={() => setTimeframe(tf)}
-                                    className={`transition-colors hover:text-blue-600 ${timeframe === tf ? 'text-blue-600' : 'text-primary/60'}`}
+                                    className={`transition-colors hover:text-blue-600 whitespace-nowrap ${timeframe === tf ? 'text-blue-600' : 'text-primary/60'}`}
                                 >
                                     {tf}
                                 </button>
@@ -78,7 +78,60 @@ export default function LeaderboardPage() {
                         </div>
                     </div>
 
-                    <div className="overflow-x-auto">
+                    {/* Mobile Card View */}
+                    <div className="md:hidden space-y-4 p-4">
+                        {isLoading ? (
+                            <div className="text-center py-10 animate-pulse text-primary/20 text-xs font-black uppercase tracking-widest">
+                                Synchronizing...
+                            </div>
+                        ) : displayMiners?.map((miner, idx) => (
+                            <div
+                                key={miner.miner_uid}
+                                className="bg-cream/5 border border-cream-dark/50 rounded-2xl p-5 cursor-pointer hover:border-primary/20 transition-all"
+                                onClick={() => window.location.href = `/admin/miners/${miner.miner_uid}`}
+                            >
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="flex items-center space-x-3">
+                                        <span className={`text-lg font-black ${idx < 3 ? 'text-blue-600' : 'text-primary/40'}`}>
+                                            #{idx + 1}
+                                        </span>
+                                        <div>
+                                            <div className="text-sm font-black text-primary">5F{miner.miner_uid.toString().padStart(6, '0')}</div>
+                                            <div className="text-[9px] font-bold text-primary/30 uppercase tracking-tighter">
+                                                {miner.miner_hotkey.substring(0, 8)}...
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center space-x-1.5 bg-cream-dark/20 px-2 py-1 rounded-lg">
+                                        <BaseLogo />
+                                        <span className="text-[9px] font-black uppercase tracking-tighter opacity-70">Base</span>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4 border-t border-dashed border-cream-dark/50 pt-4">
+                                    <div>
+                                        <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">TVL</div>
+                                        <div className="text-xs font-black text-primary">${(75000 - (idx * 1500)).toLocaleString()}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Fees</div>
+                                        <div className="text-xs font-black text-blue-600">${(3450 - (idx * 50)).toLocaleString()}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Net APY</div>
+                                        <div className="text-xs font-black text-primary">{(21.5 - (idx * 0.2)).toFixed(1)}%</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Active Vaults</div>
+                                        <div className="text-xs font-black text-primary">{3 + (idx % 3)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-left font-mono">
                             <thead>
                                 <tr className="text-[10px] font-black text-primary/30 uppercase tracking-tighter border-b border-cream-dark bg-cream/5">

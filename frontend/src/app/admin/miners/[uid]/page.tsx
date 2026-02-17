@@ -122,22 +122,22 @@ function VaultPerformanceView({ minerUid, token0Symbol, token1Symbol, winRateDat
             </div>
 
             {/* Vault Growth Chart */}
-            <div className="bg-white p-8 rounded-[40px] border border-cream-dark shadow-sm text-primary">
-                <div className="flex justify-between items-start mb-10">
+            <div className="bg-white p-4 md:p-8 rounded-3xl md:rounded-[40px] border border-cream-dark shadow-sm text-primary">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-10">
                     <div className="flex flex-col space-y-1">
                         <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/30">Vault Growth</span>
-                        <div className="flex items-center space-x-6 mt-2">
+                        <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-2">
                             <LegendItem color="bg-black" label="Growth (USD)" />
                             <LegendItem color="bg-blue-500" label={`Growth - Token 1 (${token0Symbol})`} />
                             <LegendItem color="bg-green-500" label={`Growth - Token 2 (${token1Symbol})`} />
                         </div>
                     </div>
-                    <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm">
+                    <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm self-start md:self-auto overflow-x-auto max-w-full">
                         {timeframes.map(t => (
                             <button
                                 key={t}
                                 onClick={() => setTimeframe(t)}
-                                className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest transition-all ${timeframe === t
+                                className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest transition-all whitespace-nowrap ${timeframe === t
                                     ? 'bg-primary text-white shadow-md'
                                     : 'text-primary/30 hover:text-primary/50'
                                     }`}
@@ -203,11 +203,11 @@ function VaultPerformanceView({ minerUid, token0Symbol, token1Symbol, winRateDat
             </div>
 
             {/* Capital Flow and PnL Chart */}
-            <div className="bg-white p-8 rounded-[40px] border border-cream-dark shadow-sm text-primary">
-                <div className="flex justify-between items-start mb-10">
+            <div className="bg-white p-4 md:p-8 rounded-3xl md:rounded-[40px] border border-cream-dark shadow-sm text-primary">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-10">
                     <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/30">Capital Flow and PNL</span>
-                    <div className="flex items-center space-x-3">
-                        <div className="relative">
+                    <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
+                        <div className="relative z-20">
                             <button
                                 onClick={() => setIsFilterOpen(!isFilterOpen)}
                                 className="bg-white border border-cream-dark px-4 py-1.5 rounded-xl flex items-center space-x-2 hover:border-primary/20 transition-all shadow-sm text-[9px] font-black uppercase tracking-widest"
@@ -216,7 +216,7 @@ function VaultPerformanceView({ minerUid, token0Symbol, token1Symbol, winRateDat
                                 <ChevronDown size={12} className={`text-primary/20 transition-transform ${isFilterOpen ? 'rotate-180' : ''}`} />
                             </button>
                             {isFilterOpen && (
-                                <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-cream-dark rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-2">
+                                <div className="absolute top-full left-0 md:left-auto md:right-0 mt-2 w-48 bg-white border border-cream-dark rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-2">
                                     {filters.map(f => (
                                         <button
                                             key={f}
@@ -232,12 +232,12 @@ function VaultPerformanceView({ minerUid, token0Symbol, token1Symbol, winRateDat
                                 </div>
                             )}
                         </div>
-                        <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm">
+                        <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm overflow-x-auto max-w-full">
                             {timeframes.map(t => (
                                 <button
                                     key={t}
                                     onClick={() => setTimeframe(t)}
-                                    className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest transition-all ${timeframe === t
+                                    className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest transition-all whitespace-nowrap ${timeframe === t
                                         ? 'bg-primary text-white shadow-md'
                                         : 'text-primary/30 hover:text-primary/50'
                                         }`}
@@ -319,7 +319,7 @@ function VaultPerformanceView({ minerUid, token0Symbol, token1Symbol, winRateDat
             </div>
 
             {/* Inventory Overview Card */}
-            <div className="bg-white p-8 rounded-[40px] border border-cream-dark shadow-sm text-primary">
+            <div className="bg-white p-8 rounded-3xl md:rounded-[40px] border border-cream-dark shadow-sm text-primary">
                 <div className="flex items-center justify-between mb-8">
                     <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/30">Inventory Overview</span>
                     <Info size={14} className="text-primary/20" />
@@ -355,22 +355,22 @@ function MinerPerformanceView({ minerUid, minerVaults, winRateData, token0Symbol
             </div>
 
             {/* Performance Over Time Chart */}
-            <div className="bg-white p-8 rounded-[40px] border border-cream-dark shadow-sm text-primary">
-                <div className="flex justify-between items-start mb-10">
+            <div className="bg-white p-4 md:p-8 rounded-3xl md:rounded-[40px] border border-cream-dark shadow-sm text-primary">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-10">
                     <div className="flex flex-col space-y-1">
                         <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/30">Performance Over Time</span>
-                        <div className="flex items-center space-x-6 mt-4">
+                        <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-4">
                             <LegendItem color="bg-blue-500" label="Earnings (USD)" />
                             <LegendItem color="bg-primary/10" label="Capital Deployed" />
                             <LegendItem color="bg-primary/5" label="Vault Value" />
                         </div>
                     </div>
-                    <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm">
+                    <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm self-start md:self-auto overflow-x-auto max-w-full">
                         {timeframes.map(t => (
                             <button
                                 key={t}
                                 onClick={() => setTimeframe(t)}
-                                className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest transition-all ${timeframe === t
+                                className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest transition-all whitespace-nowrap ${timeframe === t
                                     ? 'bg-primary text-white shadow-md'
                                     : 'text-primary/30 hover:text-primary/50'
                                     }`}
@@ -419,22 +419,22 @@ function MinerPerformanceView({ minerUid, minerVaults, winRateData, token0Symbol
             </div>
 
             {/* Earnings Composition Over Time Chart */}
-            <div className="bg-white p-8 rounded-[40px] border border-cream-dark shadow-sm text-primary">
-                <div className="flex justify-between items-start mb-10">
+            <div className="bg-white p-4 md:p-8 rounded-3xl md:rounded-[40px] border border-cream-dark shadow-sm text-primary">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-10">
                     <div className="flex flex-col space-y-1">
                         <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/30">Earnings Composition Over Time</span>
-                        <div className="flex items-center space-x-6 mt-4">
+                        <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-4">
                             <LegendItem color="bg-black" label="Fees" />
                             <span className="text-[8px] font-black text-primary/10 uppercase tracking-widest italic">vs</span>
                             <LegendItem color="bg-green-500" label="Emissions (USD)" />
                         </div>
                     </div>
-                    <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm">
+                    <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm self-start md:self-auto overflow-x-auto max-w-full">
                         {timeframes.map(t => (
                             <button
                                 key={t}
                                 onClick={() => setTimeframe(t)}
-                                className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest transition-all ${timeframe === t
+                                className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest transition-all whitespace-nowrap ${timeframe === t
                                     ? 'bg-primary text-white shadow-md'
                                     : 'text-primary/30 hover:text-primary/50'
                                     }`}
@@ -500,49 +500,105 @@ function MinerPerformanceView({ minerUid, minerVaults, winRateData, token0Symbol
                 </div>
             </div>
 
-            <div className="bg-white p-8 rounded-[40px] border border-cream-dark shadow-sm text-primary">
+            <div className="bg-white p-6 md:p-8 rounded-3xl md:rounded-[40px] border border-cream-dark shadow-sm text-primary">
                 <div className="flex justify-between items-center mb-6">
                     <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/30">Active Vaults by Miner</span>
                     <LayoutGrid size={14} className="text-primary/20" />
                 </div>
                 <div className="border-t border-dashed border-cream-dark/50 mb-6" />
 
-                <table className="w-full text-[10px] font-bold">
-                    <thead>
-                        <tr className="text-primary/20 text-left border-b border-cream-dark/30">
-                            <th className="pb-4 uppercase tracking-widest">Vault No.</th>
-                            <th className="pb-4 uppercase tracking-widest">Pair</th>
-                            <th className="pb-4 uppercase tracking-widest">Chain</th>
-                            <th className="pb-4 uppercase tracking-widest">TVL USD</th>
-                            <th className="pb-4 uppercase tracking-widest">Fees USD</th>
-                            <th className="pb-4 uppercase tracking-widest">APY USD</th>
-                            <th className="pb-4 uppercase tracking-widest">Benchmark</th>
-                            <th className="pb-4"></th>
-                        </tr>
-                    </thead>
-                    <tbody className="text-primary">
-                        {(minerVaults?.vaults || []).map((vault: any, i: number) => (
-                            <tr key={i} className="hover:bg-cream/20 transition-colors border-b border-cream-dark/10 last:border-0 group cursor-pointer"
-                                onClick={() => router.push(`/admin/miners/${minerUid}?pair=${vault.job_id}`)}>
-                                <td className="py-5 font-black">Vault #{vault.vault_id}</td>
-                                <td className="py-5 uppercase tracking-wide">
-                                    <Link href={`/admin/pairs/${vault.job_id}`} className="hover:underline hover:text-blue-600 transition-all"
-                                        onClick={(e) => e.stopPropagation()}>
+                {/* Mobile Card View */}
+                <div className="md:hidden space-y-4">
+                    {(minerVaults?.vaults || []).map((vault: any, i: number) => (
+                        <div
+                            key={i}
+                            className="bg-cream/5 border border-cream-dark/50 rounded-2xl p-5 cursor-pointer hover:border-primary/20 transition-all"
+                            onClick={() => router.push(`/admin/miners/${minerUid}?pair=${vault.job_id}`)}
+                        >
+                            <div className="flex justify-between items-start mb-4">
+                                <div>
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Vault No.</div>
+                                    <div className="text-sm font-black text-primary">#{vault.vault_id}</div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Chain</div>
+                                    <div className="flex items-center space-x-1.5 bg-cream-dark/20 px-2.5 py-1 rounded-lg">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                                        <span className="text-[10px] font-black uppercase tracking-tighter opacity-70">Base</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Pair</div>
+                                    <Link
+                                        href={`/admin/pairs/${vault.job_id}`}
+                                        className="text-xs font-black text-primary hover:underline hover:text-blue-600 truncate block"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
                                         {vault.pair_name}
                                     </Link>
-                                </td>
-                                <td className="py-5 opacity-40 uppercase">Base</td>
-                                <td className="py-5 font-black">$0</td>
-                                <td className="py-5 text-blue-600 font-black">$0</td>
-                                <td className="py-5">42.5%</td>
-                                <td className="py-5 opacity-30">21.5%</td>
-                                <td className="py-5 text-right">
-                                    <ChevronRight size={14} className="text-primary/20 group-hover:text-primary transition-colors inline" />
-                                </td>
+                                </div>
+                                <div>
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">APY (USD)</div>
+                                    <div className="text-xs font-black text-primary">42.5%</div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 border-t border-dashed border-cream-dark/50 pt-4">
+                                <div>
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">TVL</div>
+                                    <div className="text-xs font-black text-primary">$0</div>
+                                </div>
+                                <div>
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Fees</div>
+                                    <div className="text-xs font-black text-blue-600">$0</div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-[10px] font-bold min-w-[700px]">
+                        <thead>
+                            <tr className="text-primary/20 text-left border-b border-cream-dark/30">
+                                <th className="pb-4 uppercase tracking-widest">Vault No.</th>
+                                <th className="pb-4 uppercase tracking-widest">Pair</th>
+                                <th className="pb-4 uppercase tracking-widest">Chain</th>
+                                <th className="pb-4 uppercase tracking-widest">TVL USD</th>
+                                <th className="pb-4 uppercase tracking-widest">Fees USD</th>
+                                <th className="pb-4 uppercase tracking-widest">APY USD</th>
+                                <th className="pb-4 uppercase tracking-widest">Benchmark</th>
+                                <th className="pb-4"></th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="text-primary">
+                            {(minerVaults?.vaults || []).map((vault: any, i: number) => (
+                                <tr key={i} className="hover:bg-cream/20 transition-colors border-b border-cream-dark/10 last:border-0 group cursor-pointer"
+                                    onClick={() => router.push(`/admin/miners/${minerUid}?pair=${vault.job_id}`)}>
+                                    <td className="py-5 font-black">Vault #{vault.vault_id}</td>
+                                    <td className="py-5 uppercase tracking-wide">
+                                        <Link href={`/admin/pairs/${vault.job_id}`} className="hover:underline hover:text-blue-600 transition-all"
+                                            onClick={(e) => e.stopPropagation()}>
+                                            {vault.pair_name}
+                                        </Link>
+                                    </td>
+                                    <td className="py-5 opacity-40 uppercase">Base</td>
+                                    <td className="py-5 font-black">$0</td>
+                                    <td className="py-5 text-blue-600 font-black">$0</td>
+                                    <td className="py-5">42.5%</td>
+                                    <td className="py-5 opacity-30">21.5%</td>
+                                    <td className="py-5 text-right">
+                                        <ChevronRight size={14} className="text-primary/20 group-hover:text-primary transition-colors inline" />
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );
@@ -550,7 +606,7 @@ function MinerPerformanceView({ minerUid, minerVaults, winRateData, token0Symbol
 
 function MiniStatBox({ label, value }: { label: string; value: string }) {
     return (
-        <div className="bg-white p-6 rounded-[32px] border border-cream-dark shadow-sm flex flex-col justify-between h-full hover:bg-cream/5 transition-all duration-300">
+        <div className="bg-white p-6 rounded-2xl md:rounded-[32px] border border-cream-dark shadow-sm flex flex-col justify-between h-full hover:bg-cream/5 transition-all duration-300">
             <span className="text-[9px] font-black text-primary/30 uppercase tracking-[0.15em] mb-4 leading-none">
                 {label}
             </span>
@@ -563,9 +619,9 @@ function MiniStatBox({ label, value }: { label: string; value: string }) {
 
 function InventoryRow({ label, tokens, value, isBlue }: { label: string; tokens: string; value: string; isBlue?: boolean }) {
     return (
-        <div className="flex items-center justify-between text-[11px] font-bold">
+        <div className="flex flex-col md:flex-row md:items-center justify-between text-[11px] font-bold gap-1 md:gap-0">
             <span className="text-primary/20 uppercase tracking-widest w-40">{label}</span>
-            <div className="flex-1 flex justify-between items-center ml-10">
+            <div className="flex-1 flex justify-between items-center md:ml-10 w-full md:w-auto">
                 <span className="text-primary uppercase tracking-tight">{tokens}</span>
                 <span className={`${isBlue ? 'text-blue-600' : 'text-primary'} font-black text-xs`}>{value}</span>
             </div>

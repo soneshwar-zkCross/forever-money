@@ -34,8 +34,8 @@ export default function MinersPage() {
         >
             <div className="space-y-6 animate-fade-in pb-20">
                 {/* Top Bar - Sort & Timeframe */}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4 text-[10px] font-bold uppercase tracking-widest text-primary">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center space-x-4 text-[10px] font-bold uppercase tracking-widest text-primary w-full md:w-auto justify-between md:justify-start">
                         <span className="text-primary/40">Sort By</span>
                         <div className="relative">
                             <button
@@ -66,12 +66,12 @@ export default function MinersPage() {
                     </div>
 
                     {/* Timeframe Toggle */}
-                    <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm">
+                    <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm self-start md:self-auto overflow-x-auto max-w-full">
                         {timeframes.map(t => (
                             <button
                                 key={t}
                                 onClick={() => setTimeframe(t)}
-                                className={`px-4 py-1.5 rounded-lg text-[10px] font-black tracking-widest transition-all ${timeframe === t
+                                className={`px-4 py-1.5 rounded-lg text-[10px] font-black tracking-widest transition-all whitespace-nowrap ${timeframe === t
                                     ? 'bg-primary text-white shadow-md'
                                     : 'text-primary/30 hover:text-primary/50'
                                     }`}

@@ -47,7 +47,7 @@ export default function MetricsPage() {
                 </div>
 
                 {/* Emissions Breakdown */}
-                <div className="bg-white rounded-[40px] border border-cream-dark shadow-sm p-10">
+                <div className="bg-white rounded-3xl md:rounded-[40px] border border-cream-dark shadow-sm p-6 md:p-10">
                     <div className="flex items-center space-x-4 mb-8">
                         <div className="p-3 bg-cream rounded-2xl text-primary/40">
                             <TrendingUp size={24} />
@@ -96,7 +96,7 @@ export default function MetricsPage() {
                 </div>
 
                 {/* Top Earners */}
-                <div className="bg-white rounded-[40px] border border-cream-dark shadow-sm p-10">
+                <div className="bg-white rounded-3xl md:rounded-[40px] border border-cream-dark shadow-sm p-6 md:p-10">
                     <div className="flex items-center space-x-4 mb-8">
                         <div className="p-3 bg-cream rounded-2xl text-primary/40">
                             <Award size={24} />
@@ -142,7 +142,7 @@ export default function MetricsPage() {
                 </div>
 
                 {/* Pair Performance */}
-                <div className="bg-primary text-white rounded-[40px] shadow-xl p-10 relative overflow-hidden group">
+                <div className="bg-primary text-white rounded-3xl md:rounded-[40px] shadow-xl p-6 md:p-10 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20"></div>
 
                     <div className="relative z-10">
@@ -206,7 +206,7 @@ function MetricCard({
     isLoading?: boolean
 }) {
     return (
-        <div className="bg-white p-8 rounded-[40px] border border-cream-dark shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-500">
+        <div className="bg-white p-8 rounded-3xl md:rounded-[40px] border border-cream-dark shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-500">
             <div className="flex justify-between items-start mb-6">
                 <div className="p-3.5 bg-cream/50 text-primary rounded-2xl">
                     {icon}

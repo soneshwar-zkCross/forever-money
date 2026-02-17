@@ -85,3 +85,18 @@ body {
 .animate-fade-in {
   animation: fadeIn 0.8s ease-out forwards;
 }
+
+@keyframes slideFromLeft {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-from-left {
+  animation: slideFromLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

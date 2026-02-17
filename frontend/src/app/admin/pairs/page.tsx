@@ -37,8 +37,8 @@ export default function PairsPage() {
     ];
 
     const headerActions = (
-        <div className="flex items-center space-x-4">
-            <div className="bg-cream/50 p-1 rounded-xl border border-cream-dark/50 flex space-x-1">
+        <div className="flex items-center space-x-2 md:space-x-4">
+            <div className="hidden md:flex bg-cream/50 p-1 rounded-xl border border-cream-dark/50 space-x-1">
                 <button
                     onClick={() => setViewMode('list')}
                     className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-primary text-white shadow-md' : 'text-primary/30 hover:text-primary/60'}`}
@@ -52,9 +52,9 @@ export default function PairsPage() {
                     <LayoutGrid size={16} />
                 </button>
             </div>
-            <button className="px-5 py-2.5 bg-primary text-white rounded-xl text-[10px] font-black shadow-lg shadow-primary/20 hover:-translate-y-0.5 transition-all flex items-center space-x-2 uppercase tracking-widest active:scale-95">
+            <button className="px-3 md:px-5 py-2.5 bg-primary text-white rounded-xl text-[10px] font-black shadow-lg shadow-primary/20 hover:-translate-y-0.5 transition-all flex items-center space-x-2 uppercase tracking-widest active:scale-95">
                 <RefreshCw size={14} />
-                <span>Sync All Pairs</span>
+                <span className="hidden md:inline">Sync All Pairs</span>
             </button>
         </div>
     );
@@ -73,40 +73,50 @@ export default function PairsPage() {
                     </div>
                 ) : (
                     <>
-                        {viewMode === 'list' ? (
-                            <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden shadow-sm">
-                                <div className="p-8">
-                                    <table className="w-full text-left">
-                                        <thead>
-                                            <tr className="text-[10px] text-primary/30 font-black uppercase tracking-[0.2em] border-b border-cream-dark">
-                                                <th className="pb-4">#</th>
-                                                <th className="pb-4">Pair</th>
-                                                <th className="pb-4">TVL</th>
-                                                <th className="pb-4">Fees Collected</th>
-                                                <th className="pb-4">T1 APY</th>
-                                                <th className="pb-4">T2 APY</th>
-                                                <th className="pb-4">USD APY</th>
-                                                <th className="pb-4">vs HODL</th>
-                                                <th className="pb-4">vs FULL RANGE</th>
-                                                <th className="pb-4">Vaults</th>
-                                                <th className="pb-4"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="text-xs">
-                                            {displayJobs.map((job, i) => (
-                                                <PairRow key={job.job_id} job={job as Job} index={i + 1} />
-                                            ))}
-                                        </tbody>
-                                    </table>
+                        {/* Mobile: Always Grid/Card View */}
+                        <div className="md:hidden grid grid-cols-1 gap-4">
+                            {displayJobs.map((job) => (
+                                <PairCard key={job.job_id} job={job as Job} />
+                            ))}
+                        </div>
+
+                        {/* Desktop: Toggleable List/Grid */}
+                        <div className="hidden md:block">
+                            {viewMode === 'list' ? (
+                                <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden shadow-sm">
+                                    <div className="p-4 md:p-8 overflow-x-auto">
+                                        <table className="w-full text-left min-w-[900px]">
+                                            <thead>
+                                                <tr className="text-[10px] text-primary/30 font-black uppercase tracking-[0.2em] border-b border-cream-dark">
+                                                    <th className="pb-4">#</th>
+                                                    <th className="pb-4">Pair</th>
+                                                    <th className="pb-4">TVL</th>
+                                                    <th className="pb-4">Fees Collected</th>
+                                                    <th className="pb-4">T1 APY</th>
+                                                    <th className="pb-4">T2 APY</th>
+                                                    <th className="pb-4">USD APY</th>
+                                                    <th className="pb-4">vs HODL</th>
+                                                    <th className="pb-4">vs FULL RANGE</th>
+                                                    <th className="pb-4">Vaults</th>
+                                                    <th className="pb-4"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="text-xs">
+                                                {displayJobs.map((job, i) => (
+                                                    <PairRow key={job.job_id} job={job as Job} index={i + 1} />
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                                {displayJobs.map((job) => (
-                                    <PairCard key={job.job_id} job={job as Job} />
-                                ))}
-                            </div>
-                        )}
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+                                    {displayJobs.map((job) => (
+                                        <PairCard key={job.job_id} job={job as Job} />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </>
                 )}
             </div>

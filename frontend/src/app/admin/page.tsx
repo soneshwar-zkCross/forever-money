@@ -75,6 +75,7 @@ export default function DashboardPage() {
         { time: '23:59', m1: 3000, m2: 4200, m3: 2500, m4: 1500, m5: 1200 },
     ];
 
+    // ...
     return (
         <AdminLayout
             title="Dashboard Overview"
@@ -83,22 +84,22 @@ export default function DashboardPage() {
         >
             <div className="space-y-6 animate-fade-in pb-20">
                 {/* Section 1: System Status Bar */}
-                <div className="bg-white border border-cream-dark shadow-sm rounded-2xl p-6">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-12">
+                <div className="bg-white border border-cream-dark shadow-sm rounded-xl md:rounded-2xl p-4 md:p-6 overflow-x-auto">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 min-w-max md:min-w-0">
+                        <div className="flex items-center gap-6 md:gap-12">
                             <StatusIndicator label="API Service" status="online" detail="Latency: 42ms" />
                             <StatusIndicator label="Network DB" status={jobs ? "online" : "offline"} detail={`${jobs?.length || 0} Indexes Synced`} />
                             <StatusIndicator label="Metagraph" status={emissions ? "online" : "syncing"} detail={emissionsLoading ? "Syncing..." : "Live"} />
                             <StatusIndicator label="Emissions" status={emissions && emissions.miner_ratio > 0 ? "online" : "offline"} detail={`${((emissions?.burn_ratio || 0) * 100).toFixed(0)}% Burn Rate`} />
                         </div>
-                        <div className="text-[10px] text-primary/30 font-bold uppercase tracking-[0.2em] bg-cream/50 px-4 py-1.5 rounded-full border border-cream-dark/50 whitespace-nowrap">
+                        <div className="text-[10px] text-primary/30 font-bold uppercase tracking-[0.2em] bg-cream/50 px-4 py-1.5 rounded-full border border-cream-dark/50 whitespace-nowrap w-fit">
                             Last Updated: {new Date().toLocaleTimeString()}
                         </div>
                     </div>
                 </div>
 
                 {/* Section 2: Top Metrics (4 Columns to match image) */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                     <MetricCard label="TVL (USD)" value={`$${(subnetTVL?.total_tvl_usd || 12402156).toLocaleString()}`} change="+4.2%" trend="up" />
                     <MetricCard label="Fees Earned (USD)" value={`$${(subnetRevenue?.total_revenue_usd || 183200).toLocaleString()}`} change="+12.5%" trend="up" />
                     <MetricCard label="Emissions (USD)" value={`$${(emissions?.total_emissions_usd || 0).toLocaleString()}`} change="0%" trend="neutral" />
@@ -106,18 +107,18 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Section 3: Performance Chart */}
-                <div className="bg-white border border-cream-dark shadow-sm p-10 rounded-2xl hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-10">
-                        <div className="flex items-center space-x-6">
+                <div className="bg-white border border-cream-dark shadow-sm p-4 md:p-10 rounded-xl md:rounded-2xl hover:shadow-md transition-shadow">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 md:mb-10 gap-4">
+                        <div className="flex flex-col md:flex-row md:items-center gap-4 md:space-x-6">
                             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-primary/30">Performance Graph</h3>
-                            <div className="h-4 w-px bg-cream-dark"></div>
-                            <div className="flex items-center space-x-6">
+                            <div className="hidden md:block h-4 w-px bg-cream-dark"></div>
+                            <div className="flex items-center gap-3 md:gap-6 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
                                 <ChartLegend label="TVL" color="#3B82F6" active />
                                 <ChartLegend label="Revenue (USD)" color="#0D1117" />
                                 <ChartLegend label="Emissions (USD)" color="#9CA3AF" />
                             </div>
                         </div>
-                        <div className="flex items-center bg-cream/50 p-1 rounded-full border border-cream-dark/50">
+                        <div className="flex items-center bg-cream/50 p-1 rounded-full border border-cream-dark/50 self-start md:self-auto">
                             {['1D', '7D', '30D', 'ALL'].map((tf) => (
                                 <button
                                     key={tf}
@@ -129,16 +130,16 @@ export default function DashboardPage() {
                             ))}
                         </div>
                     </div>
-                    <div className="h-[400px] w-full">
+                    <div className="h-[300px] md:h-[400px] w-full">
                         <PerformanceChart data={performanceData} />
                     </div>
                 </div>
 
                 {/* Section 4: Miner Earnings Chart */}
-                <div className="bg-white border border-cream-dark shadow-sm p-10 rounded-2xl hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-10">
+                <div className="bg-white border border-cream-dark shadow-sm p-4 md:p-10 rounded-xl md:rounded-2xl hover:shadow-md transition-shadow">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 md:mb-10 gap-4">
                         <h3 className="text-xs font-black uppercase tracking-[0.2em] text-primary/30">Miner Earnings (USD)</h3>
-                        <div className="flex items-center bg-cream/50 p-1 rounded-full border border-cream-dark/50">
+                        <div className="flex items-center bg-cream/50 p-1 rounded-full border border-cream-dark/50 self-start md:self-auto">
                             {['1D', '7D', '30D', 'ALL'].map((tf) => (
                                 <button
                                     key={tf}
@@ -149,11 +150,11 @@ export default function DashboardPage() {
                             ))}
                         </div>
                     </div>
-                    <div className="h-[400px] w-full">
+                    <div className="h-[300px] md:h-[400px] w-full">
                         <EarningsChart data={earningsData} />
                     </div>
-                    <div className="mt-8 flex flex-wrap items-center gap-6 pt-8 border-t border-cream-dark/50">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-primary/30">Top Miners</span>
+                    <div className="mt-8 flex flex-wrap items-center gap-4 md:gap-6 pt-8 border-t border-cream-dark/50">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-primary/30 w-full md:w-auto">Top Miners</span>
                         <MinerTag rank={1} hotkey="5F087687363" uid={7} color="#020617" />
                         <MinerTag rank={2} hotkey="5F087687363" uid={7} color="#0C2060" />
                         <MinerTag rank={3} hotkey="5F087687363" uid={7} color="#1A3485" />
@@ -165,8 +166,59 @@ export default function DashboardPage() {
                 {/* Section 5: Performance Tables */}
                 <div className="flex flex-col gap-6">
                     <Panel title="Top Pairs by Revenue" href="/admin/pairs">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
+                        {/* Mobile Card View */}
+                        <div className="md:hidden space-y-4">
+                            {[1, 2, 3, 4, 5].map((i) => (
+                                <div
+                                    key={i}
+                                    className="bg-cream/5 border border-cream-dark/50 rounded-2xl p-5 cursor-pointer hover:border-primary/20 transition-all"
+                                    onClick={() => router.push(`/admin/pairs/1`)}
+                                >
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Pair</div>
+                                            <Link
+                                                href={`/admin/pairs/1`}
+                                                className="text-sm font-black text-primary hover:underline hover:text-blue-600 truncate block"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                cbBTC/USDC
+                                            </Link>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Rank</div>
+                                            <div className="bg-cream-dark/20 px-2 py-1 rounded-lg text-xs font-black text-primary/60">#{i}</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 mb-4">
+                                        <div>
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">TVL</div>
+                                            <div className="text-xs font-black text-primary">$4.2M</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Fees</div>
+                                            <div className="text-xs font-black text-blue-600">$72,350</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 border-t border-dashed border-cream-dark/50 pt-4">
+                                        <div>
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">USD APY</div>
+                                            <div className="text-xs font-black text-primary">38.2%</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Vaults</div>
+                                            <div className="text-xs font-black text-primary/60">12</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block overflow-x-auto">
+                            <table className="w-full text-left min-w-[800px]">
                                 <thead>
                                     <tr className="text-[10px] text-primary/30 font-black uppercase tracking-[0.2em] border-b border-cream-dark">
                                         <th className="pb-4">#</th>
@@ -217,8 +269,55 @@ export default function DashboardPage() {
                     </Panel>
 
                     <Panel title="Top Miners by Earnings" href="/admin/miners">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
+                        {/* Mobile Card View */}
+                        <div className="md:hidden space-y-4">
+                            {[1, 2, 3, 4, 5].map((i) => (
+                                <div
+                                    key={i}
+                                    className="bg-cream/5 border border-cream-dark/50 rounded-2xl p-5 cursor-pointer hover:border-primary/20 transition-all"
+                                    onClick={() => router.push(`/admin/miners/7`)}
+                                >
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Miner</div>
+                                            <Link
+                                                href="/admin/miners/7"
+                                                className="text-sm font-black text-primary hover:underline hover:text-blue-600 truncate block font-mono"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                5F087687363
+                                            </Link>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Rank</div>
+                                            <div className="bg-cream-dark/20 px-2 py-1 rounded-lg text-xs font-black text-primary/60">#{i}</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 mb-4">
+                                        <div>
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">TVL</div>
+                                            <div className="text-xs font-black text-primary">$72,350</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Fees</div>
+                                            <div className="text-xs font-black text-blue-600">$150</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 gap-4 border-t border-dashed border-cream-dark/50 pt-4">
+                                        <div>
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Emissions (USD)</div>
+                                            <div className="text-xs font-black text-primary">$350</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block overflow-x-auto">
+                            <table className="w-full text-left min-w-[600px]">
                                 <thead>
                                     <tr className="text-[10px] text-primary/30 font-black uppercase tracking-[0.2em] border-b border-cream-dark">
                                         <th className="pb-4">#</th>
@@ -275,7 +374,7 @@ function StatusIndicator({ label, status, detail }: { label: string, status: 'on
 
 function MetricCard({ label, value, change, trend }: { label: string; value: string; change: string; trend: 'up' | 'down' | 'neutral' }) {
     return (
-        <div className="bg-white border border-cream-dark p-8 rounded-2xl shadow-sm hover:shadow-md hover:-translate-y-1 transition-all group">
+        <div className="bg-white border border-cream-dark p-8 rounded-xl md:rounded-2xl shadow-sm hover:shadow-md hover:-translate-y-1 transition-all group">
             <div className="flex items-center justify-between mb-4">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/20 group-hover:text-primary/40 transition-colors">{label}</p>
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center bg-cream/50`}>
@@ -315,7 +414,7 @@ function MinerTag({ rank, hotkey, uid, color }: { rank: number, hotkey: string, 
 
 function Panel({ title, href, children }: { title: string; href?: string; children: React.ReactNode }) {
     return (
-        <div className="bg-white border border-cream-dark rounded-2xl overflow-hidden shadow-sm flex flex-col h-full hover:shadow-md transition-shadow">
+        <div className="bg-white border border-cream-dark rounded-xl md:rounded-2xl overflow-hidden shadow-sm flex flex-col h-full hover:shadow-md transition-shadow">
             <div className="px-8 py-6 border-b border-cream-dark flex items-center justify-between">
                 <h3 className="text-[10px] font-black text-primary/30 uppercase tracking-[0.2em]">{title}</h3>
                 {href && (
