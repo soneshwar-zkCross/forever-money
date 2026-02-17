@@ -8,6 +8,8 @@ import logging
 from datetime import datetime, timedelta, date, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
+
+from tortoise.exceptions import IntegrityError
 from pydantic import BaseModel
 
 from validator.models.job import (
@@ -20,6 +22,7 @@ from validator.models.job import (
     RoundType,
     RoundStatus,
 )
+from validator.services.scorer import Scorer
 
 logger = logging.getLogger(__name__)
 
@@ -72,33 +75,52 @@ class JobRepository:
         start_block: int,
     ) -> Round:
         """
-        Create a new round for a job or return existing one.
+        Create a new round for a job.
 
         Args:
             job: Job to create round for
             round_type: RoundType.EVALUATION or RoundType.LIVE
-            round_number: Sequential round number
+            round_number: Suggested round number (may be bumped if lost race)
             start_block: Start block for the round
         Returns:
-            Created Round object
+            Created Round object (always a new round, never existing)
         """
         start_time = datetime.now(timezone.utc)
         round_deadline = start_time + timedelta(seconds=job.round_duration_seconds)
-        round_id = f"{job.job_id}_{round_type.value}_{round_number}_{int(start_time.timestamp())}"
+        round_number_to_try = round_number
+        max_retries = 20
 
-        round_obj = await Round.create(
-            round_id=round_id,
-            job=job,
-            round_type=round_type,
-            round_number=round_number,
-            start_time=start_time,
-            round_deadline=round_deadline,
-            start_block=start_block,
-            status=RoundStatus.ACTIVE,
+        for attempt in range(max_retries):
+            round_id = (
+                f"{job.job_id}_{round_type.value}_{round_number_to_try}_"
+                f"{int(start_time.timestamp())}_{attempt}"
+            )
+            try:
+                round_obj = await Round.create(
+                    round_id=round_id,
+                    job=job,
+                    round_type=round_type,
+                    round_number=round_number_to_try,
+                    start_time=start_time,
+                    round_deadline=round_deadline,
+                    start_block=start_block,
+                    status=RoundStatus.ACTIVE,
+                )
+                logger.info(f"Created {round_type.value} round #{round_number_to_try}")
+                return round_obj
+            except IntegrityError:
+                max_round = (
+                    await Round.filter(job=job, round_type=round_type)
+                    .order_by("-round_number")
+                    .first()
+                )
+                round_number_to_try = (
+                    (max_round.round_number + 1) if max_round else 1
+                )
+        raise RuntimeError(
+            f"Failed to create round after {max_retries} retries "
+            f"(job={job.job_id}, type={round_type.value})"
         )
-
-        logger.info(f"Created {round_type.value} round: {round_id}")
-        return round_obj
 
     async def save_rebalance_decision(
         self,
@@ -391,6 +413,41 @@ class JobRepository:
         )
 
         return round_obj.winner_uid if round_obj else None
+
+    async def get_evaluation_round_ranking(self, job_id: str) -> List[int]:
+        """
+        Get the ranking of miners from the last completed evaluation round.
+        Uses round scores and historic combined_score for tie-breaking
+        (same logic as select_winner).
+
+        Returns:
+            List of miner UIDs in order (best first), or empty list if no round.
+        """
+        job = await Job.get(job_id=job_id)
+        round_obj = (
+            await Round.filter(
+                job=job,
+                round_type=RoundType.EVALUATION,
+                status=RoundStatus.COMPLETED,
+            )
+            .order_by("-round_number")
+            .first()
+        )
+        if not round_obj or not round_obj.performance_data:
+            return []
+        scores_data = round_obj.performance_data.get("scores") or {}
+        if not scores_data:
+            return []
+        round_scores = {
+            int(uid): float(score) for uid, score in scores_data.items()
+        }
+        historic = await self.get_historic_combined_scores(
+            job_id, list(round_scores.keys())
+        )
+        ranked = Scorer.rank_miners_by_score_and_history(
+            round_scores, historic
+        )
+        return [uid for uid, _ in ranked]
 
     async def get_top_miners_by_job(self) -> Dict[str, int]:
         """

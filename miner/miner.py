@@ -22,7 +22,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 
 from protocol.synapses import RebalanceQuery
-from validator.utils.env import MINER_VERSION, NETUID, SUBTENSOR_NETWORK
+from protocol.models import Position
+from validator.utils.env import MINER_VERSION, NETUID, SUBTENSOR_NETWORK, BT_WALLET_PATH
 from validator.utils.math import UniswapV3Math
 
 # Configure logging
@@ -114,9 +115,9 @@ class SN98Miner:
 
         if should_rebalance:
             # Create new position centered on current tick
-            width = 2000 # Configurable width
-            tick_spacing = 200 # Usually 100 or 200 depending on pool
-            
+            width = 2000  # Configurable width
+            tick_spacing = synapse.tick_spacing  # From validator via liq_manager.get_tick_spacing()
+
             # Snap to tick spacing (ticks must be multiples of spacing)
             center_tick = (current_tick // tick_spacing) * tick_spacing
             lower_tick = (center_tick - width) // tick_spacing * tick_spacing
@@ -134,7 +135,8 @@ class SN98Miner:
             synapse.desired_positions = [new_pos]
             logger.info(f"Proposing new position: [{lower_tick}, {upper_tick}]")
         else:
-            synapse.desired_positions = None # Keep current
+            # Keep current positions: return current_positions instead of None
+            synapse.desired_positions = list(synapse.current_positions)
             logger.info("Keeping current positions.")
 
         return synapse
@@ -249,7 +251,7 @@ def get_config():
         "--wallet.hotkey", type=str, required=True, help="Wallet hotkey"
     )
     parser.add_argument(
-        "--wallet.path", type=str, default="~/.bittensor/wallets", help="Wallet path"
+        "--wallet.path", type=str, default=BT_WALLET_PATH, help="Wallet directory (default: BT_WALLET_PATH env or ~/.bittensor/wallets)"
     )
 
     # Network arguments

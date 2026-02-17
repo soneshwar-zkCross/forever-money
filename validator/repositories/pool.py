@@ -453,7 +453,7 @@ class PoolDataDB(DataSource):
         Used for the 30% LP Alignment score.
 
         Returns:
-            Dictionary mapping sn_liquditiy_manager_address to {'fee0': float, 'fee1': float}
+            Dictionary mapping sn_liquidity_manager_address to {'fee0': float, 'fee1': float}
         """
         # Clean addresses
         clean_addresses = [

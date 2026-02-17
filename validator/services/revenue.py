@@ -4,25 +4,8 @@ Revenue Service for tracking vault fees and revenue.
 Tracks accumulated fees from vaults (SNLiquidityManager contracts) by querying
 CollectEvent data from the pool events database.
 """
-
-import sys
-import os
-
-# Setup path for running as script - must be before any validator imports
-# Check if validator module is importable, if not, add project root to path
-try:
-    import validator
-except ImportError:
-    # Add project root to path BEFORE any validator imports
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.abspath(os.path.join(script_dir, "..", ".."))
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
-    os.chdir(project_root)
-
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 from validator.repositories.job import JobRepository
@@ -32,11 +15,42 @@ from validator.utils.web3 import AsyncWeb3Helper
 
 logger = logging.getLogger(__name__)
 
+# Approximate blocks per day by chain (for lookback_days -> block range conversion)
+# Chain IDs: 1=Ethereum, 8453=Base, 137=Polygon, 42161=Arbitrum, 10=Optimism, etc.
+CHAIN_BLOCKS_PER_DAY: Dict[int, int] = {
+    1: 7200,       # Ethereum ~12s/block
+    8453: 43200,   # Base ~2s/block
+    137: 43200,    # Polygon ~2s/block
+    42161: 172800, # Arbitrum ~0.5s/block
+    10: 43200,     # Optimism ~2s/block
+    43114: 28800,  # Avalanche ~3s/block
+    56: 28800,     # BSC ~3s/block
+}
+DEFAULT_BLOCKS_PER_DAY = 43200  # fallback for unknown chains
+
 
 def _normalize_address(addr: str) -> str:
     """Return lowercase address with 0x prefix."""
     s = (addr or "").strip().lower()
     return s if s.startswith("0x") else "0x" + s
+
+
+async def _get_block_range_for_lookback(
+    chain_id: int, lookback_days: int
+) -> Tuple[int, int]:
+    """
+    Get (start_block, end_block) for a lookback period.
+
+    Uses current block from chain and approximate blocks per day.
+    """
+    w3 = AsyncWeb3Helper.make_web3(chain_id)
+    end_block = await w3.web3.eth.block_number
+    blocks_per_day = CHAIN_BLOCKS_PER_DAY.get(
+        chain_id, DEFAULT_BLOCKS_PER_DAY
+    )
+    blocks_in_period = lookback_days * blocks_per_day
+    start_block = max(0, end_block - blocks_in_period)
+    return start_block, end_block
 
 
 async def _resolve_pool_tokens(
@@ -98,8 +112,11 @@ class RevenueService:
             return 0.0
 
         vault_addresses = [j.sn_liquidity_manager_address for j in active_jobs]
-        start_block = 0
-        end_block = 999999999
+        # Use chain from first job; pool_events DB typically indexes one chain
+        chain_id = active_jobs[0].chain_id
+        start_block, end_block = await _get_block_range_for_lookback(
+            chain_id, lookback_days
+        )
 
         try:
             vault_fees = await self.pool_data_db.get_miner_vault_fees(
@@ -257,105 +274,3 @@ class RevenueService:
             total_revenue_usd += fee0_tokens * p0 + fee1_tokens * p1
 
         return total_revenue_usd
-
-
-# Test runner
-if __name__ == "__main__":
-    import asyncio
-    
-    # Imports (path already set up at top of file)
-    from validator.repositories.job import JobRepository
-    from validator.repositories.pool import PoolDataDB, init_pool_events_db
-    from validator.models.job import init_db, close_db
-    from validator.utils.env import (
-        JOBS_POSTGRES_HOST,
-        JOBS_POSTGRES_PORT,
-        JOBS_POSTGRES_DB,
-        JOBS_POSTGRES_USER,
-        JOBS_POSTGRES_PASSWORD,
-    )
-    
-    # Setup logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    
-    async def test_revenue_service():
-        """Test RevenueService functionality."""
-        print("=" * 60)
-        print("Testing RevenueService")
-        print("=" * 60)
-        
-        # Initialize database
-        db_url = (
-            f"postgres://{JOBS_POSTGRES_USER}:{JOBS_POSTGRES_PASSWORD}@"
-            f"{JOBS_POSTGRES_HOST}:{JOBS_POSTGRES_PORT}/{JOBS_POSTGRES_DB}"
-        )
-        
-        try:
-            print("\n1. Initializing database connection...")
-            await init_db(db_url)
-            print("   ✓ Database connected")
-            
-            # Initialize JobRepository
-            print("\n2. Initializing JobRepository...")
-            job_repo = JobRepository()
-            print("   ✓ JobRepository initialized")
-            
-            # Try to initialize PoolDataDB (optional)
-            pool_data_db = None
-            # pool_events_db_url = os.getenv("POOL_EVENTS_DB_URL")
-            pool_events_db_url = db_url
-
-            if pool_events_db_url:
-                try:
-                    print("\n3. Initializing PoolDataDB...")
-                    await init_pool_events_db(pool_events_db_url)
-                    pool_data_db = PoolDataDB()
-                    print("   ✓ PoolDataDB initialized")
-                except Exception as e:
-                    print(f"   ⚠ PoolDataDB not available: {e}")
-                    print("   (RevenueService will work but return 0 revenue)")
-            else:
-                print("\n3. PoolDataDB not configured (POOL_EVENTS_DB_URL not set)")
-                print("   (RevenueService will work but return 0 revenue)")
-            
-            # Initialize RevenueService
-            print("\n4. Initializing RevenueService...")
-            revenue_service = RevenueService(
-                job_repository=job_repo,
-                pool_data_db=pool_data_db,
-            )
-            print("   ✓ RevenueService initialized")
-            
-            # Test get_total_vault_revenue_usd
-            print("\n5. Testing get_total_vault_revenue_usd()...")
-            total_revenue = await revenue_service.get_total_vault_revenue_usd(lookback_days=30)
-            print(f"   Total Vault Revenue (30 days): ${total_revenue:.2f} USD")
-            
-            # Test get_vault_revenue_for_period
-            print("\n6. Testing get_vault_revenue_for_period()...")
-            period_revenue = await revenue_service.get_vault_revenue_for_period(
-                start_block=0,
-                end_block=999999999,
-            )
-            print(f"   Period Revenue: ${period_revenue:.2f} USD")
-            
-            print("\n" + "=" * 60)
-            print("RevenueService test completed!")
-            print("=" * 60)
-            
-        except Exception as e:
-            print(f"\n✗ Error during test: {e}")
-            import traceback
-            traceback.print_exc()
-        finally:
-            # Cleanup
-            try:
-                await close_db()
-            except:
-                pass
-    
-    # Run test
-    asyncio.run(test_revenue_service())

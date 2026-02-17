@@ -28,12 +28,15 @@ from validator.services.liqmanager import SnLiqManagerService
 from validator.utils.web3 import AsyncWeb3Helper
 
 from validator.orchestrator.round_loops import (
-    run_with_miner_for_evaluation,
     run_with_miner_for_live,
+    run_with_miners_batch_for_evaluation,
 )
 from validator.orchestrator.winner import select_winner
 
 logger = logging.getLogger(__name__)
+
+# Max miners to evaluate concurrently per batch (avoids overload with many miners)
+EVALUATION_BATCH_SIZE = 20
 
 
 class AsyncRoundOrchestrator:
@@ -98,7 +101,7 @@ class AsyncRoundOrchestrator:
                 await asyncio.sleep(job.round_duration_seconds)
             except Exception as e:
                 logger.error(f"Error in job {job.job_id}: {e}", exc_info=True)
-                await asyncio.sleep(60)
+                await asyncio.sleep(job.round_duration_seconds)
 
     async def run_evaluation_round(self, job: Job) -> None:
         """Run an evaluation round: backtest miners, score, select winner."""
@@ -107,8 +110,11 @@ class AsyncRoundOrchestrator:
             job.sn_liquidity_manager_address,
             job.pair_address,
         )
+        my_uid = self.config.get("my_uid")
         active_uids = [
-            uid for uid in range(len(self.metagraph.S)) if self.metagraph.S[uid] > 0
+            uid
+            for uid in range(len(self.metagraph.S))
+            if my_uid is None or uid != my_uid
         ]
         if not active_uids:
             logger.warning("No active miners found.")
@@ -116,10 +122,6 @@ class AsyncRoundOrchestrator:
 
         self.round_numbers[job.job_id]["evaluation"] += 1
         round_number = self.round_numbers[job.job_id]["evaluation"]
-        logger.info("=" * 60)
-        logger.info(f"Starting EVALUATION round #{round_number} for job {job.job_id}")
-        logger.info("=" * 60)
-
         current_block = await self._get_latest_block(job.chain_id)
         round_obj = await self.job_repository.create_round(
             job=job,
@@ -127,6 +129,11 @@ class AsyncRoundOrchestrator:
             round_number=round_number,
             start_block=current_block,
         )
+        self.round_numbers[job.job_id]["evaluation"] = round_obj.round_number
+        round_number = round_obj.round_number
+        logger.info("=" * 60)
+        logger.info(f"Starting EVALUATION round #{round_number} for job {job.job_id}")
+        logger.info("=" * 60)
         inventory = await liq_manager.get_inventory()
         initial_positions = await liq_manager.get_current_positions()
         logger.info(f"Loaded {len(initial_positions)} initial positions from on-chain")
@@ -175,19 +182,29 @@ class AsyncRoundOrchestrator:
         return await select_winner(self.job_repository, job_id, scores)
 
     async def run_live_round(self, job: Job) -> None:
-        """Run a live round with the previous evaluation winner."""
-        winner_uid = await self.job_repository.get_previous_winner(job.job_id)
+        """Run a live round with the first eligible miner from evaluation ranking."""
+        ranking = await self.job_repository.get_evaluation_round_ranking(
+            job.job_id
+        )
+        if not ranking:
+            logger.info(
+                f"No evaluation ranking for job {job.job_id}, skipping live round"
+            )
+            return
+        eligible_uids = {
+            s.miner_uid
+            for s in await self.job_repository.get_eligible_miners(job.job_id)
+        }
+        winner_uid = None
+        for uid in ranking:
+            if uid in eligible_uids:
+                winner_uid = uid
+                break
         if winner_uid is None:
-            logger.info(f"No previous winner for job {job.job_id}, skipping live round")
+            logger.info(
+                f"No eligible miners for live round (tried: {ranking}), skipping"
+            )
             return
-        eligible = await self.job_repository.get_eligible_miners(job.job_id)
-        if not any(s.miner_uid == winner_uid for s in eligible):
-            logger.info(f"Miner {winner_uid} not eligible for live round yet")
-            return
-
-        logger.info("=" * 60)
-        logger.info(f"Starting LIVE round for job {job.job_id} with Miner {winner_uid}")
-        logger.info("=" * 60)
 
         self.round_numbers[job.job_id]["live"] += 1
         round_number = self.round_numbers[job.job_id]["live"]
@@ -198,6 +215,13 @@ class AsyncRoundOrchestrator:
             round_number=round_number,
             start_block=current_block,
         )
+        self.round_numbers[job.job_id]["live"] = round_obj.round_number
+        round_number = round_obj.round_number
+        logger.info("=" * 60)
+        logger.info(
+            f"Starting LIVE round #{round_number} for job {job.job_id} with Miner {winner_uid}"
+        )
+        logger.info("=" * 60)
         liq_manager = SnLiqManagerService(
             job.chain_id,
             job.sn_liquidity_manager_address,
@@ -239,6 +263,7 @@ class AsyncRoundOrchestrator:
                         f"Miner {winner_uid} had {execution_failures}/{total_executions} "
                         f"execution failures in live round {round_number}. Score may be inaccurate."
                     )
+                logger.info(f"Miner {winner_uid} live score: {live_score}")
                 await self.job_repository.update_miner_score(
                     job_id=job.job_id,
                     miner_uid=winner_uid,
@@ -278,10 +303,14 @@ class AsyncRoundOrchestrator:
         inventory: Inventory,
         liq_manager,
     ) -> Dict[int, Dict]:
-        """Evaluate all active miners via backtest loops; save decisions and return scores."""
-        tasks = [
-            run_with_miner_for_evaluation(
-                miner_uid=uid,
+        """Evaluate all active miners via batched dendrite calls (up to 20 miners per batch)."""
+        batch_size = EVALUATION_BATCH_SIZE
+        scores: Dict[int, Dict] = {}
+
+        for batch_start in range(0, len(active_uids), batch_size):
+            batch_uids = active_uids[batch_start : batch_start + batch_size]
+            results = await run_with_miners_batch_for_evaluation(
+                miner_uids=batch_uids,
                 job=job,
                 round_=round_,
                 initial_positions=initial_positions,
@@ -295,38 +324,39 @@ class AsyncRoundOrchestrator:
                 backtester=self.backtester,
                 get_block_fn=self._get_latest_block,
             )
-            for uid in active_uids
-        ]
-        results = await asyncio.gather(*tasks)
 
-        scores: Dict[int, Dict] = {}
-        for uid, res in zip(active_uids, results):
-            if res["accepted"]:
+            for uid, res in results.items():
+                score_val = res["score"] if res["accepted"] else 0.0
                 scores[uid] = {
                     "hotkey": self.metagraph.hotkeys[uid],
-                    "score": res["score"],
+                    "score": score_val,
+                    "accepted": res["accepted"],
                     "result": res,
                 }
-                await self.job_repository.save_rebalance_decision(
-                    round_id=round_.round_id,
-                    job_id=job.job_id,
-                    miner_uid=uid,
-                    miner_hotkey=self.metagraph.hotkeys[uid],
-                    accepted=True,
-                    rebalance_data=res["rebalance_history"],
-                    refusal_reason=None,
-                    response_time_ms=res.get("total_query_time_ms", 0),
-                )
-            else:
-                logger.info(f"Miner {uid} refused job: {res.get('refusal_reason')}")
-                await self.job_repository.save_rebalance_decision(
-                    round_id=round_.round_id,
-                    job_id=job.job_id,
-                    miner_uid=uid,
-                    miner_hotkey=self.metagraph.hotkeys[uid],
-                    accepted=False,
-                    rebalance_data=None,
-                    refusal_reason=res.get("refusal_reason"),
-                    response_time_ms=0,
-                )
+                if res["accepted"]:
+                    await self.job_repository.save_rebalance_decision(
+                        round_id=round_.round_id,
+                        job_id=job.job_id,
+                        miner_uid=uid,
+                        miner_hotkey=self.metagraph.hotkeys[uid],
+                        accepted=True,
+                        rebalance_data=res["rebalance_history"],
+                        refusal_reason=None,
+                        response_time_ms=res.get("total_query_time_ms", 0),
+                    )
+                else:
+                    logger.info(
+                        f"Miner {uid} refused job: {res.get('refusal_reason')}"
+                    )
+                    await self.job_repository.save_rebalance_decision(
+                        round_id=round_.round_id,
+                        job_id=job.job_id,
+                        miner_uid=uid,
+                        miner_hotkey=self.metagraph.hotkeys[uid],
+                        accepted=False,
+                        rebalance_data=None,
+                        refusal_reason=res.get("refusal_reason"),
+                        response_time_ms=res.get("total_query_time_ms", 0),
+                    )
+
         return scores
