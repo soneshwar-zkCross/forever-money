@@ -110,20 +110,20 @@ export default function LeaderboardPage() {
 
                                 <div className="grid grid-cols-2 gap-4 border-t border-dashed border-cream-dark/50 pt-4">
                                     <div>
-                                        <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">TVL</div>
-                                        <div className="text-xs font-black text-primary">${(75000 - (idx * 1500)).toLocaleString()}</div>
+                                        <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Combined Score</div>
+                                        <div className="text-xs font-black text-primary">{miner.combined_score.toFixed(6)}</div>
                                     </div>
                                     <div>
-                                        <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Fees</div>
-                                        <div className="text-xs font-black text-blue-600">${(3450 - (idx * 50)).toLocaleString()}</div>
+                                        <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Eval Score</div>
+                                        <div className="text-xs font-black text-blue-600">{miner.evaluation_score.toFixed(6)}</div>
                                     </div>
                                     <div>
-                                        <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Net APY</div>
-                                        <div className="text-xs font-black text-primary">{(21.5 - (idx * 0.2)).toFixed(1)}%</div>
+                                        <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Live Score</div>
+                                        <div className="text-xs font-black text-primary">{miner.live_score.toFixed(6)}</div>
                                     </div>
                                     <div>
-                                        <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Active Vaults</div>
-                                        <div className="text-xs font-black text-primary">{3 + (idx % 3)}</div>
+                                        <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Evaluations</div>
+                                        <div className="text-xs font-black text-primary">{miner.total_evaluations}</div>
                                     </div>
                                 </div>
                             </div>
@@ -137,11 +137,11 @@ export default function LeaderboardPage() {
                                 <tr className="text-[10px] font-black text-primary/30 uppercase tracking-tighter border-b border-cream-dark bg-cream/5">
                                     <th className="px-8 py-4">Rank</th>
                                     <th className="px-8 py-4">Miner ID</th>
-                                    <th className="px-8 py-4">TVL (USD)</th>
-                                    <th className="px-8 py-4">Fees Earned</th>
-                                    <th className="px-8 py-4">Net APY</th>
-                                    <th className="px-8 py-4">Benchmark</th>
-                                    <th className="px-8 py-4">Active Vaults</th>
+                                    <th className="px-8 py-4">Combined Score</th>
+                                    <th className="px-8 py-4">Eval Score</th>
+                                    <th className="px-8 py-4">Live Score</th>
+                                    <th className="px-8 py-4">Evaluations</th>
+                                    <th className="px-8 py-4">Live Rounds</th>
                                     <th className="px-8 py-4">Chains</th>
                                     <th className="px-8 py-4"></th>
                                 </tr>
@@ -173,19 +173,19 @@ export default function LeaderboardPage() {
                                             </div>
                                         </td>
                                         <td className="px-8 py-5 text-[11px] font-black text-primary/80">
-                                            ${(75000 - (idx * 1500)).toLocaleString()}
+                                            {miner.combined_score.toFixed(6)}
                                         </td>
                                         <td className="px-8 py-5 text-[11px] font-black text-blue-600">
-                                            ${(3450 - (idx * 50)).toLocaleString()}
+                                            {miner.evaluation_score.toFixed(6)}
                                         </td>
                                         <td className="px-8 py-5 text-[11px] font-black text-primary/80">
-                                            {(21.5 - (idx * 0.2)).toFixed(1)}%
+                                            {miner.live_score.toFixed(6)}
                                         </td>
                                         <td className="px-8 py-5 text-[11px] font-black text-primary/40">
-                                            {(45.2 - (idx * 0.1)).toFixed(1)}%
+                                            {miner.total_evaluations}
                                         </td>
                                         <td className="px-8 py-5 text-[11px] font-black text-primary/80">
-                                            {3 + (idx % 3)}
+                                            {miner.total_live_rounds}
                                         </td>
                                         <td className="px-8 py-5">
                                             <div className="flex items-center space-x-2">

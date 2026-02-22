@@ -42,7 +42,10 @@ async def lifespan(app: FastAPI):
             'api.models.metrics'  # API-only metrics tables
         ]}
     )
-    await Tortoise.generate_schemas(safe=True)  # Create tables if they don't exist
+    try:
+        await Tortoise.generate_schemas(safe=True)  # Create tables if they don't exist
+    except Exception as e:
+        logger.warning(f"Schema generation skipped (read-only DB?): {e}")
     logger.info("Database connected successfully")
 
     # Initialize Bittensor client

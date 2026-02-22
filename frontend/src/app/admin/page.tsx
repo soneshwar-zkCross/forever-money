@@ -1,44 +1,32 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import AdminLayout from '@/components/layout/AdminLayout';
 import {
     LayoutDashboard,
-    Database,
-    Activity,
-    AlertCircle,
-    CheckCircle2,
-    Clock,
     Zap,
-    Terminal,
-    Cpu,
-    HardDrive,
-    TrendingUp,
-    Users,
-    Layers,
-    RefreshCw,
     ChevronRight,
     ArrowRight
 } from 'lucide-react';
 import {
     useJobs,
-    useLeaderboard,
-    useNetworkStats,
     useSubnetEmissions,
-    useExecutions,
     useSubnetTVL,
-    useSubnetPnL,
     useSubnetRevenue,
     useTopEarners,
-    usePairPerformance
+    useJobTVL,
+    useJobRevenue,
+    useJobAPY,
+    Job
 } from '@/lib/api';
+import { useSubnetMetricsHistory } from '@/lib/metrics-hooks';
 import PerformanceChart from '@/components/charts/PerformanceChart';
 import EarningsChart from '@/components/charts/EarningsChart';
 
 export default function DashboardPage() {
-    const { data: jobs, isLoading: jobsLoading } = useJobs();
+    const { data: jobs } = useJobs();
     const router = useRouter();
     const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
@@ -51,31 +39,54 @@ export default function DashboardPage() {
     const { data: emissions, isLoading: emissionsLoading } = useSubnetEmissions();
     const { data: subnetTVL } = useSubnetTVL();
     const { data: subnetRevenue } = useSubnetRevenue(30);
+    const { data: topEarners } = useTopEarners(5);
 
     const [timeframe, setTimeframe] = useState('30D');
 
-    // Mock chart data (Styled to match the image)
-    const performanceData = [
-        { time: '00:00', value: 4000, value2: 4500 },
-        { time: '04:00', value: 6500, value2: 5800 },
-        { time: '08:00', value: 5500, value2: 5200 },
-        { time: '12:00', value: 7200, value2: 6500 },
-        { time: '16:00', value: 8100, value2: 8500 },
-        { time: '20:00', value: 9500, value2: 9800 },
-        { time: '23:59', value: 12402, value2: 11000 },
-    ];
+    // Map timeframe to days for API
+    const timeframeDays = useMemo(() => {
+        switch (timeframe) {
+            case '1D': return 1;
+            case '7D': return 7;
+            case '30D': return 30;
+            case 'ALL': return 365;
+            default: return 30;
+        }
+    }, [timeframe]);
 
-    const earningsData = [
-        { time: '00:00', m1: 1000, m2: 2000, m3: 800, m4: 500, m5: 300 },
-        { time: '04:00', m1: 1500, m2: 2200, m3: 1200, m4: 700, m5: 400 },
-        { time: '08:00', m1: 1200, m2: 2400, m3: 1100, m4: 600, m5: 500 },
-        { time: '12:00', m1: 1800, m2: 2800, m3: 1500, m4: 900, m5: 700 },
-        { time: '16:00', m1: 2200, m2: 3200, m3: 1800, m4: 1100, m5: 800 },
-        { time: '20:00', m1: 2600, m2: 3800, m3: 2200, m4: 1300, m5: 1000 },
-        { time: '23:59', m1: 3000, m2: 4200, m3: 2500, m4: 1500, m5: 1200 },
-    ];
+    const { data: metricsHistory } = useSubnetMetricsHistory(timeframeDays);
 
-    // ...
+    // Transform metrics history for Performance chart
+    const performanceData = useMemo(() => {
+        if (!metricsHistory?.series?.length) return [];
+        return metricsHistory.series.map(point => ({
+            time: timeframeDays <= 1
+                ? new Date(point.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : new Date(point.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+            value: point.tvl_usd,
+            value2: point.revenue_usd,
+        }));
+    }, [metricsHistory, timeframeDays]);
+
+    // Transform metrics history for Earnings chart using top earner score distribution
+    const earningsData = useMemo(() => {
+        if (!metricsHistory?.series?.length || !topEarners?.length) return [];
+        const percentages = topEarners.slice(0, 5).map(e => e.score_percentage || 0.2);
+        return metricsHistory.series.map(point => {
+            const totalEmissions = point.revenue_usd || 0;
+            return {
+                time: timeframeDays <= 1
+                    ? new Date(point.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : new Date(point.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+                m1: totalEmissions * (percentages[0] || 0),
+                m2: totalEmissions * (percentages[1] || 0),
+                m3: totalEmissions * (percentages[2] || 0),
+                m4: totalEmissions * (percentages[3] || 0),
+                m5: totalEmissions * (percentages[4] || 0),
+            };
+        });
+    }, [metricsHistory, topEarners, timeframeDays]);
+
     return (
         <AdminLayout
             title="Dashboard Overview"
@@ -88,7 +99,7 @@ export default function DashboardPage() {
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 min-w-max md:min-w-0">
                         <div className="flex items-center gap-6 md:gap-12">
                             <StatusIndicator label="API Service" status="online" detail="Latency: 42ms" />
-                            <StatusIndicator label="Network DB" status={jobs ? "online" : "offline"} detail={`${jobs?.length || 0} Indexes Synced`} />
+                            <StatusIndicator label="Network DB" status={jobs ? "online" : "offline"} detail={`${jobs?.length || 0} Jobs Synced`} />
                             <StatusIndicator label="Metagraph" status={emissions ? "online" : "syncing"} detail={emissionsLoading ? "Syncing..." : "Live"} />
                             <StatusIndicator label="Emissions" status={emissions && emissions.miner_ratio > 0 ? "online" : "offline"} detail={`${((emissions?.burn_ratio || 0) * 100).toFixed(0)}% Burn Rate`} />
                         </div>
@@ -98,12 +109,32 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                {/* Section 2: Top Metrics (4 Columns to match image) */}
+                {/* Section 2: Top Metrics (4 Columns) */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-                    <MetricCard label="TVL (USD)" value={`$${(subnetTVL?.total_tvl_usd || 12402156).toLocaleString()}`} change="+4.2%" trend="up" />
-                    <MetricCard label="Fees Earned (USD)" value={`$${(subnetRevenue?.total_revenue_usd || 183200).toLocaleString()}`} change="+12.5%" trend="up" />
-                    <MetricCard label="Emissions (USD)" value={`$${(emissions?.total_emissions_usd || 0).toLocaleString()}`} change="0%" trend="neutral" />
-                    <MetricCard label="Emissions (Alpha)" value={emissions?.total_emissions_alpha ? emissions.total_emissions_alpha.toLocaleString() : "0"} change="-2.1%" trend="down" />
+                    <MetricCard
+                        label="TVL (USD)"
+                        value={`$${(subnetTVL?.total_tvl_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                        change={`${subnetTVL?.vault_count || 0} vaults`}
+                        trend="up"
+                    />
+                    <MetricCard
+                        label="Fees Earned (USD)"
+                        value={`$${(subnetRevenue?.total_revenue_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+                        change={`${subnetRevenue?.vault_count || 0} vaults`}
+                        trend="up"
+                    />
+                    <MetricCard
+                        label="Emissions (USD)"
+                        value={`$${(emissions?.total_emissions_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+                        change={`${((emissions?.burn_ratio || 0) * 100).toFixed(0)}% burn`}
+                        trend="neutral"
+                    />
+                    <MetricCard
+                        label="Emissions (Alpha)"
+                        value={emissions?.total_emissions_alpha?.toLocaleString(undefined, { maximumFractionDigits: 2 }) || "0"}
+                        change={`$${(emissions?.alpha_price_usd || 0).toFixed(4)}/a`}
+                        trend="neutral"
+                    />
                 </div>
 
                 {/* Section 3: Performance Chart */}
@@ -115,7 +146,6 @@ export default function DashboardPage() {
                             <div className="flex items-center gap-3 md:gap-6 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
                                 <ChartLegend label="TVL" color="#3B82F6" active />
                                 <ChartLegend label="Revenue (USD)" color="#0D1117" />
-                                <ChartLegend label="Emissions (USD)" color="#9CA3AF" />
                             </div>
                         </div>
                         <div className="flex items-center bg-cream/50 p-1 rounded-full border border-cream-dark/50 self-start md:self-auto">
@@ -131,7 +161,13 @@ export default function DashboardPage() {
                         </div>
                     </div>
                     <div className="h-[300px] md:h-[400px] w-full">
-                        <PerformanceChart data={performanceData} />
+                        {performanceData.length > 0 ? (
+                            <PerformanceChart data={performanceData} />
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-primary/20 text-xs font-black uppercase tracking-widest">
+                                No performance data available
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -143,7 +179,8 @@ export default function DashboardPage() {
                             {['1D', '7D', '30D', 'ALL'].map((tf) => (
                                 <button
                                     key={tf}
-                                    className={`px-4 py-1.5 text-[10px] font-black rounded-full transition-all ${tf === '30D' ? 'bg-primary text-white shadow-md' : 'text-primary/40'}`}
+                                    onClick={() => setTimeframe(tf)}
+                                    className={`px-4 py-1.5 text-[10px] font-black rounded-full transition-all ${timeframe === tf ? 'bg-primary text-white shadow-md' : 'text-primary/40'}`}
                                 >
                                     {tf}
                                 </button>
@@ -151,15 +188,31 @@ export default function DashboardPage() {
                         </div>
                     </div>
                     <div className="h-[300px] md:h-[400px] w-full">
-                        <EarningsChart data={earningsData} />
+                        {earningsData.length > 0 ? (
+                            <EarningsChart data={earningsData} />
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-primary/20 text-xs font-black uppercase tracking-widest">
+                                No earnings data available
+                            </div>
+                        )}
                     </div>
                     <div className="mt-8 flex flex-wrap items-center gap-4 md:gap-6 pt-8 border-t border-cream-dark/50">
                         <span className="text-[10px] font-black uppercase tracking-widest text-primary/30 w-full md:w-auto">Top Miners</span>
-                        <MinerTag rank={1} hotkey="5F087687363" uid={7} color="#020617" />
-                        <MinerTag rank={2} hotkey="5F087687363" uid={7} color="#0C2060" />
-                        <MinerTag rank={3} hotkey="5F087687363" uid={7} color="#1A3485" />
-                        <MinerTag rank={4} hotkey="5F087687363" uid={7} color="#1E40AF" />
-                        <MinerTag rank={5} hotkey="5F087687363" uid={7} color="#3B82F6" />
+                        {topEarners?.slice(0, 5).map((earner, i) => {
+                            const colors = ['#020617', '#0C2060', '#1A3485', '#1E40AF', '#3B82F6'];
+                            return (
+                                <MinerTag
+                                    key={earner.miner_uid}
+                                    rank={i + 1}
+                                    hotkey={earner.miner_hotkey.slice(0, 11)}
+                                    uid={earner.miner_uid}
+                                    color={colors[i] || '#3B82F6'}
+                                />
+                            );
+                        })}
+                        {!topEarners && (
+                            <span className="text-[10px] text-primary/20 font-bold uppercase tracking-widest">Loading...</span>
+                        )}
                     </div>
                 </div>
 
@@ -168,52 +221,12 @@ export default function DashboardPage() {
                     <Panel title="Top Pairs by Revenue" href="/admin/pairs">
                         {/* Mobile Card View */}
                         <div className="md:hidden space-y-4">
-                            {[1, 2, 3, 4, 5].map((i) => (
-                                <div
-                                    key={i}
-                                    className="bg-cream/5 border border-cream-dark/50 rounded-2xl p-5 cursor-pointer hover:border-primary/20 transition-all"
-                                    onClick={() => router.push(`/admin/pairs/1`)}
-                                >
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div>
-                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Pair</div>
-                                            <Link
-                                                href={`/admin/pairs/1`}
-                                                className="text-sm font-black text-primary hover:underline hover:text-blue-600 truncate block"
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                cbBTC/USDC
-                                            </Link>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Rank</div>
-                                            <div className="bg-cream-dark/20 px-2 py-1 rounded-lg text-xs font-black text-primary/60">#{i}</div>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4 mb-4">
-                                        <div>
-                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">TVL</div>
-                                            <div className="text-xs font-black text-primary">$4.2M</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Fees</div>
-                                            <div className="text-xs font-black text-blue-600">$72,350</div>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4 border-t border-dashed border-cream-dark/50 pt-4">
-                                        <div>
-                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">USD APY</div>
-                                            <div className="text-xs font-black text-primary">38.2%</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Vaults</div>
-                                            <div className="text-xs font-black text-primary/60">12</div>
-                                        </div>
-                                    </div>
-                                </div>
+                            {jobs?.slice(0, 5).map((job, i) => (
+                                <DashboardPairCard key={job.job_id} job={job} index={i + 1} />
                             ))}
+                            {!jobs && (
+                                <div className="text-center py-10 text-primary/20 text-xs font-black uppercase tracking-widest animate-pulse">Loading pairs...</div>
+                            )}
                         </div>
 
                         {/* Desktop Table View */}
@@ -225,43 +238,15 @@ export default function DashboardPage() {
                                         <th className="pb-4">Pair</th>
                                         <th className="pb-4">TVL</th>
                                         <th className="pb-4">Fees Collected</th>
-                                        <th className="pb-4">T1 APY</th>
-                                        <th className="pb-4">T2 APY</th>
                                         <th className="pb-4">USD APY</th>
-                                        <th className="pb-4">vs HODL</th>
-                                        <th className="pb-4">vs FULL RANGE</th>
-                                        <th className="pb-4">Vaults</th>
+                                        <th className="pb-4">Status</th>
+                                        <th className="pb-4">Fee Rate</th>
                                         <th className="pb-4"></th>
                                     </tr>
                                 </thead>
                                 <tbody className="text-xs">
-                                    {[
-                                        { pair: 'cbBTC/USDC', jobId: '1', tvl: '$4.2M', fees: '$72,350', t1: '45.6%', t2: '32.5%', usd: '38.2%', hodl: '54%', range: '54%', vaults: '12' },
-                                        { pair: 'cbBTC/USDC', jobId: '1', tvl: '$3.8M', fees: '$70,350', t1: '42.1%', t2: '35.8%', usd: '39.0%', hodl: '52%', range: '54%', vaults: '8' },
-                                        { pair: 'cbBTC/USDC', jobId: '1', tvl: '$3.5M', fees: '$68,350', t1: '48.3%', t2: '31.2%', usd: '40.1%', hodl: '55%', range: '54%', vaults: '15' },
-                                        { pair: 'cbBTC/USDC', jobId: '1', tvl: '$3.5M', fees: '$68,350', t1: '48.3%', t2: '31.2%', usd: '40.1%', hodl: '55%', range: '54%', vaults: '15' },
-                                        { pair: 'cbBTC/USDC', jobId: '1', tvl: '$3.5M', fees: '$68,350', t1: '48.3%', t2: '31.2%', usd: '40.1%', hodl: '55%', range: '54%', vaults: '15' },
-                                    ].map((row, i) => (
-                                        <tr key={i} className="group hover:bg-cream/30 transition-colors border-b border-cream-dark/30 last:border-0 cursor-pointer"
-                                            onClick={() => router.push(`/admin/pairs/${row.jobId}`)}>
-                                            <td className="py-5 font-black text-primary/20">{i + 1}</td>
-                                            <td className="py-5 font-black">
-                                                <Link href={`/admin/pairs/${row.jobId}`} className="hover:underline hover:text-blue-600 transition-all font-black" onClick={(e) => e.stopPropagation()}>
-                                                    {row.pair}
-                                                </Link>
-                                            </td>
-                                            <td className="py-5 font-bold text-primary/60">{row.tvl}</td>
-                                            <td className="py-5 font-bold text-primary/60">{row.fees}</td>
-                                            <td className="py-5 font-bold text-primary/30">{row.t1}</td>
-                                            <td className="py-5 font-bold text-primary/30">{row.t2}</td>
-                                            <td className="py-5 font-black text-primary">{row.usd}</td>
-                                            <td className="py-5 font-bold text-primary/30">{row.hodl}</td>
-                                            <td className="py-5 font-bold text-primary/30">{row.range}</td>
-                                            <td className="py-5 font-bold text-primary/60">{row.vaults}</td>
-                                            <td className="py-5 text-right">
-                                                <ChevronRight size={14} className="text-primary/20 group-hover:text-primary transition-colors inline" />
-                                            </td>
-                                        </tr>
+                                    {jobs?.slice(0, 5).map((job, i) => (
+                                        <DashboardPairRow key={job.job_id} job={job} index={i + 1} />
                                     ))}
                                 </tbody>
                             </table>
@@ -271,48 +256,51 @@ export default function DashboardPage() {
                     <Panel title="Top Miners by Earnings" href="/admin/miners">
                         {/* Mobile Card View */}
                         <div className="md:hidden space-y-4">
-                            {[1, 2, 3, 4, 5].map((i) => (
+                            {topEarners?.map((earner, i) => (
                                 <div
-                                    key={i}
+                                    key={earner.miner_uid}
                                     className="bg-cream/5 border border-cream-dark/50 rounded-2xl p-5 cursor-pointer hover:border-primary/20 transition-all"
-                                    onClick={() => router.push(`/admin/miners/7`)}
+                                    onClick={() => router.push(`/admin/miners/${earner.miner_uid}`)}
                                 >
                                     <div className="flex justify-between items-start mb-4">
                                         <div>
                                             <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Miner</div>
                                             <Link
-                                                href="/admin/miners/7"
+                                                href={`/admin/miners/${earner.miner_uid}`}
                                                 className="text-sm font-black text-primary hover:underline hover:text-blue-600 truncate block font-mono"
                                                 onClick={(e) => e.stopPropagation()}
                                             >
-                                                5F087687363
+                                                UID {earner.miner_uid} - {earner.miner_hotkey.slice(0, 8)}...
                                             </Link>
                                         </div>
                                         <div className="text-right">
                                             <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Rank</div>
-                                            <div className="bg-cream-dark/20 px-2 py-1 rounded-lg text-xs font-black text-primary/60">#{i}</div>
+                                            <div className="bg-cream-dark/20 px-2 py-1 rounded-lg text-xs font-black text-primary/60">#{i + 1}</div>
                                         </div>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4 mb-4">
                                         <div>
-                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">TVL</div>
-                                            <div className="text-xs font-black text-primary">$72,350</div>
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Earnings (a)</div>
+                                            <div className="text-xs font-black text-primary">{earner.estimated_earnings_alpha.toFixed(4)}</div>
                                         </div>
                                         <div>
-                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Fees</div>
-                                            <div className="text-xs font-black text-blue-600">$150</div>
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Score</div>
+                                            <div className="text-xs font-black text-blue-600">{(earner.score_percentage * 100).toFixed(1)}%</div>
                                         </div>
                                     </div>
 
                                     <div className="grid grid-cols-1 gap-4 border-t border-dashed border-cream-dark/50 pt-4">
                                         <div>
-                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Emissions (USD)</div>
-                                            <div className="text-xs font-black text-primary">$350</div>
+                                            <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Earnings (USD)</div>
+                                            <div className="text-xs font-black text-primary">${earner.estimated_earnings_usd.toFixed(2)}</div>
                                         </div>
                                     </div>
                                 </div>
                             ))}
+                            {!topEarners && (
+                                <div className="text-center py-10 text-primary/20 text-xs font-black uppercase tracking-widest animate-pulse">Loading miners...</div>
+                            )}
                         </div>
 
                         {/* Desktop Table View */}
@@ -322,25 +310,25 @@ export default function DashboardPage() {
                                     <tr className="text-[10px] text-primary/30 font-black uppercase tracking-[0.2em] border-b border-cream-dark">
                                         <th className="pb-4">#</th>
                                         <th className="pb-4">Miner</th>
-                                        <th className="pb-4">Fees</th>
-                                        <th className="pb-4">Emissions(USD)</th>
-                                        <th className="pb-4 text-right pr-4">TVL</th>
+                                        <th className="pb-4">Score</th>
+                                        <th className="pb-4">Earnings (a)</th>
+                                        <th className="pb-4 text-right pr-4">Earnings (USD)</th>
                                         <th className="pb-4"></th>
                                     </tr>
                                 </thead>
                                 <tbody className="text-xs">
-                                    {[1, 2, 3, 4, 5].map((i) => (
-                                        <tr key={i} className="group hover:bg-cream/30 transition-colors border-b border-cream-dark/30 last:border-0 cursor-pointer"
-                                            onClick={() => router.push(`/admin/miners/7`)}>
-                                            <td className="py-5 font-black text-primary/20">{i}</td>
+                                    {topEarners?.map((earner, i) => (
+                                        <tr key={earner.miner_uid} className="group hover:bg-cream/30 transition-colors border-b border-cream-dark/30 last:border-0 cursor-pointer"
+                                            onClick={() => router.push(`/admin/miners/${earner.miner_uid}`)}>
+                                            <td className="py-5 font-black text-primary/20">{i + 1}</td>
                                             <td className="py-5 font-bold text-primary/60">
-                                                <Link href="/admin/miners/7" className="hover:underline hover:text-blue-600 transition-all" onClick={(e) => e.stopPropagation()}>
-                                                    5F087687363
+                                                <Link href={`/admin/miners/${earner.miner_uid}`} className="hover:underline hover:text-blue-600 transition-all" onClick={(e) => e.stopPropagation()}>
+                                                    UID {earner.miner_uid} - {earner.miner_hotkey.slice(0, 8)}...
                                                 </Link>
                                             </td>
-                                            <td className="py-5 font-black text-primary">$150</td>
-                                            <td className="py-5 font-black text-primary">$350</td>
-                                            <td className="py-5 font-black text-primary text-2xl tracking-tighter text-right pr-4">$72,350</td>
+                                            <td className="py-5 font-black text-primary">{(earner.score_percentage * 100).toFixed(1)}%</td>
+                                            <td className="py-5 font-black text-primary">{earner.estimated_earnings_alpha.toFixed(4)} a</td>
+                                            <td className="py-5 font-black text-primary text-2xl tracking-tighter text-right pr-4">${earner.estimated_earnings_usd.toFixed(2)}</td>
                                             <td className="py-5 text-right">
                                                 <ChevronRight size={14} className="text-primary/20 group-hover:text-primary transition-colors inline" />
                                             </td>
@@ -354,6 +342,101 @@ export default function DashboardPage() {
             </div>
         </AdminLayout>
     );
+}
+
+// Dashboard Pair Row - fetches per-job metrics
+function DashboardPairRow({ job, index }: { job: Job, index: number }) {
+    const { data: tvl } = useJobTVL(job.job_id);
+    const { data: revenue } = useJobRevenue(job.job_id, 30);
+    const { data: apy } = useJobAPY(job.job_id, 30);
+    const router = useRouter();
+
+    return (
+        <tr className="group hover:bg-cream/30 transition-colors border-b border-cream-dark/30 last:border-0 cursor-pointer"
+            onClick={() => router.push(`/admin/pairs/${job.job_id}`)}>
+            <td className="py-5 font-black text-primary/20">{index}</td>
+            <td className="py-5 font-black">
+                <Link href={`/admin/pairs/${job.job_id}`} className="hover:underline hover:text-blue-600 transition-all font-black" onClick={(e) => e.stopPropagation()}>
+                    {job.metadata?.pair_name || job.pair_address.slice(0, 10) + '...'}
+                </Link>
+            </td>
+            <td className="py-5 font-bold text-primary/60">{formatUSD(tvl?.tvl_usd || 0)}</td>
+            <td className="py-5 font-bold text-primary/60">${(revenue?.revenue_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+            <td className="py-5 font-black text-primary">{(apy?.apy_percent || 0).toFixed(1)}%</td>
+            <td className="py-5">
+                <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${job.is_active ? 'bg-green-500 text-white shadow-sm shadow-green-200' : 'bg-red-500 text-white shadow-sm shadow-red-200'}`}>
+                    {job.is_active ? 'Active' : 'Inactive'}
+                </span>
+            </td>
+            <td className="py-5 font-bold text-primary/30">{(job.fee_rate * 100).toFixed(1)}%</td>
+            <td className="py-5 text-right">
+                <ChevronRight size={14} className="text-primary/20 group-hover:text-primary transition-colors inline" />
+            </td>
+        </tr>
+    );
+}
+
+// Dashboard Pair Card (mobile)
+function DashboardPairCard({ job, index }: { job: Job, index: number }) {
+    const { data: tvl } = useJobTVL(job.job_id);
+    const { data: revenue } = useJobRevenue(job.job_id, 30);
+    const { data: apy } = useJobAPY(job.job_id, 30);
+    const router = useRouter();
+
+    return (
+        <div
+            className="bg-cream/5 border border-cream-dark/50 rounded-2xl p-5 cursor-pointer hover:border-primary/20 transition-all"
+            onClick={() => router.push(`/admin/pairs/${job.job_id}`)}
+        >
+            <div className="flex justify-between items-start mb-4">
+                <div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Pair</div>
+                    <Link
+                        href={`/admin/pairs/${job.job_id}`}
+                        className="text-sm font-black text-primary hover:underline hover:text-blue-600 truncate block"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {job.metadata?.pair_name || job.pair_address.slice(0, 10) + '...'}
+                    </Link>
+                </div>
+                <div className="text-right">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Rank</div>
+                    <div className="bg-cream-dark/20 px-2 py-1 rounded-lg text-xs font-black text-primary/60">#{index}</div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">TVL</div>
+                    <div className="text-xs font-black text-primary">{formatUSD(tvl?.tvl_usd || 0)}</div>
+                </div>
+                <div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Fees</div>
+                    <div className="text-xs font-black text-blue-600">${(revenue?.revenue_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 border-t border-dashed border-cream-dark/50 pt-4">
+                <div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">USD APY</div>
+                    <div className="text-xs font-black text-primary">{(apy?.apy_percent || 0).toFixed(1)}%</div>
+                </div>
+                <div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Status</div>
+                    <div className={`text-xs font-black ${job.is_active ? 'text-green-600' : 'text-red-500'}`}>
+                        {job.is_active ? 'Active' : 'Inactive'}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// Helper: format USD
+function formatUSD(value: number): string {
+    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `$${(value / 1000).toFixed(1)}k`;
+    return `$${value.toFixed(2)}`;
 }
 
 function StatusIndicator({ label, status, detail }: { label: string, status: 'online' | 'offline' | 'syncing', detail: string }) {
@@ -372,7 +455,7 @@ function StatusIndicator({ label, status, detail }: { label: string, status: 'on
     );
 }
 
-function MetricCard({ label, value, change, trend }: { label: string; value: string; change: string; trend: 'up' | 'down' | 'neutral' }) {
+function MetricCard({ label, value, change }: { label: string; value: string; change: string; trend: 'up' | 'down' | 'neutral' }) {
     return (
         <div className="bg-white border border-cream-dark p-8 rounded-xl md:rounded-2xl shadow-sm hover:shadow-md hover:-translate-y-1 transition-all group">
             <div className="flex items-center justify-between mb-4">
@@ -383,12 +466,7 @@ function MetricCard({ label, value, change, trend }: { label: string; value: str
             </div>
             <div className="flex items-end justify-between">
                 <p className="text-2xl font-black tracking-tighter text-primary">{value}</p>
-                {/* Visual sparkline icon placeholder could go here if needed, matching the image's small gray curves */}
-                <div className="h-4 w-10 opacity-20">
-                    <svg viewBox="0 0 40 16" className="w-full h-full stroke-primary" fill="none">
-                        <path d="M0 12 Q 10 0, 20 8 T 40 4" strokeWidth="2" />
-                    </svg>
-                </div>
+                <span className="text-[9px] font-bold text-primary/30 uppercase tracking-widest">{change}</span>
             </div>
         </div>
     );
@@ -425,30 +503,5 @@ function Panel({ title, href, children }: { title: string; href?: string; childr
             </div>
             <div className="p-8 flex-1">{children}</div>
         </div>
-    );
-}
-
-function MetricRow({ label, value, subtext }: { label: string; value: string; subtext: string }) {
-    return (
-        <div className="flex items-center justify-between py-3.5 border-b border-cream-dark/50 last:border-0 group">
-            <div>
-                <p className="text-xs font-black text-primary group-hover:text-primary-light transition-colors">{label}</p>
-                <p className="text-[10px] text-primary/30 font-bold uppercase tracking-tighter mt-0.5">{subtext}</p>
-            </div>
-            <p className="text-sm font-black text-primary group-hover:text-primary-light transition-colors">{value}</p>
-        </div>
-    );
-}
-
-function Badge({ status }: { status: string }) {
-    const styles: Record<string, string> = {
-        success: 'bg-green-500 text-white shadow-sm shadow-green-200',
-        pending: 'bg-yellow-500 text-white shadow-sm shadow-yellow-200',
-        failed: 'bg-red-500 text-white shadow-sm shadow-red-200',
-    };
-    return (
-        <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${styles[status] || 'bg-primary/5 text-primary/40 border-cream-dark'}`}>
-            {status}
-        </span>
     );
 }

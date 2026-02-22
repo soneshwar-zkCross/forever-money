@@ -16,6 +16,7 @@ import {
     useJobRevenue,
     useJobTVL,
     useJobAPY,
+    useLeaderboard,
     Job
 } from '@/lib/api';
 import Link from 'next/link';
@@ -26,15 +27,7 @@ export default function PairsPage() {
     const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
     const router = useRouter();
 
-    // Displaying jobs with placeholder data for missing fields to match design
-    const displayJobs = jobs || [
-        { job_id: '1', metadata: { pair_name: 'cbBTC/USDC' }, target: 'cbBTC/USDC' },
-        { job_id: '2', metadata: { pair_name: 'cbETH/USDC' }, target: 'cbETH/USDC' },
-        { job_id: '3', metadata: { pair_name: 'cbLTC/USDC' }, target: 'cbLTC/USDC' },
-        { job_id: '4', metadata: { pair_name: 'cbXRP/USDC' }, target: 'cbXRP/USDC' },
-        { job_id: '5', metadata: { pair_name: 'cbADA/USDC' }, target: 'cbADA/USDC' },
-        { job_id: '6', metadata: { pair_name: 'cbSOL/USDC' }, target: 'cbSOL/USDC' },
-    ];
+    const displayJobs = jobs || [];
 
     const headerActions = (
         <div className="flex items-center space-x-2 md:space-x-4">
@@ -127,7 +120,15 @@ export default function PairsPage() {
 function PairRow({ job, index }: { job: Job, index: number }) {
     const { data: tvl } = useJobTVL(job.job_id);
     const { data: revenue } = useJobRevenue(job.job_id, 30);
+    const { data: apy } = useJobAPY(job.job_id, 30);
+    const { data: leaderboard } = useLeaderboard(job.job_id);
     const router = useRouter();
+
+    const formatTVL = (val: number) => {
+        if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`;
+        if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`;
+        return `$${val.toFixed(2)}`;
+    };
 
     return (
         <tr
@@ -140,14 +141,14 @@ function PairRow({ job, index }: { job: Job, index: number }) {
                     {job.metadata?.pair_name || job.target}
                 </Link>
             </td>
-            <td className="py-5 font-bold text-primary/60">${((tvl?.tvl_usd || 4200000) / 1000000).toFixed(1)}M</td>
-            <td className="py-5 font-bold text-primary/60">${(revenue?.revenue_usd || 72350).toLocaleString()}</td>
-            <td className="py-5 font-bold text-primary/30">45.6%</td>
-            <td className="py-5 font-bold text-primary/30">32.5%</td>
-            <td className="py-5 font-black text-primary">38.2%</td>
-            <td className="py-5 font-bold text-primary/30">54%</td>
-            <td className="py-5 font-bold text-primary/30">54%</td>
-            <td className="py-5 font-bold text-primary/60">12</td>
+            <td className="py-5 font-bold text-primary/60">{formatTVL(tvl?.tvl_usd || 0)}</td>
+            <td className="py-5 font-bold text-primary/60">${(revenue?.revenue_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+            <td className="py-5 font-bold text-primary/30">{(apy?.apy_percent_token0 || 0).toFixed(1)}%</td>
+            <td className="py-5 font-bold text-primary/30">{(apy?.apy_percent_token1 || 0).toFixed(1)}%</td>
+            <td className="py-5 font-black text-primary">{(apy?.apy_percent || 0).toFixed(1)}%</td>
+            <td className="py-5 font-bold text-primary/30">-</td>
+            <td className="py-5 font-bold text-primary/30">-</td>
+            <td className="py-5 font-bold text-primary/60">{leaderboard?.length || 0}</td>
             <td className="py-5 text-right">
                 <ChevronRight size={14} className="text-primary/20 group-hover:text-primary transition-colors inline" />
             </td>
@@ -158,7 +159,14 @@ function PairRow({ job, index }: { job: Job, index: number }) {
 function PairCard({ job }: { job: Job }) {
     const { data: tvl } = useJobTVL(job.job_id);
     const { data: revenue } = useJobRevenue(job.job_id, 30);
+    const { data: apy } = useJobAPY(job.job_id, 30);
     const { data: stats } = useNetworkStats(job.job_id);
+
+    const formatTVL = (val: number) => {
+        if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`;
+        if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`;
+        return `$${val.toFixed(2)}`;
+    };
 
     return (
         <Link
@@ -168,7 +176,7 @@ function PairCard({ job }: { job: Job }) {
             <div className="flex justify-between items-start mb-6">
                 <div>
                     <h3 className="text-lg font-black text-primary mb-1">{job.metadata?.pair_name || job.target}</h3>
-                    <p className="text-[10px] font-black text-primary/20 uppercase tracking-widest">Active Pair</p>
+                    <p className="text-[10px] font-black text-primary/20 uppercase tracking-widest">{job.is_active ? 'Active Pair' : 'Inactive Pair'}</p>
                 </div>
                 <div className="bg-primary/5 p-2 rounded-xl">
                     <Terminal size={16} className="text-primary/40" />
@@ -178,26 +186,26 @@ function PairCard({ job }: { job: Job }) {
             <div className="grid grid-cols-2 gap-6 mb-8">
                 <div>
                     <p className="text-[9px] font-black text-primary/20 uppercase tracking-widest mb-1">TVL</p>
-                    <p className="text-lg font-black text-primary">${((tvl?.tvl_usd || 4200000) / 1000000).toFixed(1)}M</p>
+                    <p className="text-lg font-black text-primary">{formatTVL(tvl?.tvl_usd || 0)}</p>
                 </div>
                 <div>
                     <p className="text-[9px] font-black text-primary/20 uppercase tracking-widest mb-1">Revenue</p>
-                    <p className="text-lg font-black text-primary">${((revenue?.revenue_usd || 72350) / 1000).toFixed(1)}k</p>
+                    <p className="text-lg font-black text-primary">${(revenue?.revenue_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
                 </div>
             </div>
 
             <div className="space-y-3 pt-6 border-t border-cream-dark/50">
                 <div className="flex justify-between items-center">
                     <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">USD APY</span>
-                    <span className="text-xs font-black text-primary">38.2%</span>
+                    <span className="text-xs font-black text-primary">{(apy?.apy_percent || 0).toFixed(1)}%</span>
                 </div>
                 <div className="flex justify-between items-center">
                     <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">Miners</span>
-                    <span className="text-xs font-black text-primary">{stats?.total_miners || 24}</span>
+                    <span className="text-xs font-black text-primary">{stats?.total_miners || 0}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">Vs HODL</span>
-                    <span className="text-xs font-black text-green-500">+54%</span>
+                    <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">Fee Rate</span>
+                    <span className="text-xs font-black text-primary">{(job.fee_rate * 100).toFixed(1)}%</span>
                 </div>
             </div>
 

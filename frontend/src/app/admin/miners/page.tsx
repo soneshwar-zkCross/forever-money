@@ -9,7 +9,6 @@ import {
     ChevronDown,
     ArrowRight,
     ExternalLink,
-    Terminal
 } from 'lucide-react';
 import { useJobs, useLeaderboard } from '@/lib/api';
 
@@ -23,8 +22,32 @@ export default function MinersPage() {
     const selectedJobId = jobs?.[0]?.job_id || '';
     const { data: miners, isLoading } = useLeaderboard(selectedJobId);
 
-    const sortOptions = ['Miner ID', 'TVL (USD)', 'Fees Earned', 'Net APY', 'Active Vaults', 'Chains'];
+    const sortOptions = ['Miner ID', 'Combined Score', 'Eval Score', 'Live Score', 'Participation Days'];
     const timeframes = ['1D', '7D', '30D', 'ALL'];
+
+    // Sort miners based on selected option
+    const sortedMiners = React.useMemo(() => {
+        if (!miners) return [];
+        const sorted = [...miners];
+        switch (sortBy) {
+            case 'Miner ID':
+                sorted.sort((a, b) => a.miner_uid - b.miner_uid);
+                break;
+            case 'Combined Score':
+                sorted.sort((a, b) => b.combined_score - a.combined_score);
+                break;
+            case 'Eval Score':
+                sorted.sort((a, b) => b.evaluation_score - a.evaluation_score);
+                break;
+            case 'Live Score':
+                sorted.sort((a, b) => b.live_score - a.live_score);
+                break;
+            case 'Participation Days':
+                sorted.sort((a, b) => b.participation_days - a.participation_days);
+                break;
+        }
+        return sorted;
+    }, [miners, sortBy]);
 
     return (
         <AdminLayout
@@ -89,7 +112,7 @@ export default function MinersPage() {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {miners?.map((miner, i) => (
+                        {sortedMiners?.map((miner) => (
                             <div
                                 key={miner.miner_uid}
                                 className="bg-white p-6 rounded-[32px] border border-cream-dark shadow-sm hover:shadow-md transition-all duration-500 font-bold text-primary group flex flex-col h-full"
@@ -99,10 +122,13 @@ export default function MinersPage() {
                                     <div className="flex items-center space-x-2">
                                         <Link href={`/admin/miners/${miner.miner_uid}`} className="hover:underline transition-all">
                                             <h4 className="text-sm font-black tracking-tight uppercase">
-                                                Miner ID: 5f0...{miner.miner_hotkey.slice(-3)}
+                                                UID {miner.miner_uid} - {miner.miner_hotkey.slice(0, 8)}...
                                             </h4>
                                         </Link>
-                                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
+                                        <span className={`w-1.5 h-1.5 rounded-full shadow-[0_0_8px] ${miner.is_eligible_for_live
+                                            ? 'bg-green-500 shadow-green-500/40'
+                                            : 'bg-yellow-500 shadow-yellow-500/40'
+                                            }`} />
                                     </div>
                                     <Link
                                         href={`/admin/miners/${miner.miner_uid}`}
@@ -115,40 +141,37 @@ export default function MinersPage() {
 
                                 {/* Main Stats - Dashed List */}
                                 <div className="space-y-3.5 pt-5 border-t border-dashed border-cream-dark/50 flex-1">
-                                    <StatRow label="Total Earnings:" value={`$${(18400 - (i * 120)).toLocaleString()}`} isBlue />
-                                    <StatRow label="Alpha Earned:" value={(92000 - (i * 600)).toLocaleString()} isBlue />
-                                    <StatRow label="Jobs Participated:" value={(2742 - i).toLocaleString()} isBlue />
-                                    <StatRow label="TVL (USD):" value={`$${(2742 - i).toLocaleString()}`} isBlue />
-                                    <StatRow label="Net APY:" value={`$${(2742 - i).toLocaleString()}`} isBlue />
+                                    <StatRow label="Combined Score:" value={miner.combined_score.toFixed(6)} isBlue />
+                                    <StatRow label="Eval Score:" value={miner.evaluation_score.toFixed(6)} isBlue />
+                                    <StatRow label="Live Score:" value={miner.live_score.toFixed(6)} isBlue />
+                                    <StatRow label="Total Evaluations:" value={miner.total_evaluations.toLocaleString()} isBlue />
+                                    <StatRow label="Live Rounds:" value={miner.total_live_rounds.toLocaleString()} isBlue />
 
                                     <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-widest pt-1">
                                         <span className="text-primary/20">Chains:</span>
                                         <div className="flex items-center space-x-2">
                                             <ChainBadge name="BASE" icon="/images/base-logo.svg" />
-                                            <ChainBadge name="ETH" icon="/images/eth-logo.svg" />
                                         </div>
                                     </div>
 
                                     <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-widest pt-1">
-                                        <span className="text-primary/20">Active Vaults:</span>
-                                        <span className="text-blue-600">3</span>
+                                        <span className="text-primary/20">Participation Days:</span>
+                                        <span className="text-blue-600">{miner.participation_days}</span>
                                     </div>
                                 </div>
 
-                                {/* Contributions Sub-section */}
+                                {/* Hotkey Sub-section */}
                                 <div className="mt-6 pt-6 border-t border-dashed border-cream-dark/50 shrink-0">
                                     <div className="flex justify-between items-center mb-5">
-                                        <h5 className="text-[9px] font-black uppercase tracking-[0.2em] text-primary/20">Top Jobs Contributions</h5>
+                                        <h5 className="text-[9px] font-black uppercase tracking-[0.2em] text-primary/20">Hotkey</h5>
                                         <div className="flex items-center space-x-1.5 text-primary/40 font-mono text-[10px]">
-                                            <span>0xa23...df45</span>
+                                            <span>{miner.miner_hotkey.slice(0, 6)}...{miner.miner_hotkey.slice(-4)}</span>
                                             <ExternalLink size={10} className="cursor-pointer hover:text-primary transition-colors" />
                                         </div>
                                     </div>
 
                                     <div className="space-y-2.5">
-                                        <ContributionRow label="cbBTC/USDC" value="$6,800" href={`/admin/miners/${miner.miner_uid}?pair=1`} />
-                                        <ContributionRow label="USDC/WETH" value="$4,100" href={`/admin/miners/${miner.miner_uid}?pair=2`} />
-                                        <ContributionRow label="xTAO/USDC" value="$3,900" href={`/admin/miners/${miner.miner_uid}?pair=3`} />
+                                        <ContributionRow label="Eligible for Live" value={miner.is_eligible_for_live ? 'Yes' : 'No'} href={`/admin/miners/${miner.miner_uid}`} />
                                     </div>
                                 </div>
                             </div>
@@ -194,4 +217,3 @@ function ContributionRow({ label, value, href }: { label: string; value: string;
 
     return content;
 }
-
