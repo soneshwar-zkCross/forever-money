@@ -6,8 +6,9 @@ Loads environment variables and provides configuration settings for the API.
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from the project root .env
+_project_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
+load_dotenv(os.path.join(_project_root, ".env"))
 
 # API Settings
 API_TITLE = "SN98 ForeverMoney API"
