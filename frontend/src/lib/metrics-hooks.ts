@@ -166,6 +166,7 @@ export interface MetricsHistoryDataPoint {
     tvl_usd: number;
     revenue_usd: number;
     apy_percent?: number;
+    pnl_usd?: number;
 }
 
 export interface SubnetMetricsHistoryDataPoint {

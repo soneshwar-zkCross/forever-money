@@ -31,6 +31,15 @@ DATABASE_URL = os.getenv("JOBS_DB_URL") or os.getenv("READER_DB_URL") or (
     f"@{JOBS_POSTGRES_HOST}:{JOBS_POSTGRES_PORT}/{JOBS_POSTGRES_DB}"
 )
 
+# Local metrics database (writable, for API-only snapshot tables)
+# Defaults to a SQLite file alongside the API code.
+_metrics_db_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+os.makedirs(_metrics_db_dir, exist_ok=True)
+METRICS_DB_URL = os.getenv(
+    "METRICS_DB_URL",
+    f"sqlite://{os.path.join(_metrics_db_dir, 'metrics.db')}"
+)
+
 # Pagination defaults
 DEFAULT_PAGE_SIZE = 50
-MAX_PAGE_SIZE = 100
+MAX_PAGE_SIZE = 300

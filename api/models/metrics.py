@@ -38,6 +38,7 @@ class MetricsSnapshot(Model):
 
     class Meta:
         table = "metrics_snapshots"
+        app = "metrics"
 
     def __str__(self):
         return f"MetricsSnapshot({self.snapshot_time})"
@@ -89,6 +90,7 @@ class JobMetrics(Model):
 
     class Meta:
         table = "job_metrics"
+        app = "metrics"
         indexes = (
             ("job_id", "calculated_at"),
         )
@@ -131,6 +133,7 @@ class MinerMetrics(Model):
 
     class Meta:
         table = "miner_metrics"
+        app = "metrics"
         indexes = (
             ("miner_uid", "calculated_at"),
         )
@@ -173,6 +176,7 @@ class PairMetrics(Model):
 
     class Meta:
         table = "pair_metrics"
+        app = "metrics"
         indexes = (
             ("pair_address", "calculated_at"),
         )
@@ -209,12 +213,13 @@ class VaultBalanceSnapshot(Model):
     
     class Meta:
         table = "vault_balance_snapshots"
+        app = "metrics"
         indexes = (
             ("job_id", "snapshot_type"),
             ("job_id", "timestamp"),
         )
         unique_together = (("job_id", "snapshot_type"),)  # Only one initial per job
-    
+
     def __str__(self):
         return f"VaultBalanceSnapshot({self.job_id}, {self.snapshot_type}, {self.timestamp})"
 
@@ -249,6 +254,7 @@ class SubnetMetricsSnapshot(Model):
     
     class Meta:
         table = "subnet_metrics_snapshots"
-    
+        app = "metrics"
+
     def __str__(self):
         return f"SubnetMetricsSnapshot({self.snapshot_time})"

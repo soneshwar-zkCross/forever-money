@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+import asyncio
 import time
 import logging
 
@@ -17,7 +18,8 @@ from api.config import (
     API_VERSION,
     API_DESCRIPTION,
     CORS_ORIGINS,
-    DATABASE_URL
+    DATABASE_URL,
+    METRICS_DB_URL,
 )
 from api.routers import jobs, leaderboard, rounds, miners, executions, auth, admin, metrics
 from api.utils.bittensor_client import BittensorClient
@@ -32,21 +34,34 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle startup and shutdown events"""
-    # Startup
-    logger.info("Initializing database connection...")
+    # Startup — dual-database: reader DB (read-only) + local metrics DB (writable)
+    logger.info("Initializing database connections...")
+    logger.info(f"  Reader DB: {DATABASE_URL.split('@')[-1] if '@' in DATABASE_URL else DATABASE_URL}")
+    logger.info(f"  Metrics DB: {METRICS_DB_URL}")
     await Tortoise.init(
-        db_url=DATABASE_URL,
-        modules={'models': [
-            'validator.models.job',
-            'validator.models.pool_events',
-            'api.models.metrics'  # API-only metrics tables
-        ]}
+        config={
+            'connections': {
+                'default': DATABASE_URL,       # Reader DB (read-only, validator tables)
+                'metrics': METRICS_DB_URL,      # Local DB (writable, snapshot tables)
+            },
+            'apps': {
+                'models': {
+                    'models': [
+                        'validator.models.job',
+                        'validator.models.pool_events',
+                    ],
+                    'default_connection': 'default',
+                },
+                'metrics': {
+                    'models': ['api.models.metrics'],
+                    'default_connection': 'metrics',
+                },
+            },
+        }
     )
-    try:
-        await Tortoise.generate_schemas(safe=True)  # Create tables if they don't exist
-    except Exception as e:
-        logger.warning(f"Schema generation skipped (read-only DB?): {e}")
-    logger.info("Database connected successfully")
+    # Only generate schemas on the local metrics DB (reader DB is read-only)
+    await Tortoise.generate_schemas(safe=True)
+    logger.info("Database connections established")
 
     # Initialize Bittensor client
     logger.info("Initializing Bittensor client...")
@@ -54,11 +69,10 @@ async def lifespan(app: FastAPI):
     logger.info("Bittensor client initialized")
 
     # Start background metrics snapshot task
-    # Temporarily disabled - uncomment after testing
-    # logger.info("Starting metrics snapshot background task...")
-    # from api.tasks.metrics_snapshot import snapshot_all_metrics
-    # asyncio.create_task(snapshot_all_metrics(interval_seconds=300))  # 5 minutes
-    # logger.info("Metrics snapshot task started")
+    logger.info("Starting metrics snapshot background task...")
+    from api.tasks.metrics_snapshot import snapshot_all_metrics
+    asyncio.create_task(snapshot_all_metrics(interval_seconds=300))  # 5 minutes
+    logger.info("Metrics snapshot task started")
 
     yield
 

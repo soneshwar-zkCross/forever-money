@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from validator.models.pool_events import SwapEvent
 from validator.models.job import Job
 from api.utils.pool_data_service import PoolDataService
+from api.utils.address import normalize_evt_address
 import logging
 
 logger = logging.getLogger(__name__)
@@ -37,8 +38,9 @@ class CandleService:
             # Get swap events for the last N hours
             cutoff_time = int((datetime.utcnow() - timedelta(hours=lookback_hours)).timestamp())
 
+            # FIX: normalize address (strip 0x) to match reader DB format
             swaps = await SwapEvent.filter(
-                evt_address=job.pair_address,
+                evt_address=normalize_evt_address(job.pair_address),
                 evt_block_time__gte=cutoff_time
             ).order_by("evt_block_time").all()
 

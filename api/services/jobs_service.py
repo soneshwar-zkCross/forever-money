@@ -12,6 +12,8 @@ import logging
 from validator.models.job import Job, Round, MinerScore, RoundStatus, LiveExecution, Prediction
 from validator.models.pool_events import SwapEvent
 from validator.repositories.pool import PoolDataDB
+from api.utils.address import normalize_evt_address
+from api.utils.pool_data_service import POOL_CONFIGS
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +131,28 @@ class JobService:
             Dict with revenue metrics
         """
         if not pool_data_db:
+            # Fallback: try computing revenue from reader DB collects table
+            try:
+                from api.services.reader_db_metrics import ReaderDBMetricsService
+                rev = await ReaderDBMetricsService.get_vault_revenue(
+                    job.pair_address, job.sn_liquidity_manager_address
+                )
+                if rev["revenue_token0"] > 0 or rev["revenue_token1"] > 0:
+                    total_rounds = await Round.filter(job=job).count()
+                    prices = await ReaderDBMetricsService.get_token_prices(job)
+                    revenue_usd = ReaderDBMetricsService.tokens_to_usd(
+                        rev["revenue_token0"], rev["revenue_token1"],
+                        prices["price0"], prices["price1"],
+                    )
+                    return {
+                        "revenue_usd": revenue_usd,
+                        "revenue_token0": rev["revenue_token0"],
+                        "revenue_token1": rev["revenue_token1"],
+                        "avg_revenue_per_round": revenue_usd / total_rounds if total_rounds > 0 else 0.0,
+                    }
+            except Exception as fb_err:
+                logger.debug(f"Reader DB revenue fallback failed: {fb_err}")
+
             logger.warning("PoolDataDB not available, returning 0 revenue")
             return {
                 "revenue_usd": 0.0,
@@ -140,7 +164,7 @@ class JobService:
         try:
             # Get vault fees from pool data
             vault_fees = await pool_data_db.get_miner_vault_fees(
-                sn_liquditiy_manager_addresses=[job.sn_liquidity_manager_address],
+                sn_liquidity_manager_addresses=[job.sn_liquidity_manager_address],
                 start_block=0,
                 end_block=999999999,
             )
@@ -161,9 +185,12 @@ class JobService:
             fee0_tokens = float(fee0_wei) / 1e18
             fee1_tokens = float(fee1_wei) / 1e18
 
-            # Simplified USD conversion (token0 = $1, token1 = $1)
-            # TODO: Use actual token prices from PriceService
-            revenue_usd = fee0_tokens + fee1_tokens
+            # Convert to USD using actual token prices
+            from api.services.reader_db_metrics import ReaderDBMetricsService
+            prices = await ReaderDBMetricsService.get_token_prices(job)
+            revenue_usd = ReaderDBMetricsService.tokens_to_usd(
+                fee0_tokens, fee1_tokens, prices["price0"], prices["price1"]
+            )
 
             # Calculate average revenue per round
             total_rounds = await Round.filter(job=job).count()
@@ -285,6 +312,19 @@ class JobService:
             }
 
     @staticmethod
+    def _get_pool_cfg(pair_address: str) -> dict:
+        """Look up POOL_CONFIGS by pair_address (handles 0x prefix)."""
+        key = pair_address.strip().lower()
+        if not key.startswith("0x"):
+            key = "0x" + key
+        return POOL_CONFIGS.get(key, {
+            "token0": {"symbol": "Token0", "decimals": 18},
+            "token1": {"symbol": "Token1", "decimals": 18},
+            "fee_tier": 0.003,
+            "invert_price": False,
+        })
+
+    @staticmethod
     async def get_pool_price(job: Job) -> Dict[str, Any]:
         """
         Get pool price statistics from swap events.
@@ -295,65 +335,84 @@ class JobService:
         Returns:
             Dict with price statistics
         """
+        _null_price = {
+            "current_price": None,
+            "price_24h_ago": None,
+            "price_24h_high": None,
+            "price_24h_low": None,
+            "price_change_24h": None,
+            "price_change_24h_percent": None,
+            "volume_24h_usd": None,
+            "swap_count_24h": 0,
+            "last_swap_timestamp": None,
+        }
+
         try:
+            # FIX: normalize address (strip 0x) to match reader DB format
+            normalized_addr = normalize_evt_address(job.pair_address)
+            cfg = JobService._get_pool_cfg(job.pair_address)
+            dec0 = cfg["token0"]["decimals"]
+            dec1 = cfg["token1"]["decimals"]
+            decimal_adj = 10 ** (dec0 - dec1)
+
+            def tick_to_price(tick_val):
+                p = (1.0001 ** int(tick_val)) * decimal_adj
+                if cfg.get("invert_price"):
+                    return 1.0 / p if p > 0 else 0.0
+                return p
+
             # Get swap events for last 24 hours
             twenty_four_hours_ago = int((datetime.utcnow() - timedelta(hours=24)).timestamp())
 
             swaps_24h = await SwapEvent.filter(
-                evt_address=job.pair_address,
+                evt_address=normalized_addr,
                 evt_block_time__gte=twenty_four_hours_ago
             ).order_by("evt_block_time")
 
             if not swaps_24h:
+                # Try reader DB fallback
+                try:
+                    from api.services.reader_db_metrics import ReaderDBMetricsService
+                    stats = await ReaderDBMetricsService.get_price_stats_24h(job.pair_address)
+                    if stats.get("current_price") is not None:
+                        vol = await ReaderDBMetricsService.get_volume_24h(job.pair_address)
+                        current_position = await JobService.get_current_position(job)
+                        return {
+                            "current_price": stats["current_price"],
+                            "price_24h_ago": stats["open_price"],
+                            "price_24h_high": stats["high_price"],
+                            "price_24h_low": stats["low_price"],
+                            "price_change_24h": (stats["current_price"] - stats["open_price"]) if stats["open_price"] else None,
+                            "price_change_24h_percent": stats["price_change_percent"],
+                            "volume_24h_usd": vol["volume_token1"],
+                            "swap_count_24h": stats["swap_count"],
+                            "last_swap_timestamp": None,
+                            "current_position": current_position,
+                        }
+                except Exception as fb_err:
+                    logger.debug(f"Reader DB fallback failed for price: {fb_err}")
+
                 current_position = await JobService.get_current_position(job)
-                return {
-                    "current_price": None,
-                    "price_24h_ago": None,
-                    "price_24h_high": None,
-                    "price_24h_low": None,
-                    "price_change_24h": None,
-                    "price_change_24h_percent": None,
-                    "volume_24h_usd": None,
-                    "swap_count_24h": 0,
-                    "last_swap_timestamp": None,
-                    "current_position": current_position,
-                }
+                return {**_null_price, "current_position": current_position}
 
-            # Calculate prices from amount0/amount1 ratios
-            prices = []
-            for swap in swaps_24h:
-                amount0 = float(swap.amount0)
-                amount1 = float(swap.amount1)
+            # Use tick-based pricing (more accurate than amount ratios)
+            ticks = [int(s.tick) for s in swaps_24h]
 
-                # Simple price calculation: |amount1 / amount0|
-                if amount0 != 0:
-                    price = abs(amount1 / amount0)
-                    prices.append(price)
+            current_price = tick_to_price(ticks[-1])
+            price_24h_ago = tick_to_price(ticks[0])
 
-            if not prices:
-                current_position = await JobService.get_current_position(job)
-                return {
-                    "current_price": None,
-                    "price_24h_ago": None,
-                    "price_24h_high": None,
-                    "price_24h_low": None,
-                    "price_change_24h": None,
-                    "price_change_24h_percent": None,
-                    "volume_24h_usd": None,
-                    "swap_count_24h": len(swaps_24h),
-                    "last_swap_timestamp": datetime.fromtimestamp(swaps_24h[-1].evt_block_time) if swaps_24h else None,
-                    "current_position": current_position,
-                }
+            if cfg.get("invert_price"):
+                price_high = tick_to_price(min(ticks))
+                price_low = tick_to_price(max(ticks))
+            else:
+                price_high = tick_to_price(max(ticks))
+                price_low = tick_to_price(min(ticks))
 
-            current_price = prices[-1]
-            price_24h_ago = prices[0]
-            price_high = max(prices)
-            price_low = min(prices)
             price_change = current_price - price_24h_ago
             price_change_percent = (price_change / price_24h_ago * 100) if price_24h_ago != 0 else 0
 
-            # Calculate volume (simplified)
-            volume_24h = sum(abs(float(s.amount1)) / 1e18 for s in swaps_24h)
+            # Calculate volume with proper decimals
+            volume_24h = sum(abs(float(s.amount1)) / (10 ** dec1) for s in swaps_24h)
 
             # Get current position
             current_position = await JobService.get_current_position(job)
@@ -375,18 +434,7 @@ class JobService:
             logger.error(f"Failed to get pool price for {job.job_id}: {e}")
             # Still try to get current position even if price calc fails
             current_position = await JobService.get_current_position(job)
-            return {
-                "current_price": None,
-                "price_24h_ago": None,
-                "price_24h_high": None,
-                "price_24h_low": None,
-                "price_change_24h": None,
-                "price_change_24h_percent": None,
-                "volume_24h_usd": None,
-                "swap_count_24h": 0,
-                "last_swap_timestamp": None,
-                "current_position": current_position,
-            }
+            return {**_null_price, "current_position": current_position}
 
     @staticmethod
     async def get_all_rounds_with_executions(

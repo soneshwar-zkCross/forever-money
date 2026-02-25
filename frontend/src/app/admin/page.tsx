@@ -21,6 +21,7 @@ import {
     useJobAPY,
     Job
 } from '@/lib/api';
+import { formatUsd, formatFeeRate } from '@/lib/format';
 import { useSubnetMetricsHistory } from '@/lib/metrics-hooks';
 import PerformanceChart from '@/components/charts/PerformanceChart';
 import EarningsChart from '@/components/charts/EarningsChart';
@@ -360,7 +361,7 @@ function DashboardPairRow({ job, index }: { job: Job, index: number }) {
                     {job.metadata?.pair_name || job.pair_address.slice(0, 10) + '...'}
                 </Link>
             </td>
-            <td className="py-5 font-bold text-primary/60">{formatUSD(tvl?.tvl_usd || 0)}</td>
+            <td className="py-5 font-bold text-primary/60">{formatUsd(tvl?.tvl_usd)}</td>
             <td className="py-5 font-bold text-primary/60">${(revenue?.revenue_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
             <td className="py-5 font-black text-primary">{(apy?.apy_percent || 0).toFixed(1)}%</td>
             <td className="py-5">
@@ -368,7 +369,7 @@ function DashboardPairRow({ job, index }: { job: Job, index: number }) {
                     {job.is_active ? 'Active' : 'Inactive'}
                 </span>
             </td>
-            <td className="py-5 font-bold text-primary/30">{(job.fee_rate * 100).toFixed(1)}%</td>
+            <td className="py-5 font-bold text-primary/30">{formatFeeRate(job.fee_rate)}</td>
             <td className="py-5 text-right">
                 <ChevronRight size={14} className="text-primary/20 group-hover:text-primary transition-colors inline" />
             </td>
@@ -408,7 +409,7 @@ function DashboardPairCard({ job, index }: { job: Job, index: number }) {
             <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                     <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">TVL</div>
-                    <div className="text-xs font-black text-primary">{formatUSD(tvl?.tvl_usd || 0)}</div>
+                    <div className="text-xs font-black text-primary">{formatUsd(tvl?.tvl_usd)}</div>
                 </div>
                 <div>
                     <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Fees</div>
@@ -430,13 +431,6 @@ function DashboardPairCard({ job, index }: { job: Job, index: number }) {
             </div>
         </div>
     );
-}
-
-// Helper: format USD
-function formatUSD(value: number): string {
-    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-    if (value >= 1000) return `$${(value / 1000).toFixed(1)}k`;
-    return `$${value.toFixed(2)}`;
 }
 
 function StatusIndicator({ label, status, detail }: { label: string, status: 'online' | 'offline' | 'syncing', detail: string }) {

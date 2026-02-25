@@ -267,9 +267,9 @@ async function fetchJobs(): Promise<Job[]> {
     }
 }
 
-async function fetchLeaderboard(jobId: string): Promise<MinerScore[]> {
+async function fetchLeaderboard(jobId: string, limit: number = 100): Promise<MinerScore[]> {
     try {
-        const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/leaderboard?limit=10`);
+        const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/leaderboard?limit=${limit}`);
         if (!res.ok) throw new Error('Failed to fetch leaderboard');
         const data = await res.json();
         return data.leaderboard;
@@ -299,6 +299,17 @@ async function fetchExecutions(jobId: string): Promise<LiveExecution[]> {
     } catch (error) {
         console.warn('API Error (fetchExecutions):', error);
         return [];
+    }
+}
+
+async function fetchAllMiners(limit: number = 300, offset: number = 0, sortBy: string = 'uid'): Promise<{ total_miners: number; miners: MinerScore[] }> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/miners/?limit=${limit}&offset=${offset}&sort_by=${sortBy}`);
+        if (!res.ok) throw new Error('Failed to fetch miners');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchAllMiners):', error);
+        return { total_miners: 0, miners: [] };
     }
 }
 
@@ -551,14 +562,24 @@ export function useJobs() {
     return useQuery({
         queryKey: ['jobs'],
         queryFn: fetchJobs,
+        staleTime: 5 * 60 * 1000,
     });
 }
 
-export function useLeaderboard(jobId: string) {
+export function useLeaderboard(jobId: string, limit: number = 100) {
     return useQuery({
-        queryKey: ['leaderboard', jobId],
-        queryFn: () => fetchLeaderboard(jobId),
+        queryKey: ['leaderboard', jobId, limit],
+        queryFn: () => fetchLeaderboard(jobId, limit),
         enabled: !!jobId,
+        staleTime: 2 * 60 * 1000,
+    });
+}
+
+export function useAllMiners(limit: number = 300, offset: number = 0, sortBy: string = 'uid') {
+    return useQuery({
+        queryKey: ['all-miners', limit, offset, sortBy],
+        queryFn: () => fetchAllMiners(limit, offset, sortBy),
+        staleTime: 2 * 60 * 1000,
     });
 }
 
@@ -567,6 +588,7 @@ export function useNetworkStats(jobId: string) {
         queryKey: ['network-stats', jobId],
         queryFn: () => fetchJobStats(jobId),
         enabled: !!jobId,
+        staleTime: 2 * 60 * 1000,
     });
 }
 
@@ -575,6 +597,7 @@ export function useExecutions(jobId: string) {
         queryKey: ['executions', jobId],
         queryFn: () => fetchExecutions(jobId),
         enabled: !!jobId,
+        staleTime: 5000,
         refetchInterval: 5000, // Refresh every 5s for live feed feel
     });
 }
@@ -584,6 +607,7 @@ export function useSubnetRevenue(lookbackDays: number = 30) {
     return useQuery({
         queryKey: ['subnet-revenue', lookbackDays],
         queryFn: () => fetchSubnetRevenue(lookbackDays),
+        staleTime: 2 * 60 * 1000,
         refetchInterval: 60000, // Refresh every 60s
     });
 }
@@ -592,6 +616,7 @@ export function useSubnetEmissions() {
     return useQuery({
         queryKey: ['subnet-emissions'],
         queryFn: fetchSubnetEmissions,
+        staleTime: 5 * 60 * 1000,
         refetchInterval: 60000, // Refresh every 60s
     });
 }
@@ -600,6 +625,7 @@ export function useTopEarners(limit: number = 10) {
     return useQuery({
         queryKey: ['top-earners', limit],
         queryFn: () => fetchTopEarners(limit),
+        staleTime: 2 * 60 * 1000,
         refetchInterval: 60000, // Refresh every 60s
     });
 }
@@ -608,6 +634,7 @@ export function usePairPerformance() {
     return useQuery({
         queryKey: ['pair-performance'],
         queryFn: fetchPairPerformance,
+        staleTime: 2 * 60 * 1000,
         refetchInterval: 60000, // Refresh every 60s
     });
 }
@@ -617,6 +644,7 @@ export function useJobRevenue(jobId: string, lookbackDays: number = 30) {
         queryKey: ['job-revenue', jobId, lookbackDays],
         queryFn: () => fetchJobRevenue(jobId, lookbackDays),
         enabled: !!jobId,
+        staleTime: 2 * 60 * 1000,
         refetchInterval: 60000,
         retry: 1,
     });
@@ -627,6 +655,7 @@ export function usePoolPrice(jobId: string) {
         queryKey: ['pool-price', jobId],
         queryFn: () => fetchPoolPrice(jobId),
         enabled: !!jobId,
+        staleTime: 30 * 1000,
         refetchInterval: 30000,
         retry: 1,
     });
@@ -637,6 +666,7 @@ export function useAllRounds(jobId: string, limit: number = 50, offset: number =
         queryKey: ['all-rounds', jobId, limit, offset],
         queryFn: () => fetchAllRounds(jobId, limit, offset),
         enabled: !!jobId,
+        staleTime: 2 * 60 * 1000,
         refetchInterval: 60000,
         retry: 1,
     });
@@ -647,6 +677,7 @@ export function useJobTVL(jobId: string) {
         queryKey: ['job-tvl', jobId],
         queryFn: () => fetchJobTVL(jobId),
         enabled: !!jobId,
+        staleTime: 2 * 60 * 1000,
         refetchInterval: 60000,
         retry: 1,
     });
@@ -657,6 +688,7 @@ export function useJobPnL(jobId: string, lookbackDays: number = 30) {
         queryKey: ['job-pnl', jobId, lookbackDays],
         queryFn: () => fetchJobPnL(jobId, lookbackDays),
         enabled: !!jobId,
+        staleTime: 2 * 60 * 1000,
         refetchInterval: 60000,
         retry: 1,
     });
@@ -667,6 +699,7 @@ export function useJobAPY(jobId: string, lookbackDays: number = 30) {
         queryKey: ['job-apy', jobId, lookbackDays],
         queryFn: () => fetchJobAPY(jobId, lookbackDays),
         enabled: !!jobId,
+        staleTime: 2 * 60 * 1000,
         refetchInterval: 60000,
         retry: 1,
     });
@@ -676,6 +709,7 @@ export function useSubnetTVL() {
     return useQuery({
         queryKey: ['subnet-tvl'],
         queryFn: fetchSubnetTVL,
+        staleTime: 2 * 60 * 1000,
         refetchInterval: 60000,
         retry: 1,
     });
@@ -685,6 +719,7 @@ export function useSubnetPnL(lookbackDays: number = 30) {
     return useQuery({
         queryKey: ['subnet-pnl', lookbackDays],
         queryFn: () => fetchSubnetPnL(lookbackDays),
+        staleTime: 2 * 60 * 1000,
         refetchInterval: 60000,
         retry: 1,
     });
@@ -695,6 +730,83 @@ export function useMinerWinRate(uid: number, jobId?: string) {
         queryKey: ['miner-win-rate', uid, jobId],
         queryFn: () => fetchMinerWinRate(uid, jobId),
         enabled: !!uid,
+        staleTime: 2 * 60 * 1000,
+        refetchInterval: 60000,
+        retry: 1,
+    });
+}
+
+// Miner Score History
+
+export interface ScoreHistoryDataPoint {
+    timestamp: string;
+    combined_score: number;
+    evaluation_score: number;
+    live_score: number;
+    round_type: string;
+    rank: number | null;
+}
+
+export interface MinerScoreHistoryResponse {
+    miner_uid: number;
+    data_points: ScoreHistoryDataPoint[];
+}
+
+async function fetchMinerScoreHistory(uid: number): Promise<MinerScoreHistoryResponse> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/miners/${uid}/score-history`);
+        if (!res.ok) throw new Error('Failed to fetch miner score history');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchMinerScoreHistory):', error);
+        return { miner_uid: uid, data_points: [] };
+    }
+}
+
+export function useMinerScoreHistory(uid: number) {
+    return useQuery({
+        queryKey: ['miner-score-history', uid],
+        queryFn: () => fetchMinerScoreHistory(uid),
+        enabled: !!uid,
+        staleTime: 2 * 60 * 1000,
+        refetchInterval: 60000,
+        retry: 1,
+    });
+}
+
+// Miner Metrics History
+
+export interface MinerMetricsDataPoint {
+    timestamp: string;
+    earnings_alpha: number;
+    earnings_usd: number;
+    total_score: number;
+    win_rate: number;
+}
+
+export interface MinerMetricsHistoryResponse {
+    miner_uid: number;
+    timeframe_days: number;
+    series: MinerMetricsDataPoint[];
+}
+
+async function fetchMinerMetricsHistory(uid: number, days: number = 30): Promise<MinerMetricsHistoryResponse> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/miners/${uid}/metrics-history?days=${days}`);
+        if (!res.ok) throw new Error('Failed to fetch miner metrics history');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchMinerMetricsHistory):', error);
+        return { miner_uid: uid, timeframe_days: days, series: [] };
+    }
+}
+
+export function useMinerMetricsHistory(uid: number, days: number = 30) {
+    return useQuery({
+        queryKey: ['miner-metrics-history', uid, days],
+        queryFn: () => fetchMinerMetricsHistory(uid, days),
+        enabled: !!uid,
+        staleTime: 2 * 60 * 1000,
         refetchInterval: 60000,
         retry: 1,
     });
@@ -750,6 +862,7 @@ export function usePoolDataStats(jobId: string, lookbackHours: number = 24) {
         queryKey: ['pool-data-stats', jobId, lookbackHours],
         queryFn: () => fetchPoolDataStats(jobId, lookbackHours),
         enabled: !!jobId,
+        staleTime: 2 * 60 * 1000,
         refetchInterval: 60000, // Refresh every 60s
         retry: 1, // Only retry once since pool data might not be available
     });
@@ -772,6 +885,66 @@ export function useSyncPoolData() {
     return {
         syncPoolData,
     };
+}
+
+// Miner Profile
+
+export interface MinerJobPerformance {
+    job_id: string;
+    pair_name: string | null;
+    combined_score: number;
+    evaluation_score: number;
+    live_score: number;
+    rank: number;
+    participation_days: number;
+    is_eligible_for_live: boolean;
+    total_evaluations: number;
+    total_live_rounds: number;
+    wins: number;
+    first_seen: string;
+    last_active: string;
+}
+
+export interface MinerProfile {
+    miner_uid: number;
+    miner_hotkey: string;
+    total_jobs: number;
+    total_rounds: number;
+    global_win_rate: number;
+    jobs: MinerJobPerformance[];
+    estimated_earnings_alpha: number | null;
+    estimated_earnings_usd: number | null;
+}
+
+async function fetchMinerProfile(uid: number): Promise<MinerProfile> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/miners/${uid}`);
+        if (!res.ok) throw new Error('Failed to fetch miner profile');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchMinerProfile):', error);
+        return {
+            miner_uid: uid,
+            miner_hotkey: '',
+            total_jobs: 0,
+            total_rounds: 0,
+            global_win_rate: 0,
+            jobs: [],
+            estimated_earnings_alpha: null,
+            estimated_earnings_usd: null,
+        };
+    }
+}
+
+export function useMinerProfile(uid: number) {
+    return useQuery({
+        queryKey: ['miner-profile', uid],
+        queryFn: () => fetchMinerProfile(uid),
+        enabled: !!uid,
+        staleTime: 2 * 60 * 1000,
+        refetchInterval: 60000,
+        retry: 1,
+    });
 }
 
 // Miner Vaults
@@ -826,6 +999,7 @@ export function useMinerVaults(uid: number) {
         queryKey: ['miner-vaults', uid],
         queryFn: () => fetchMinerVaults(uid),
         enabled: !!uid,
+        staleTime: 2 * 60 * 1000,
         refetchInterval: 60000,
         retry: 1,
     });

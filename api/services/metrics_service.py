@@ -134,7 +134,7 @@ class MetricsService:
         try:
             # Get vault fees from pool data
             vault_fees = await pool_data_db.get_miner_vault_fees(
-                sn_liquditiy_manager_addresses=[job.sn_liquidity_manager_address],
+                sn_liquidity_manager_addresses=[job.sn_liquidity_manager_address],
                 start_block=0,
                 end_block=999999999,
             )

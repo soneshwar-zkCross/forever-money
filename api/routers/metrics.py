@@ -2,10 +2,13 @@
 Metrics Router
 
 Endpoints for subnet-wide metrics and analytics.
+Handles missing api.models.metrics tables gracefully by falling through
+to direct DB calculations from validator tables.
 """
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Query
+import logging
 
 from api.models.responses import (
     SubnetRevenueResponse,
@@ -21,18 +24,14 @@ from api.models.responses import (
     SubnetPnLResponse,
     ErrorResponse,
 )
-from api.models.metrics import (
-    JobMetrics,
-    MinerMetrics,
-    PairMetrics,
-    SubnetMetricsSnapshot,
-    VaultBalanceSnapshot,
-)
 from api.services.metrics_service import MetricsService
 from api.services.metrics_calculator import MetricsCalculator
+from api.services.reader_db_metrics import ReaderDBMetricsService
 from validator.repositories.job import JobRepository
 from validator.repositories.pool import PoolDataDB
-from validator.models.job import Job
+from validator.models.job import Job, MinerScore, Round, RoundStatus
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -56,38 +55,42 @@ def get_pool_data_db() -> Optional[PoolDataDB]:
         try:
             _pool_data_db = PoolDataDB()
         except Exception:
-            # Pool DB might not be available in all environments
             _pool_data_db = None
     return _pool_data_db
+
+
+async def _try_stored_metrics(query_fn):
+    """Try to query stored metrics tables, return None if tables don't exist."""
+    try:
+        return await query_fn()
+    except Exception as e:
+        if "does not exist" in str(e):
+            logger.debug(f"Stored metrics table not available: {e}")
+            return None
+        raise
 
 
 @router.get("/subnet/revenue", response_model=SubnetRevenueResponse)
 async def get_subnet_revenue(
     lookback_days: int = Query(30, description="Number of days to look back", ge=1, le=365)
 ):
-    """
-    Get total revenue across all vaults in the subnet.
-
-    - **lookback_days**: Number of days to look back for revenue calculation (default: 30)
-
-    Returns subnet-wide revenue metrics with per-vault breakdown.
-    """
+    """Get total revenue across all vaults in the subnet."""
     try:
-        # Try to get data from stored metrics first (for mock data)
-        latest_metrics = await JobMetrics.all().order_by("-calculated_at").limit(100)
+        # Try stored metrics first
+        from api.models.metrics import JobMetrics
+        latest_metrics = await _try_stored_metrics(
+            lambda: JobMetrics.all().order_by("-calculated_at").limit(100)
+        )
 
         if latest_metrics:
-            # Aggregate from stored metrics
             job_metrics_by_id = {}
             for metric in latest_metrics:
                 if metric.job_id not in job_metrics_by_id:
                     job_metrics_by_id[metric.job_id] = metric
 
             total_revenue_usd = sum(m.revenue_usd for m in job_metrics_by_id.values())
-
             vault_revenues = []
             for job_id, metric in job_metrics_by_id.items():
-                # Get job details
                 job = await Job.filter(job_id=job_id).first()
                 if job:
                     vault_revenues.append(VaultRevenueResponse(
@@ -108,44 +111,70 @@ async def get_subnet_revenue(
                 error=None,
             )
 
-        # Fall back to calculating from validator services
-        job_repo = get_job_repository()
-        pool_db = get_pool_data_db()
+        # Fall back: calculate revenue from reader DB collects table
+        all_jobs = await Job.all()
+        vault_revenues = []
+        total_revenue_usd = 0.0
 
-        result = await MetricsService.get_subnet_revenue(
-            job_repository=job_repo,
-            pool_data_db=pool_db,
-            lookback_days=lookback_days,
-        )
-
-        # Convert to response model
-        vault_revenues = [
-            VaultRevenueResponse(**vault) for vault in result["vault_revenues"]
-        ]
+        for j in all_jobs:
+            try:
+                rev = await ReaderDBMetricsService.get_vault_revenue(
+                    j.pair_address, j.sn_liquidity_manager_address
+                )
+                rev0 = rev["revenue_token0"]
+                rev1 = rev["revenue_token1"]
+                prices = await ReaderDBMetricsService.get_token_prices(j)
+                rev_usd = ReaderDBMetricsService.tokens_to_usd(
+                    rev0, rev1, prices["price0"], prices["price1"]
+                )
+                total_revenue_usd += rev_usd
+                vault_revenues.append(VaultRevenueResponse(
+                    job_id=j.job_id,
+                    vault_address=j.sn_liquidity_manager_address,
+                    pair_address=j.pair_address,
+                    revenue_usd=rev_usd,
+                    revenue_token0=rev0,
+                    revenue_token1=rev1,
+                ))
+            except Exception:
+                vault_revenues.append(VaultRevenueResponse(
+                    job_id=j.job_id,
+                    vault_address=j.sn_liquidity_manager_address,
+                    pair_address=j.pair_address,
+                    revenue_usd=0.0,
+                    revenue_token0=0.0,
+                    revenue_token1=0.0,
+                ))
 
         return SubnetRevenueResponse(
-            total_revenue_usd=result["total_revenue_usd"],
-            lookback_days=result["lookback_days"],
-            vault_count=result["vault_count"],
+            total_revenue_usd=total_revenue_usd,
+            lookback_days=lookback_days,
+            vault_count=len(all_jobs),
             vault_revenues=vault_revenues,
-            updated_at=result["updated_at"],
-            error=result.get("error"),
+            updated_at=datetime.now().isoformat(),
+            error=None,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get subnet revenue: {str(e)}")
+        logger.error(f"Failed to get subnet revenue: {e}")
+        return SubnetRevenueResponse(
+            total_revenue_usd=0.0,
+            lookback_days=lookback_days,
+            vault_count=0,
+            vault_revenues=[],
+            updated_at=datetime.now().isoformat(),
+            error=str(e),
+        )
 
 
 @router.get("/subnet/emissions", response_model=SubnetEmissionsResponse)
 async def get_subnet_emissions():
-    """
-    Get subnet emissions breakdown.
-
-    Returns emissions split between burn (UID 0) and active miners,
-    including Alpha amounts, USD values, and burn/miner ratios.
-    """
+    """Get subnet emissions breakdown."""
     try:
-        # Try to get data from stored subnet snapshots first (for mock data)
-        latest_snapshot = await SubnetMetricsSnapshot.all().order_by("-snapshot_time").first()
+        # Try stored snapshots first
+        from api.models.metrics import SubnetMetricsSnapshot
+        latest_snapshot = await _try_stored_metrics(
+            lambda: SubnetMetricsSnapshot.all().order_by("-snapshot_time").first()
+        )
 
         if latest_snapshot:
             return SubnetEmissionsResponse(
@@ -164,40 +193,66 @@ async def get_subnet_emissions():
                 error=None,
             )
 
-        # Fall back to calculating from validator services
-        job_repo = get_job_repository()
-        pool_db = get_pool_data_db()
-
-        result = await MetricsService.get_subnet_emissions(
-            job_repository=job_repo,
-            pool_data_db=pool_db,
-        )
-
-        return SubnetEmissionsResponse(**result)
+        # Fall back to calculating from Bittensor
+        try:
+            job_repo = get_job_repository()
+            pool_db = get_pool_data_db()
+            result = await MetricsService.get_subnet_emissions(
+                job_repository=job_repo,
+                pool_data_db=pool_db,
+            )
+            return SubnetEmissionsResponse(**result)
+        except Exception as calc_err:
+            logger.warning(f"Emissions calculation failed: {calc_err}")
+            # Return zero-value response
+            return SubnetEmissionsResponse(
+                total_emissions_alpha=0.0,
+                total_emissions_usd=0.0,
+                burn_ratio=0.0,
+                miner_ratio=0.0,
+                burn_alpha=0.0,
+                burn_usd=0.0,
+                miner_alpha=0.0,
+                miner_usd=0.0,
+                alpha_price_usd=0.0,
+                vault_revenue_usd=0.0,
+                profit_ratio=0.0,
+                updated_at=datetime.now().isoformat(),
+                error=str(calc_err),
+            )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get subnet emissions: {str(e)}")
+        logger.error(f"Failed to get subnet emissions: {e}")
+        return SubnetEmissionsResponse(
+            total_emissions_alpha=0.0,
+            total_emissions_usd=0.0,
+            burn_ratio=0.0,
+            miner_ratio=0.0,
+            burn_alpha=0.0,
+            burn_usd=0.0,
+            miner_alpha=0.0,
+            miner_usd=0.0,
+            alpha_price_usd=0.0,
+            vault_revenue_usd=0.0,
+            profit_ratio=0.0,
+            updated_at=datetime.now().isoformat(),
+            error=str(e),
+        )
 
 
 @router.get("/top-earners", response_model=List[TopEarnerResponse])
 async def get_top_earners(
     limit: int = Query(10, description="Number of top earners to return", ge=1, le=100)
 ):
-    """
-    Get top earning miners ranked by estimated earnings.
-
-    - **limit**: Number of top earners to return (default: 10, max: 100)
-
-    Returns list of miners with their estimated earnings in Alpha and USD,
-    based on their score contribution to the network.
-    """
+    """Get top earning miners ranked by score from the miner_scores table."""
     try:
-        # Try to get data from stored miner metrics first (for mock data)
-        miner_metrics = await MinerMetrics.all().order_by("-estimated_earnings_alpha").limit(limit)
+        # Try stored miner metrics first
+        from api.models.metrics import MinerMetrics
+        miner_metrics = await _try_stored_metrics(
+            lambda: MinerMetrics.all().order_by("-estimated_earnings_alpha").limit(limit)
+        )
 
         if miner_metrics:
-            # Calculate total score for percentage
             total_score_sum = sum(m.total_score for m in miner_metrics)
-
             return [
                 TopEarnerResponse(
                     miner_uid=m.miner_uid,
@@ -210,46 +265,86 @@ async def get_top_earners(
                 for m in miner_metrics
             ]
 
-        # Fall back to calculating from validator services
-        job_repo = get_job_repository()
-        pool_db = get_pool_data_db()
+        # Fall back: calculate from rounds winners + miner_scores (pure DB)
+        logger.info("Calculating top earners from rounds winners + miner_scores")
 
-        earners = await MetricsService.get_top_earners(
-            job_repository=job_repo,
-            pool_data_db=pool_db,
-            limit=limit,
+        # Get win counts from completed rounds (real performance data)
+        from tortoise.functions import Count
+        conn = MinerScore._meta.db  # type: ignore
+        if conn is None:
+            from tortoise import Tortoise
+            conn = Tortoise.get_connection("default")
+
+        win_rows = await conn.execute_query(
+            "SELECT winner_uid, COUNT(*) as wins FROM rounds "
+            "WHERE winner_uid IS NOT NULL AND status='completed' AND winner_uid != 0 "
+            "GROUP BY winner_uid ORDER BY wins DESC LIMIT $1",
+            [limit],
         )
 
-        return [TopEarnerResponse(**earner) for earner in earners]
+        if win_rows[1]:
+            # Build results from win data + miner_scores for hotkeys
+            results = []
+            total_wins = sum(r["wins"] for r in win_rows[1])
+
+            for row in win_rows[1]:
+                uid = row["winner_uid"]
+                wins = row["wins"]
+                # Get hotkey from miner_scores
+                score = await MinerScore.filter(miner_uid=uid).first()
+                hotkey = score.miner_hotkey if score else f"UID_{uid}"
+
+                results.append(
+                    TopEarnerResponse(
+                        miner_uid=uid,
+                        miner_hotkey=hotkey,
+                        score=float(wins),
+                        estimated_earnings_alpha=0.0,
+                        estimated_earnings_usd=0.0,
+                        score_percentage=wins / total_wins if total_wins > 0 else 0.0,
+                    )
+                )
+            return results
+
+        # Final fallback: use miner_scores directly
+        all_scores = await MinerScore.all().order_by("-combined_score").limit(limit)
+        total_score_sum = sum(float(s.combined_score) for s in all_scores) or 1.0
+
+        return [
+            TopEarnerResponse(
+                miner_uid=s.miner_uid,
+                miner_hotkey=s.miner_hotkey,
+                score=float(s.combined_score),
+                estimated_earnings_alpha=0.0,
+                estimated_earnings_usd=0.0,
+                score_percentage=float(s.combined_score) / total_score_sum if total_score_sum != 0 else 0.0,
+            )
+            for s in all_scores
+        ]
     except Exception as e:
+        logger.error(f"Failed to get top earners: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get top earners: {str(e)}")
 
 
 @router.get("/pairs/performance", response_model=List[PairPerformanceResponse])
 async def get_pair_performance():
-    """
-    Get performance metrics aggregated by trading pair.
-
-    Returns revenue and miner statistics for each pair,
-    sorted by total revenue (descending).
-    """
+    """Get performance metrics aggregated by trading pair (from DB)."""
     try:
-        # Try to get data from stored pair metrics first (for mock data)
-        pair_metrics = await PairMetrics.all().order_by("-total_revenue_usd")
+        # Try stored pair metrics first
+        from api.models.metrics import PairMetrics
+        pair_metrics = await _try_stored_metrics(
+            lambda: PairMetrics.all().order_by("-total_revenue_usd")
+        )
 
         if pair_metrics:
             result = []
             for pair_metric in pair_metrics:
-                # Get job details from breakdown
                 jobs = []
                 if pair_metric.job_breakdown:
                     for job_id, breakdown in pair_metric.job_breakdown.items():
                         job = await Job.filter(job_id=job_id).first()
                         if job:
-                            # Count miners for this job
-                            from validator.models.job import MinerScore
                             miner_count = await MinerScore.filter(job=job).distinct().count()
-
                             jobs.append(PairJobResponse(
                                 job_id=job_id,
                                 vault_address=job.sn_liquidity_manager_address,
@@ -262,65 +357,90 @@ async def get_pair_performance():
                         pair_address=pair_metric.pair_address,
                         vault_count=pair_metric.active_jobs_count,
                         total_revenue_usd=pair_metric.total_revenue_usd,
-                        total_revenue_token0=0.0,  # Not stored in PairMetrics
-                        total_revenue_token1=0.0,  # Not stored in PairMetrics
+                        total_revenue_token0=0.0,
+                        total_revenue_token1=0.0,
                         total_miners=pair_metric.total_miners,
                         jobs=jobs,
                     )
                 )
-
             return result
 
-        # Fall back to calculating from validator services
-        job_repo = get_job_repository()
-        pool_db = get_pool_data_db()
+        # Fall back: calculate directly from Job + MinerScore + reader DB
+        logger.info("Calculating pair performance from validator tables + reader DB")
+        all_jobs = await Job.all()
+        pair_stats = {}
 
-        pairs = await MetricsService.get_pair_performance(
-            job_repository=job_repo,
-            pool_data_db=pool_db,
-        )
+        for job in all_jobs:
+            pair_key = job.pair_address
+            if pair_key not in pair_stats:
+                pair_stats[pair_key] = {
+                    "pair_address": job.pair_address,
+                    "vault_count": 0,
+                    "total_revenue_usd": 0.0,
+                    "total_revenue_token0": 0.0,
+                    "total_revenue_token1": 0.0,
+                    "total_miners": 0,
+                    "jobs": [],
+                }
 
-        # Convert to response model
-        result = []
-        for pair in pairs:
-            jobs = [PairJobResponse(**job) for job in pair["jobs"]]
-            result.append(
-                PairPerformanceResponse(
-                    pair_address=pair["pair_address"],
-                    vault_count=pair["vault_count"],
-                    total_revenue_usd=pair["total_revenue_usd"],
-                    total_revenue_token0=pair["total_revenue_token0"],
-                    total_revenue_token1=pair["total_revenue_token1"],
-                    total_miners=pair["total_miners"],
-                    jobs=jobs,
+            miner_count = await MinerScore.filter(job=job).count()
+
+            # Get real revenue from reader DB
+            job_rev_usd = 0.0
+            try:
+                rev = await ReaderDBMetricsService.get_vault_revenue(
+                    job.pair_address, job.sn_liquidity_manager_address
                 )
-            )
+                prices = await ReaderDBMetricsService.get_token_prices(job)
+                job_rev_usd = ReaderDBMetricsService.tokens_to_usd(
+                    rev["revenue_token0"], rev["revenue_token1"],
+                    prices["price0"], prices["price1"],
+                )
+                pair_stats[pair_key]["total_revenue_usd"] += job_rev_usd
+                pair_stats[pair_key]["total_revenue_token0"] += rev["revenue_token0"]
+                pair_stats[pair_key]["total_revenue_token1"] += rev["revenue_token1"]
+            except Exception:
+                pass
 
-        return result
+            pair_stats[pair_key]["vault_count"] += 1
+            pair_stats[pair_key]["total_miners"] += miner_count
+            pair_stats[pair_key]["jobs"].append(PairJobResponse(
+                job_id=job.job_id,
+                vault_address=job.sn_liquidity_manager_address,
+                revenue_usd=job_rev_usd,
+                miner_count=miner_count,
+            ))
+
+        result = sorted(pair_stats.values(), key=lambda x: x["total_miners"], reverse=True)
+        return [
+            PairPerformanceResponse(
+                pair_address=p["pair_address"],
+                vault_count=p["vault_count"],
+                total_revenue_usd=p["total_revenue_usd"],
+                total_revenue_token0=p["total_revenue_token0"],
+                total_revenue_token1=p["total_revenue_token1"],
+                total_miners=p["total_miners"],
+                jobs=p["jobs"],
+            )
+            for p in result
+        ]
     except Exception as e:
+        logger.error(f"Failed to get pair performance: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get pair performance: {str(e)}")
 
 
 @router.get("/jobs/{job_id}/tvl", response_model=JobTVLResponse)
 async def get_job_tvl(job_id: str):
-    """
-    Get current TVL (Total Value Locked) for a specific job/vault.
+    """Get current TVL for a specific job/vault."""
+    job = await Job.filter(job_id=job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    - **job_id**: Job identifier
-
-    Returns current token balances and USD value locked in the vault.
-    Uses stored metrics if available, otherwise calculates on-chain.
-    """
     try:
         from api.models.metrics import JobMetrics
-        from datetime import datetime
-
-        job = await Job.filter(job_id=job_id).first()
-        if not job:
-            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-
-        # Try to get latest stored metrics first (for test/mock data)
-        latest_metric = await JobMetrics.filter(job_id=job_id).order_by("-calculated_at").first()
+        latest_metric = await _try_stored_metrics(
+            lambda: JobMetrics.filter(job_id=job_id).order_by("-calculated_at").first()
+        )
 
         if latest_metric:
             return JobTVLResponse(
@@ -332,126 +452,151 @@ async def get_job_tvl(job_id: str):
                 token1_price_usd=latest_metric.token1_price_usd,
                 updated_at=latest_metric.calculated_at.isoformat(),
             )
+    except Exception:
+        pass
 
-        # Fall back to on-chain calculation if no stored metrics
+    # Fall back to on-chain calculation
+    try:
         tvl_data = await MetricsCalculator.calculate_job_tvl(job)
+        if tvl_data["tvl_token0"] > 0 or tvl_data["tvl_token1"] > 0:
+            return JobTVLResponse(
+                job_id=job_id,
+                tvl_token0=tvl_data["tvl_token0"],
+                tvl_token1=tvl_data["tvl_token1"],
+                tvl_usd=tvl_data["tvl_usd"],
+                token0_price_usd=tvl_data.get("token0_price_usd", 0.0),
+                token1_price_usd=tvl_data.get("token1_price_usd", 0.0),
+                updated_at=datetime.now().isoformat(),
+            )
+    except Exception:
+        pass
+
+    # Final fallback: approximate TVL from mints - burns in reader DB
+    try:
+        tvl_approx = await ReaderDBMetricsService.get_pool_tvl_approx(job.pair_address, job.sn_liquidity_manager_address)
+        prices = await ReaderDBMetricsService.get_token_prices(job)
+        tvl_usd = ReaderDBMetricsService.tokens_to_usd(
+            tvl_approx["tvl_token0"], tvl_approx["tvl_token1"],
+            prices["price0"], prices["price1"],
+        )
         return JobTVLResponse(
             job_id=job_id,
-            tvl_token0=tvl_data["tvl_token0"],
-            tvl_token1=tvl_data["tvl_token1"],
-            tvl_usd=tvl_data["tvl_usd"],
-            token0_price_usd=tvl_data["token0_price_usd"],
-            token1_price_usd=tvl_data["token1_price_usd"],
+            tvl_token0=tvl_approx["tvl_token0"],
+            tvl_token1=tvl_approx["tvl_token1"],
+            tvl_usd=tvl_usd,
+            token0_price_usd=prices["price0"],
+            token1_price_usd=prices["price1"],
             updated_at=datetime.now().isoformat(),
         )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get TVL: {str(e)}")
+    except Exception:
+        return JobTVLResponse(
+            job_id=job_id,
+            tvl_token0=0.0,
+            tvl_token1=0.0,
+            tvl_usd=0.0,
+            token0_price_usd=0.0,
+            token1_price_usd=0.0,
+            updated_at=datetime.now().isoformat(),
+        )
 
 
 @router.get("/jobs/{job_id}/pnl", response_model=JobPnLResponse)
 async def get_job_pnl(
     job_id: str,
-    lookback_days: int = Query(30, description="Number of days to calculate PnL over", ge=1, le=365)
+    lookback_days: int = Query(30, ge=1, le=365)
 ):
-    """
-    Get PnL (Profit & Loss) for a specific job/vault.
+    """Get PnL for a specific job/vault."""
+    job = await Job.filter(job_id=job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    - **job_id**: Job identifier
-    - **lookback_days**: Number of days to calculate PnL over (default: 30)
-
-    Returns PnL calculated as: Current TVL - Initial TVL over the period.
-    Uses stored metrics if available.
-    """
     try:
         from api.models.metrics import JobMetrics
-        from datetime import datetime, timedelta
-
-        job = await Job.filter(job_id=job_id).first()
-        if not job:
-            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-
-        # Try to get stored metrics
         cutoff = datetime.now() - timedelta(days=lookback_days)
-        initial_metric = await JobMetrics.filter(
-            job_id=job_id,
-            calculated_at__gte=cutoff
-        ).order_by("calculated_at").first()
-
-        latest_metric = await JobMetrics.filter(job_id=job_id).order_by("-calculated_at").first()
+        initial_metric = await _try_stored_metrics(
+            lambda: JobMetrics.filter(job_id=job_id, calculated_at__gte=cutoff).order_by("calculated_at").first()
+        )
+        latest_metric = await _try_stored_metrics(
+            lambda: JobMetrics.filter(job_id=job_id).order_by("-calculated_at").first()
+        )
 
         if initial_metric and latest_metric:
-            pnl_usd = latest_metric.tvl_usd - initial_metric.tvl_usd
-            pnl_token0 = latest_metric.tvl_token0 - initial_metric.tvl_token0
-            pnl_token1 = latest_metric.tvl_token1 - initial_metric.tvl_token1
-
             return JobPnLResponse(
                 job_id=job_id,
-                pnl_usd=pnl_usd,
-                pnl_token0=pnl_token0,
-                pnl_token1=pnl_token1,
+                pnl_usd=latest_metric.tvl_usd - initial_metric.tvl_usd,
+                pnl_token0=latest_metric.tvl_token0 - initial_metric.tvl_token0,
+                pnl_token1=latest_metric.tvl_token1 - initial_metric.tvl_token1,
                 initial_tvl_usd=initial_metric.tvl_usd,
                 current_tvl_usd=latest_metric.tvl_usd,
                 lookback_days=lookback_days,
                 updated_at=latest_metric.calculated_at.isoformat(),
             )
+    except Exception:
+        pass
 
-        # Fall back to calculation
-        pool_db = get_pool_data_db()
-        pnl_data = await MetricsCalculator.calculate_job_pnl(job, pool_db, lookback_days)
+    # Fallback: use vault revenue from collects as a proxy for PnL
+    try:
+        rev = await ReaderDBMetricsService.get_vault_revenue(
+            job.pair_address, job.sn_liquidity_manager_address
+        )
+        tvl_approx = await ReaderDBMetricsService.get_pool_tvl_approx(job.pair_address, job.sn_liquidity_manager_address)
+        pnl0 = rev["revenue_token0"]
+        pnl1 = rev["revenue_token1"]
+        prices = await ReaderDBMetricsService.get_token_prices(job)
+
+        pnl_usd = ReaderDBMetricsService.tokens_to_usd(pnl0, pnl1, prices["price0"], prices["price1"])
+        tvl_token0 = tvl_approx["tvl_token0"]
+        tvl_token1 = tvl_approx["tvl_token1"]
+        tvl_usd = ReaderDBMetricsService.tokens_to_usd(tvl_token0, tvl_token1, prices["price0"], prices["price1"])
 
         return JobPnLResponse(
             job_id=job_id,
-            pnl_usd=pnl_data["pnl_usd"],
-            pnl_token0=pnl_data["pnl_token0"],
-            pnl_token1=pnl_data["pnl_token1"],
-            initial_tvl_usd=pnl_data["initial_tvl_usd"],
-            current_tvl_usd=pnl_data["current_tvl_usd"],
+            pnl_usd=pnl_usd,
+            pnl_token0=pnl0,
+            pnl_token1=pnl1,
+            initial_tvl_usd=tvl_usd,
+            current_tvl_usd=tvl_usd + pnl_usd,
             lookback_days=lookback_days,
             updated_at=datetime.now().isoformat(),
         )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get PnL: {str(e)}")
+    except Exception:
+        return JobPnLResponse(
+            job_id=job_id,
+            pnl_usd=0.0,
+            pnl_token0=0.0,
+            pnl_token1=0.0,
+            initial_tvl_usd=0.0,
+            current_tvl_usd=0.0,
+            lookback_days=lookback_days,
+            updated_at=datetime.now().isoformat(),
+        )
 
 
 @router.get("/jobs/{job_id}/apy", response_model=JobAPYResponse)
 async def get_job_apy(
     job_id: str,
-    lookback_days: int = Query(30, description="Number of days to calculate APY over", ge=1, le=365)
+    lookback_days: int = Query(30, ge=1, le=365)
 ):
-    """
-    Get APY (Annual Percentage Yield) for a specific job/vault.
+    """Get APY for a specific job/vault."""
+    job = await Job.filter(job_id=job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    - **job_id**: Job identifier
-    - **lookback_days**: Number of days to calculate APY over (default: 30)
-
-    Returns annualized yield based on: (Revenue / Average TVL) * (365 / days) * 100
-    Uses stored metrics if available.
-    """
     try:
         from api.models.metrics import JobMetrics
-        from datetime import datetime
-
-        job = await Job.filter(job_id=job_id).first()
-        if not job:
-            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-
-        # Get latest stored metric
-        latest_metric = await JobMetrics.filter(job_id=job_id).order_by("-calculated_at").first()
+        latest_metric = await _try_stored_metrics(
+            lambda: JobMetrics.filter(job_id=job_id).order_by("-calculated_at").first()
+        )
 
         if latest_metric:
-            # Calculate token-level APY from stored metrics
-            apy_percent_token0 = (latest_metric.revenue_token0 / latest_metric.tvl_token0 * 365.0 / lookback_days * 100.0) if latest_metric.tvl_token0 > 0 else 0.0
-            apy_percent_token1 = (latest_metric.revenue_token1 / latest_metric.tvl_token1 * 365.0 / lookback_days * 100.0) if latest_metric.tvl_token1 > 0 else 0.0
+            apy_token0 = (latest_metric.revenue_token0 / latest_metric.tvl_token0 * 365.0 / lookback_days * 100.0) if latest_metric.tvl_token0 > 0 else 0.0
+            apy_token1 = (latest_metric.revenue_token1 / latest_metric.tvl_token1 * 365.0 / lookback_days * 100.0) if latest_metric.tvl_token1 > 0 else 0.0
 
             return JobAPYResponse(
                 job_id=job_id,
                 apy_percent=latest_metric.apy_percent,
-                apy_percent_token0=apy_percent_token0,
-                apy_percent_token1=apy_percent_token1,
+                apy_percent_token0=apy_token0,
+                apy_percent_token1=apy_token1,
                 revenue_usd=latest_metric.revenue_usd,
                 revenue_token0=latest_metric.revenue_token0,
                 revenue_token1=latest_metric.revenue_token1,
@@ -461,79 +606,108 @@ async def get_job_apy(
                 lookback_days=lookback_days,
                 updated_at=latest_metric.calculated_at.isoformat(),
             )
+    except Exception:
+        pass
 
-        # Fall back to calculation
-        pool_db = get_pool_data_db()
-        apy_data = await MetricsCalculator.calculate_job_apy(job, pool_db, lookback_days)
-
+    # Fallback: calculate APY from reader DB (collects / mints-burns)
+    try:
+        apy_data = await ReaderDBMetricsService.calculate_apy(
+            job.pair_address, job.sn_liquidity_manager_address, lookback_days
+        )
+        prices = await ReaderDBMetricsService.get_token_prices(job)
         return JobAPYResponse(
             job_id=job_id,
             apy_percent=apy_data["apy_percent"],
-            apy_percent_token0=apy_data["apy_percent_token0"],
-            apy_percent_token1=apy_data["apy_percent_token1"],
-            revenue_usd=apy_data["revenue_usd"],
+            apy_percent_token0=apy_data["apy_token0"],
+            apy_percent_token1=apy_data["apy_token1"],
+            revenue_usd=ReaderDBMetricsService.tokens_to_usd(
+                apy_data["revenue_token0"], apy_data["revenue_token1"],
+                prices["price0"], prices["price1"],
+            ),
             revenue_token0=apy_data["revenue_token0"],
             revenue_token1=apy_data["revenue_token1"],
-            avg_tvl_usd=apy_data["avg_tvl_usd"],
-            avg_tvl_token0=apy_data["avg_tvl_token0"],
-            avg_tvl_token1=apy_data["avg_tvl_token1"],
+            avg_tvl_usd=ReaderDBMetricsService.tokens_to_usd(
+                apy_data["tvl_token0"], apy_data["tvl_token1"],
+                prices["price0"], prices["price1"],
+            ),
+            avg_tvl_token0=apy_data["tvl_token0"],
+            avg_tvl_token1=apy_data["tvl_token1"],
             lookback_days=lookback_days,
             updated_at=datetime.now().isoformat(),
         )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get APY: {str(e)}")
+    except Exception:
+        return JobAPYResponse(
+            job_id=job_id,
+            apy_percent=0.0,
+            apy_percent_token0=0.0,
+            apy_percent_token1=0.0,
+            revenue_usd=0.0,
+            revenue_token0=0.0,
+            revenue_token1=0.0,
+            avg_tvl_usd=0.0,
+            avg_tvl_token0=0.0,
+            avg_tvl_token1=0.0,
+            lookback_days=lookback_days,
+            updated_at=datetime.now().isoformat(),
+        )
 
 
 @router.get("/subnet/tvl", response_model=SubnetTVLResponse)
 async def get_subnet_tvl():
-    """
-    Get total TVL (Total Value Locked) across all vaults in the subnet.
-
-    Returns total TVL in USD with per-vault breakdown.
-    Uses stored metrics if available.
-    """
+    """Get total TVL across all vaults in the subnet."""
     try:
-        from api.models.metrics import JobMetrics
-        from datetime import datetime
-
-        job_repo = get_job_repository()
-        active_jobs = await job_repo.get_active_jobs()
-
+        all_jobs = await Job.all()
         total_tvl_usd = 0.0
         vault_tvls = []
 
-        for job in active_jobs:
-            # Try to get latest stored metric first
-            latest_metric = await JobMetrics.filter(job_id=job.job_id).order_by("-calculated_at").first()
+        for job in all_jobs:
+            try:
+                from api.models.metrics import JobMetrics
+                latest_metric = await _try_stored_metrics(
+                    lambda: JobMetrics.filter(job_id=job.job_id).order_by("-calculated_at").first()
+                )
+                if latest_metric:
+                    total_tvl_usd += latest_metric.tvl_usd
+                    vault_tvls.append({
+                        "job_id": job.job_id,
+                        "vault_address": job.sn_liquidity_manager_address,
+                        "pair_address": job.pair_address,
+                        "tvl_usd": latest_metric.tvl_usd,
+                        "tvl_token0": latest_metric.tvl_token0,
+                        "tvl_token1": latest_metric.tvl_token1,
+                    })
+                    continue
+            except Exception:
+                pass
 
-            if latest_metric:
-                total_tvl_usd += latest_metric.tvl_usd
+            # No stored metrics - try reader DB approximation
+            try:
+                tvl_approx = await ReaderDBMetricsService.get_pool_tvl_approx(job.pair_address, job.sn_liquidity_manager_address)
+                t0 = tvl_approx["tvl_token0"]
+                t1 = tvl_approx["tvl_token1"]
+                approx_usd = t0 + t1
+                total_tvl_usd += approx_usd
                 vault_tvls.append({
                     "job_id": job.job_id,
                     "vault_address": job.sn_liquidity_manager_address,
                     "pair_address": job.pair_address,
-                    "tvl_usd": latest_metric.tvl_usd,
-                    "tvl_token0": latest_metric.tvl_token0,
-                    "tvl_token1": latest_metric.tvl_token1,
+                    "tvl_usd": approx_usd,
+                    "tvl_token0": t0,
+                    "tvl_token1": t1,
                 })
-            else:
-                # Fall back to calculation
-                tvl_data = await MetricsCalculator.calculate_job_tvl(job)
-                total_tvl_usd += tvl_data["tvl_usd"]
+            except Exception:
                 vault_tvls.append({
                     "job_id": job.job_id,
                     "vault_address": job.sn_liquidity_manager_address,
                     "pair_address": job.pair_address,
-                    "tvl_usd": tvl_data["tvl_usd"],
-                    "tvl_token0": tvl_data["tvl_token0"],
-                    "tvl_token1": tvl_data["tvl_token1"],
+                    "tvl_usd": 0.0,
+                    "tvl_token0": 0.0,
+                    "tvl_token1": 0.0,
                 })
 
         return SubnetTVLResponse(
             total_tvl_usd=total_tvl_usd,
-            vault_count=len(active_jobs),
+            vault_count=len(all_jobs),
             vault_tvls=vault_tvls,
             updated_at=datetime.now().isoformat(),
         )
@@ -543,185 +717,137 @@ async def get_subnet_tvl():
 
 @router.get("/subnet/pnl", response_model=SubnetPnLResponse)
 async def get_subnet_pnl(
-    lookback_days: int = Query(30, description="Number of days to calculate PnL over", ge=1, le=365)
+    lookback_days: int = Query(30, ge=1, le=365)
 ):
-    """
-    Get total PnL (Profit & Loss) across all vaults in the subnet.
+    """Get total PnL across all vaults in the subnet."""
+    all_jobs = await Job.all()
+    vault_pnls = []
+    total_pnl_usd = 0.0
 
-    - **lookback_days**: Number of days to calculate PnL over (default: 30)
+    for j in all_jobs:
+        try:
+            rev = await ReaderDBMetricsService.get_vault_revenue(
+                j.pair_address, j.sn_liquidity_manager_address
+            )
+            pnl0 = rev["revenue_token0"]
+            pnl1 = rev["revenue_token1"]
+            prices = await ReaderDBMetricsService.get_token_prices(j)
+            pnl_usd = ReaderDBMetricsService.tokens_to_usd(pnl0, pnl1, prices["price0"], prices["price1"])
+            total_pnl_usd += pnl_usd
+            vault_pnls.append({
+                "job_id": j.job_id,
+                "vault_address": j.sn_liquidity_manager_address,
+                "pair_address": j.pair_address,
+                "pnl_usd": pnl_usd,
+                "pnl_token0": pnl0,
+                "pnl_token1": pnl1,
+            })
+        except Exception:
+            vault_pnls.append({
+                "job_id": j.job_id,
+                "vault_address": j.sn_liquidity_manager_address,
+                "pair_address": j.pair_address,
+                "pnl_usd": 0.0,
+                "pnl_token0": 0.0,
+                "pnl_token1": 0.0,
+            })
 
-    Returns total PnL in USD with per-vault breakdown.
-    Uses stored metrics if available.
-    """
-    try:
-        from api.models.metrics import JobMetrics
-        from datetime import datetime, timedelta
-
-        job_repo = get_job_repository()
-        active_jobs = await job_repo.get_active_jobs()
-
-        total_pnl_usd = 0.0
-        vault_pnls = []
-
-        cutoff = datetime.now() - timedelta(days=lookback_days)
-
-        for job in active_jobs:
-            # Try to get stored metrics
-            initial_metric = await JobMetrics.filter(
-                job_id=job.job_id,
-                calculated_at__gte=cutoff
-            ).order_by("calculated_at").first()
-
-            latest_metric = await JobMetrics.filter(job_id=job.job_id).order_by("-calculated_at").first()
-
-            if initial_metric and latest_metric:
-                pnl_usd = latest_metric.tvl_usd - initial_metric.tvl_usd
-                pnl_token0 = latest_metric.tvl_token0 - initial_metric.tvl_token0
-                pnl_token1 = latest_metric.tvl_token1 - initial_metric.tvl_token1
-
-                total_pnl_usd += pnl_usd
-                vault_pnls.append({
-                    "job_id": job.job_id,
-                    "vault_address": job.sn_liquidity_manager_address,
-                    "pair_address": job.pair_address,
-                    "pnl_usd": pnl_usd,
-                    "pnl_token0": pnl_token0,
-                    "pnl_token1": pnl_token1,
-                })
-            else:
-                # Fall back to calculation
-                pool_db = get_pool_data_db()
-                pnl_data = await MetricsCalculator.calculate_job_pnl(job, pool_db, lookback_days)
-                total_pnl_usd += pnl_data["pnl_usd"]
-
-                vault_pnls.append({
-                    "job_id": job.job_id,
-                    "vault_address": job.sn_liquidity_manager_address,
-                    "pair_address": job.pair_address,
-                    "pnl_usd": pnl_data["pnl_usd"],
-                    "pnl_token0": pnl_data["pnl_token0"],
-                    "pnl_token1": pnl_data["pnl_token1"],
-                })
-
-        return SubnetPnLResponse(
-            total_pnl_usd=total_pnl_usd,
-            vault_count=len(active_jobs),
-            vault_pnls=vault_pnls,
-            lookback_days=lookback_days,
-            updated_at=datetime.now().isoformat(),
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get subnet PnL: {str(e)}")
+    return SubnetPnLResponse(
+        total_pnl_usd=total_pnl_usd,
+        vault_count=len(all_jobs),
+        vault_pnls=vault_pnls,
+        lookback_days=lookback_days,
+        updated_at=datetime.now().isoformat(),
+    )
 
 
 @router.get("/jobs/{job_id}/tvl-history")
 async def get_job_tvl_history(
     job_id: str,
-    days: int = Query(7, ge=1, le=365, description="Number of days of history")
+    days: int = Query(7, ge=1, le=365)
 ):
-    """
-    Get TVL history for charts.
-    
-    - **job_id**: Job identifier
-    - **days**: Number of days of history to return (default: 7)
-    
-    Returns time-series data points for TVL and revenue.
-    """
+    """Get TVL history for charts."""
     try:
-        from datetime import datetime, timedelta
         from api.models.metrics import JobMetrics
-        
         cutoff = datetime.utcnow() - timedelta(days=days)
-        metrics = await JobMetrics.filter(
-            job_id=job_id,
-            calculated_at__gte=cutoff
-        ).order_by("calculated_at")
-        
-        return {
-            "job_id": job_id,
-            "timeframe_days": days,
-            "series": [
-                {
-                    "timestamp": m.calculated_at.isoformat(),
-                    "tvl_usd": m.tvl_usd,
-                    "revenue_usd": m.revenue_usd,
-                    "apy_percent": m.apy_percent
-                }
-                for m in metrics
-            ]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get TVL history: {str(e)}")
+        metrics = await _try_stored_metrics(
+            lambda: JobMetrics.filter(job_id=job_id, calculated_at__gte=cutoff).order_by("calculated_at")
+        )
+
+        if metrics:
+            return {
+                "job_id": job_id,
+                "timeframe_days": days,
+                "series": [
+                    {
+                        "timestamp": m.calculated_at.isoformat(),
+                        "tvl_usd": m.tvl_usd,
+                        "revenue_usd": m.revenue_usd,
+                        "apy_percent": m.apy_percent,
+                        "pnl_usd": m.pnl_usd,
+                    }
+                    for m in metrics
+                ]
+            }
+    except Exception:
+        pass
+
+    return {"job_id": job_id, "timeframe_days": days, "series": []}
 
 
 @router.get("/subnet/metrics-history")
 async def get_subnet_metrics_history(
-    days: int = Query(30, ge=1, le=365, description="Number of days of history")
+    days: int = Query(30, ge=1, le=365)
 ):
-    """
-    Get subnet-wide historical metrics for charts.
-    
-    - **days**: Number of days of history to return (default: 30)
-    
-    Returns time-series data points for subnet TVL, revenue, and emissions.
-    """
+    """Get subnet-wide historical metrics for charts."""
     try:
-        from datetime import datetime, timedelta
         from api.models.metrics import SubnetMetricsSnapshot
-        
         cutoff = datetime.utcnow() - timedelta(days=days)
-        snapshots = await SubnetMetricsSnapshot.filter(
-            snapshot_time__gte=cutoff
-        ).order_by("snapshot_time")
-        
-        return {
-            "timeframe_days": days,
-            "series": [
-                {
-                    "timestamp": s.snapshot_time.isoformat(),
-                    "tvl_usd": s.total_tvl_usd,
-                    "revenue_usd": s.total_revenue_usd,
-                    "emissions_alpha": s.total_emissions_alpha,
-                    "pnl_usd": s.total_pnl_usd
-                }
-                for s in snapshots
-            ]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get metrics history: {str(e)}")
+        snapshots = await _try_stored_metrics(
+            lambda: SubnetMetricsSnapshot.filter(snapshot_time__gte=cutoff).order_by("snapshot_time")
+        )
+
+        if snapshots:
+            return {
+                "timeframe_days": days,
+                "series": [
+                    {
+                        "timestamp": s.snapshot_time.isoformat(),
+                        "tvl_usd": s.total_tvl_usd,
+                        "revenue_usd": s.total_revenue_usd,
+                        "emissions_alpha": s.total_emissions_alpha,
+                        "pnl_usd": s.total_pnl_usd
+                    }
+                    for s in snapshots
+                ]
+            }
+    except Exception:
+        pass
+
+    return {"timeframe_days": days, "series": []}
 
 
 @router.get("/jobs/{job_id}/inventory-change")
 async def get_job_inventory_change(job_id: str):
-    """
-    Get initial vs current inventory for a job/vault.
-    
-    - **job_id**: Job identifier
-    
-    Returns initial balance snapshot and current balance with change calculations.
-    """
+    """Get initial vs current inventory for a job/vault."""
+    job = await Job.filter(job_id=job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
     try:
         from api.models.metrics import VaultBalanceSnapshot
-        
-        # Get initial snapshot
-        initial = await VaultBalanceSnapshot.filter(
-            job_id=job_id,
-            snapshot_type="initial"
-        ).first()
-        
+        initial = await _try_stored_metrics(
+            lambda: VaultBalanceSnapshot.filter(job_id=job_id, snapshot_type="initial").first()
+        )
+
         if not initial:
             return {
                 "error": "No initial snapshot available",
                 "note": "Initial snapshot will be created once the metrics snapshot job detects this vault"
             }
-        
-        # Get current TVL from on-chain
-        job = await Job.filter(job_id=job_id).first()
-        if not job:
-            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-        
+
         current_tvl = await MetricsCalculator.calculate_job_tvl(job)
-        
+
         return {
             "job_id": job_id,
             "initial": {
@@ -744,5 +870,8 @@ async def get_job_inventory_change(job_id: str):
         }
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get inventory change: {str(e)}")
+    except Exception:
+        return {
+            "error": "No initial snapshot available",
+            "note": "Metrics tables not available in this environment"
+        }

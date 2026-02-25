@@ -3,7 +3,9 @@ Miners Router
 
 Endpoints for miner-related operations.
 """
-from typing import Optional
+import logging
+from typing import Optional, List
+from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Query
 
 from api.models.responses import (
@@ -18,6 +20,8 @@ from api.services.metrics_calculator import MetricsCalculator
 from validator.repositories.job import JobRepository
 from validator.repositories.pool import PoolDataDB
 from validator.models.job import MinerScore
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -44,6 +48,64 @@ def get_pool_data_db() -> Optional[PoolDataDB]:
             # Pool DB might not be available in all environments
             _pool_data_db = None
     return _pool_data_db
+
+
+@router.get("/")
+async def list_all_miners(
+    limit: int = Query(300, ge=1, le=300, description="Max miners to return"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    sort_by: str = Query("combined", description="Sort by: combined, evaluation, live, uid"),
+):
+    """
+    List all miners across all jobs.
+
+    Returns a flat list of miners with their best scores across jobs.
+    """
+    sort_map = {
+        "combined": "-combined_score",
+        "evaluation": "-evaluation_score",
+        "live": "-live_score",
+        "uid": "miner_uid",
+    }
+    order = sort_map.get(sort_by, "-combined_score")
+
+    total = await MinerScore.all().distinct().values_list("miner_uid", flat=True)
+    total_count = len(set(total))
+
+    # Get miner scores — if a miner appears in multiple jobs, we get all rows
+    # then deduplicate keeping the best combined_score per miner
+    all_scores = await MinerScore.all().order_by(order).prefetch_related("job")
+
+    # Deduplicate: keep best combined_score per miner_uid
+    seen: dict = {}
+    for score in all_scores:
+        uid = score.miner_uid
+        if uid not in seen or float(score.combined_score) > float(seen[uid].combined_score):
+            seen[uid] = score
+
+    miners_list = sorted(seen.values(), key=lambda s: (
+        -float(s.combined_score) if sort_by != "uid" else s.miner_uid
+    ))
+    page = miners_list[offset:offset + limit]
+
+    result = []
+    for score in page:
+        result.append({
+            "miner_uid": score.miner_uid,
+            "miner_hotkey": score.miner_hotkey,
+            "combined_score": float(score.combined_score),
+            "evaluation_score": float(score.evaluation_score),
+            "live_score": float(score.live_score),
+            "participation_days": score.participation_days,
+            "is_eligible_for_live": score.is_eligible_for_live,
+            "total_evaluations": score.total_evaluations,
+            "total_live_rounds": score.total_live_rounds,
+        })
+
+    return {
+        "total_miners": total_count,
+        "miners": result,
+    }
 
 
 @router.get("/{uid}", response_model=MinerProfileResponse)
@@ -191,6 +253,98 @@ async def get_miner_dividends(uid: int):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get dividends: {str(e)}")
+
+
+@router.get("/{uid}/score-history")
+async def get_miner_score_history(uid: int):
+    """
+    Get score history for a miner across all jobs.
+
+    Reads MinerScore.score_history JSON field and merges/sorts by timestamp.
+
+    - **uid**: Miner UID
+    """
+    try:
+        miner_scores = await MinerScore.filter(miner_uid=uid).prefetch_related("job").all()
+
+        if not miner_scores:
+            raise HTTPException(status_code=404, detail=f"Miner {uid} not found")
+
+        all_data_points = []
+
+        for score in miner_scores:
+            history = score.score_history
+            if not history:
+                continue
+
+            entries = history.get("history", []) if isinstance(history, dict) else []
+            for entry in entries:
+                all_data_points.append({
+                    "timestamp": entry.get("timestamp", ""),
+                    "combined_score": entry.get("combined_score", 0.0),
+                    "evaluation_score": entry.get("evaluation_score", 0.0),
+                    "live_score": entry.get("live_score", 0.0),
+                    "round_type": entry.get("round_type", ""),
+                    "rank": entry.get("rank"),
+                })
+
+        # Sort by timestamp
+        all_data_points.sort(key=lambda x: x["timestamp"])
+
+        return {
+            "miner_uid": uid,
+            "data_points": all_data_points,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get score history for miner {uid}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get score history: {str(e)}")
+
+
+@router.get("/{uid}/metrics-history")
+async def get_miner_metrics_history(
+    uid: int,
+    days: int = Query(30, ge=1, le=365, description="Number of days to look back"),
+):
+    """
+    Get historical metrics for a miner from the MinerMetrics table.
+
+    - **uid**: Miner UID
+    - **days**: Number of days to look back (default: 30)
+    """
+    try:
+        from api.models.metrics import MinerMetrics
+
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        metrics = await MinerMetrics.filter(
+            miner_uid=uid,
+            calculated_at__gte=cutoff,
+        ).order_by("calculated_at")
+
+        return {
+            "miner_uid": uid,
+            "timeframe_days": days,
+            "series": [
+                {
+                    "timestamp": m.calculated_at.isoformat(),
+                    "earnings_alpha": m.estimated_earnings_alpha,
+                    "earnings_usd": m.estimated_earnings_usd,
+                    "total_score": m.total_score,
+                    "win_rate": m.win_rate,
+                }
+                for m in metrics
+            ],
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get metrics history for miner {uid}: {e}")
+        return {
+            "miner_uid": uid,
+            "timeframe_days": days,
+            "series": [],
+        }
 
 
 @router.get("/{uid}/vaults")

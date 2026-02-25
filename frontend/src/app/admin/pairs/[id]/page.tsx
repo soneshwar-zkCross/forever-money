@@ -23,6 +23,8 @@ import {
     Coins
 } from 'lucide-react';
 import { useJobs, useNetworkStats, useLeaderboard, useJobAPY, useJobPnL, useJobTVL, useJobRevenue } from '@/lib/api';
+import { useJobTVLHistory } from '@/lib/metrics-hooks';
+import { formatUsd, formatFeeRate, formatTokenAmount } from '@/lib/format';
 import Link from 'next/link';
 import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip, XAxis, CartesianGrid } from 'recharts';
 
@@ -33,7 +35,9 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
     const { data: apy } = useJobAPY(jobId, 30);
     const { data: pnl } = useJobPnL(jobId, 30);
     const { data: tvl } = useJobTVL(jobId);
+    const { data: revenue } = useJobRevenue(jobId, 30);
     const { data: miners, isLoading: leaderboardLoading } = useLeaderboard(jobId);
+    const { data: tvlHistory } = useJobTVLHistory(jobId, 30);
 
     const job = jobs?.find(j => j.job_id === jobId) || {
         job_id: jobId,
@@ -48,16 +52,16 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
 
     const [token0Symbol, token1Symbol] = job.metadata.pair_name.split('/') || ['cbBTC', 'USDC'];
 
-    // Mock Performance Data for 3 Lines
-    const performanceData = Array.from({ length: 48 }, (_, i) => {
-        const hour = Math.floor(i / 2).toString().padStart(2, '0');
-        const min = (i % 2 === 0 ? '00' : '30');
-        const time = `${hour}:${min}`;
+    // Build performance chart data from real TVL history
+    const tvlSeries = tvlHistory?.series || [];
+    const performanceData = tvlSeries.map((pt: any) => {
+        const d = new Date(pt.timestamp);
+        const time = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         return {
             time,
-            forever: 4000 + (i * 120) + (Math.sin(i / 4) * 400),
-            lp: 4000 + (i * 90) + (Math.sin(i / 5) * 200),
-            holding: 4000 + (i * 60) + (Math.sin(i / 6) * 100),
+            forever: pt.tvl_usd || 0,
+            lp: (pt.tvl_usd || 0) - (pt.revenue_usd || 0),
+            holding: (pt.tvl_usd || 0) - (pt.pnl_usd || 0),
         };
     });
 
@@ -82,7 +86,7 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                             <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                             <span>Active</span>
                             <span className="text-green-200">|</span>
-                            <span>{stats?.total_miners || 10}</span>
+                            <span>{stats?.active_miners_24h || 0} miners</span>
                         </div>
                         <a
                             href={`https://basescan.org/address/${job.sn_liquidity_manager_address}`}
@@ -98,18 +102,17 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
 
                 {/* Main Metrics Row (7 Standardized Boxes) */}
                 <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
-                    <MetricBox label="TVL (USD)" value={`$${((tvl?.tvl_usd || 0) / 1000000).toFixed(1)}M`} />
-                    <MetricBox label="Fees Earned (30D)" value={`$${((pnl?.pnl_usd || 0) / 1000).toFixed(0)}k`} />
+                    <MetricBox label="TVL (USD)" value={formatUsd(tvl?.tvl_usd)} />
+                    <MetricBox label="Fees Earned (30D)" value={formatUsd(revenue?.revenue_usd)} />
                     <MetricBox
-                        label={`APY cbBTC / USDE / USD`}
-                        value="0.0% / 0.0% / 0.0%"
-                        subvalue="LIVE CALCULATIONS"
+                        label={`APY ${token0Symbol} / ${token1Symbol} / USD`}
+                        value={`${(apy?.apy_percent_token0 || 0).toFixed(1)}% / ${(apy?.apy_percent_token1 || 0).toFixed(1)}% / ${(apy?.apy_percent || 0).toFixed(1)}%`}
                         isApy
                     />
-                    <MetricBox label="Active Vault Jobs" value={stats?.total_miners?.toString() || "10"} />
-                    <MetricBox label="Initial Portfolio Value" value="$742" />
-                    <MetricBox label="Current Portfolio Value" value="$2,742" />
-                    <MetricBox label="Net Gain" value="$2,000" highlight />
+                    <MetricBox label="Active Miners (24h)" value={stats?.active_miners_24h?.toString() || "0"} subvalue={`${stats?.total_miners || 0} total`} />
+                    <MetricBox label={`Avg TVL (${token0Symbol})`} value={formatTokenAmount(apy?.avg_tvl_token0, token0Symbol)} />
+                    <MetricBox label={`Avg TVL (${token1Symbol})`} value={formatTokenAmount(apy?.avg_tvl_token1, token1Symbol)} />
+                    <MetricBox label="Net PnL" value={formatUsd(pnl?.pnl_usd)} highlight />
                 </div>
 
                 {/* Strategy Comparison Section */}
@@ -157,9 +160,9 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                             <div className="flex flex-wrap justify-center items-center gap-4 md:border-l border-cream-dark/50 md:pl-6 w-full md:w-auto">
                                 <span className="text-primary/30 hidden md:inline">APY</span>
                                 <div className="flex items-center justify-center space-x-4 w-full md:w-auto">
-                                    <span className="text-primary font-bold">(USD): 41%</span>
-                                    <span className="text-primary font-bold">BTC: 20%</span>
-                                    <span className="text-primary font-bold">USDC: 20%</span>
+                                    <span className="text-primary font-bold">(USD): {(apy?.apy_percent || 0).toFixed(1)}%</span>
+                                    <span className="text-primary font-bold">{token0Symbol}: {(apy?.apy_percent_token0 || 0).toFixed(1)}%</span>
+                                    <span className="text-primary font-bold">{token1Symbol}: {(apy?.apy_percent_token1 || 0).toFixed(1)}%</span>
                                 </div>
                             </div>
                         </div>
@@ -184,42 +187,42 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                                 <StrategyRow
                                     name="ForeverMoney"
                                     isBest
-                                    btc="0.0524 BTC"
-                                    btcChange="+0.0024"
-                                    btcChangePct="+4.8%"
+                                    btc={`${(tvl?.tvl_token0 || 0).toFixed(4)} ${token0Symbol}`}
+                                    btcChange={pnl?.pnl_token0 ? `${pnl.pnl_token0 >= 0 ? '+' : ''}${pnl.pnl_token0.toFixed(4)}` : "—"}
+                                    btcChangePct={apy?.apy_percent_token0 ? `${apy.apy_percent_token0.toFixed(1)}%` : "—"}
                                     btcChangeColor="text-green-500"
-                                    apyUsdc1="42.5%"
-                                    usdc="12,930 USDC"
-                                    usdcChange="+0.0024"
-                                    usdcChangePct="+4.8%"
-                                    apyUsdc2="42.5%"
-                                    apyTotal="42.5%"
+                                    apyUsdc1={`${(apy?.apy_percent_token0 || 0).toFixed(1)}%`}
+                                    usdc={`${(tvl?.tvl_token1 || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${token1Symbol}`}
+                                    usdcChange={pnl?.pnl_token1 ? `${pnl.pnl_token1 >= 0 ? '+' : ''}${pnl.pnl_token1.toFixed(4)}` : "—"}
+                                    usdcChangePct={apy?.apy_percent_token1 ? `${apy.apy_percent_token1.toFixed(1)}%` : "—"}
+                                    apyUsdc2={`${(apy?.apy_percent_token1 || 0).toFixed(1)}%`}
+                                    apyTotal={`${(apy?.apy_percent || 0).toFixed(1)}%`}
                                 />
                                 <StrategyRow
                                     name="Full-range LP"
-                                    btc="0.0524 BTC"
-                                    btcChange="+0.0024"
-                                    btcChangePct="+4.8%"
+                                    btc="—"
+                                    btcChange="—"
+                                    btcChangePct="—"
                                     btcChangeColor="text-primary"
-                                    apyUsdc1="42.5%"
-                                    usdc="12,930 USDC"
-                                    usdcChange="+0.0024"
-                                    usdcChangePct="+4.8%"
-                                    apyUsdc2="42.5%"
-                                    apyTotal="42.5%"
+                                    apyUsdc1="—"
+                                    usdc="—"
+                                    usdcChange="—"
+                                    usdcChangePct="—"
+                                    apyUsdc2="—"
+                                    apyTotal="—"
                                 />
                                 <StrategyRow
                                     name="Holding"
-                                    btc="0.0524 BTC"
-                                    btcChange="+0.0024"
-                                    btcChangePct="+4.8%"
+                                    btc="—"
+                                    btcChange="—"
+                                    btcChangePct="—"
                                     btcChangeColor="text-primary"
-                                    apyUsdc1="42.5%"
-                                    usdc="12,930 USDC"
-                                    usdcChange="+0.0024"
-                                    usdcChangePct="+4.8%"
-                                    apyUsdc2="42.5%"
-                                    apyTotal="42.5%"
+                                    apyUsdc1="0.0%"
+                                    usdc="—"
+                                    usdcChange="—"
+                                    usdcChangePct="—"
+                                    apyUsdc2="0.0%"
+                                    apyTotal="0.0%"
                                 />
                             </tbody>
                         </table>
@@ -256,31 +259,36 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
 
                     <div className="h-[300px] w-full relative">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={performanceData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="6 6" vertical={false} stroke="#F2EDE4" />
-                                <XAxis
-                                    dataKey="time"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fill: '#0C2060', opacity: 0.3, fontSize: 9, fontWeight: 700 }}
-                                    interval={7}
-                                    dy={10}
-                                />
-                                <YAxis
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fill: '#0C2060', opacity: 0.3, fontSize: 9, fontWeight: 700 }}
-                                    tickFormatter={(val) => `$${val / 1000}k`}
-                                />
-                                <Tooltip
-                                    contentStyle={{ borderRadius: '12px', border: '1px solid #F2EDE4', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '10px', fontWeight: 700 }}
-                                />
-                                <Line type="monotone" dataKey="forever" stroke="#3B82F6" strokeWidth={2.5} dot={false} />
-                                <Line type="monotone" dataKey="lp" stroke="#0D1117" strokeWidth={1.5} dot={false} />
-                                <Line type="monotone" dataKey="holding" stroke="#3B82F6" strokeWidth={1.2} strokeOpacity={0.4} dot={false} />
-                            </LineChart>
-                        </ResponsiveContainer>
+                        {performanceData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={performanceData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="6 6" vertical={false} stroke="#F2EDE4" />
+                                    <XAxis
+                                        dataKey="time"
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tick={{ fill: '#0C2060', opacity: 0.3, fontSize: 9, fontWeight: 700 }}
+                                        dy={10}
+                                    />
+                                    <YAxis
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tick={{ fill: '#0C2060', opacity: 0.3, fontSize: 9, fontWeight: 700 }}
+                                        tickFormatter={(val) => `$${(val / 1000).toFixed(1)}k`}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{ borderRadius: '12px', border: '1px solid #F2EDE4', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '10px', fontWeight: 700 }}
+                                    />
+                                    <Line type="monotone" dataKey="forever" stroke="#3B82F6" strokeWidth={2.5} dot={false} />
+                                    <Line type="monotone" dataKey="lp" stroke="#0D1117" strokeWidth={1.5} dot={false} />
+                                    <Line type="monotone" dataKey="holding" stroke="#3B82F6" strokeWidth={1.2} strokeOpacity={0.4} dot={false} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-primary/20 text-xs font-black uppercase tracking-widest">
+                                Collecting performance data...
+                            </div>
+                        )}
                     </div>
 
                     <div className="mt-6 flex items-center justify-between pt-6 border-t border-cream-dark/30">
@@ -297,7 +305,7 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                             <p className="text-[9px] font-bold text-primary/20 uppercase tracking-widest mt-1">Live Execution Records</p>
                         </div>
                         <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[9px] font-bold uppercase tracking-widest">
-                            10 Active
+                            {miners?.length || 0} Active
                         </div>
                     </div>
 
@@ -309,36 +317,39 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                                     <th className="py-4">Miner</th>
                                     <th className="py-4 whitespace-nowrap">TVL</th>
                                     <th className="py-4 whitespace-nowrap">Fees USD</th>
-                                    <th className="py-4 whitespace-nowrap text-blue-600">Fees cbBTC</th>
-                                    <th className="py-4 whitespace-nowrap text-blue-600">Fees USDC</th>
-                                    <th className="py-4 whitespace-nowrap text-blue-600">APY cbBTC</th>
-                                    <th className="py-4 whitespace-nowrap text-blue-600">APY USDE</th>
+                                    <th className="py-4 whitespace-nowrap text-blue-600">Fees {token0Symbol}</th>
+                                    <th className="py-4 whitespace-nowrap text-blue-600">Fees {token1Symbol}</th>
+                                    <th className="py-4 whitespace-nowrap text-blue-600">APY {token0Symbol}</th>
+                                    <th className="py-4 whitespace-nowrap text-blue-600">APY {token1Symbol}</th>
                                     <th className="py-4 whitespace-nowrap text-blue-600 text-right pr-4">APY (USD)</th>
                                     <th className="pr-8 py-4"></th>
                                 </tr>
                             </thead>
                             <tbody className="text-[10px] font-bold">
-                                {[1, 2, 7, 8, 5, 6, 9, 11, 10, 4].map((no, i) => (
-                                    <tr key={no} className="border-b border-cream-dark/20 last:border-0 hover:bg-cream/5 transition-colors group cursor-pointer">
-                                        <td className="pl-8 py-4 text-primary/40">Vault #{no}</td>
+                                {(miners || []).map((miner, i) => (
+                                    <tr key={miner.miner_uid} className="border-b border-cream-dark/20 last:border-0 hover:bg-cream/5 transition-colors group cursor-pointer">
+                                        <td className="pl-8 py-4 text-primary/40">Vault #{miner.miner_uid}</td>
                                         <td className="py-4">
                                             <div className="flex flex-col">
-                                                <span>5G036030...</span>
-                                                <span className="text-[8px] text-primary/20 uppercase tracking-tighter">UID: {no}</span>
+                                                <span>{miner.miner_hotkey?.slice(0, 10)}...</span>
+                                                <span className="text-[8px] text-primary/20 uppercase tracking-tighter">UID: {miner.miner_uid}</span>
                                             </div>
                                         </td>
-                                        <td className="py-4 text-blue-600">$135,000</td>
-                                        <td className="py-4 text-blue-500">$72,350</td>
-                                        <td className="py-4 text-blue-500">1,100,587</td>
-                                        <td className="py-4 text-blue-500">4.7689</td>
-                                        <td className="py-4 text-blue-500">32.5%</td>
-                                        <td className="py-4 text-blue-500">15.2%</td>
-                                        <td className="py-4 text-blue-600 text-right pr-4">14%</td>
+                                        <td className="py-4 text-blue-600">{formatUsd(tvl?.tvl_usd ? tvl.tvl_usd / (miners?.length || 1) : 0)}</td>
+                                        <td className="py-4 text-blue-500">{formatUsd(revenue?.revenue_usd ? revenue.revenue_usd / (miners?.length || 1) : 0)}</td>
+                                        <td className="py-4 text-blue-500">{(revenue?.revenue_token0 ? revenue.revenue_token0 / (miners?.length || 1) : 0).toFixed(4)}</td>
+                                        <td className="py-4 text-blue-500">{(revenue?.revenue_token1 ? revenue.revenue_token1 / (miners?.length || 1) : 0).toFixed(4)}</td>
+                                        <td className="py-4 text-blue-500">{(apy?.apy_percent_token0 || 0).toFixed(1)}%</td>
+                                        <td className="py-4 text-blue-500">{(apy?.apy_percent_token1 || 0).toFixed(1)}%</td>
+                                        <td className="py-4 text-blue-600 text-right pr-4">{(apy?.apy_percent || 0).toFixed(1)}%</td>
                                         <td className="pr-8 py-4 text-right">
                                             <ChevronRight size={12} className="inline text-blue-600 transition-transform group-hover:translate-x-1" />
                                         </td>
                                     </tr>
                                 ))}
+                                {(!miners || miners.length === 0) && (
+                                    <tr><td colSpan={10} className="py-8 text-center text-primary/20">No active vaults</td></tr>
+                                )}
                             </tbody>
                         </table>
                     </div>
@@ -348,11 +359,11 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                 <div className="bg-white border border-cream-dark p-8 rounded-[32px] shadow-sm">
                     <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30 mb-6 pb-4 border-b border-cream-dark/30">Pair Configuration</h3>
                     <div className="space-y-4">
-                        <ConfigEntry label="Pair Address" value="0x44e992bb3889bf030369fbb10a9c99b83cb3e775" isMono />
-                        <ConfigEntry label="Vault Address" value="0x44e992bb3889bf030369fbb10a9c99b83cb3e775" isMono />
-                        <ConfigEntry label="Fee Rate" value="0.30%" />
-                        <ConfigEntry label="Target Ratio" value="50%" />
-                        <ConfigEntry label="Round Duration" value="900s (15m)" />
+                        <ConfigEntry label="Pair Address" value={job.pair_address} isMono />
+                        <ConfigEntry label="Vault Address" value={job.sn_liquidity_manager_address} isMono />
+                        <ConfigEntry label="Fee Rate" value={formatFeeRate(job.fee_rate)} />
+                        <ConfigEntry label="Target Ratio" value={`${((job.target_ratio || 0) * 100).toFixed(0)}%`} />
+                        <ConfigEntry label="Round Duration" value={`${job.round_duration_seconds}s (${Math.round((job.round_duration_seconds || 0) / 60)}m)`} />
                     </div>
                 </div>
             </div>

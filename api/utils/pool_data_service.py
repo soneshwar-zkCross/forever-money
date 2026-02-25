@@ -16,8 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 # Pool configurations (address -> config)
+# Keys are LOWERCASED with 0x prefix for easy lookup.
 POOL_CONFIGS = {
-    "0xf9d5533091B5339BC102fCE5DecFe74C09512315": {
+    "0xf9d5533091b5339bc102fce5decfe74c09512315": {
         "id": "xtao-usdc-base",
         "name": "xTAO/USDC Aerodrome (Base)",
         "table_name": "base_poocl_swaps_v2",
@@ -33,7 +34,7 @@ POOL_CONFIGS = {
         "token0": {"symbol": "WETH", "decimals": 18},
         "token1": {"symbol": "USDC", "decimals": 6},
         "fee_tier": 0.0005,
-        "invert_price": False,  # WETH is token0, USDC is token1, so tick already gives USDC/WETH
+        "invert_price": False,
     },
     "0x4e962bb3889bf030368f56810a9c96b83cb3e778": {
         "id": "cbbtc-usdc-base",
@@ -43,6 +44,24 @@ POOL_CONFIGS = {
         "token1": {"symbol": "cbBTC", "decimals": 8},
         "fee_tier": 0.0005,
         "invert_price": True,
+    },
+    "0x1024c20c048ea6087293f46d4a1c042cb6705924": {
+        "id": "bid-weth-base",
+        "name": "BID/WETH Aerodrome (Base)",
+        "table_name": "base_poocl_swaps_v2",
+        "token0": {"symbol": "WETH", "decimals": 18},
+        "token1": {"symbol": "BID", "decimals": 18},
+        "fee_tier": 0.01,
+        "invert_price": False,
+    },
+    "0x70acdf2ad0bf2402c957154f944c19ef4e1cbae1": {
+        "id": "weth-cbbtc-base",
+        "name": "cbBTC/WETH Aerodrome (Base)",
+        "table_name": "base_poocl_swaps_v2",
+        "token0": {"symbol": "WETH", "decimals": 18},
+        "token1": {"symbol": "cbBTC", "decimals": 8},
+        "fee_tier": 0.003,
+        "invert_price": False,
     },
 }
 

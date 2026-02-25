@@ -63,7 +63,7 @@ async def list_jobs(
             round_duration_seconds=job.round_duration_seconds,
             created_at=job.created_at,
             updated_at=job.updated_at,
-            metadata=job.metadata or {}
+            metadata=job.metadata if job.metadata else {"pair_name": job.job_id.replace("-", "/").upper()}
         )
         for job in jobs
     ]

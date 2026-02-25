@@ -10,17 +10,15 @@ import {
     ArrowRight,
     ExternalLink,
 } from 'lucide-react';
-import { useJobs, useLeaderboard } from '@/lib/api';
+import { useAllMiners } from '@/lib/api';
 
 export default function MinersPage() {
-    const { data: jobs } = useJobs();
     const [sortBy, setSortBy] = useState('Miner ID');
     const [isSortOpen, setIsSortOpen] = useState(false);
     const [timeframe, setTimeframe] = useState('30D');
 
-    // Use the first job ID as default for data fetching
-    const selectedJobId = jobs?.[0]?.job_id || '';
-    const { data: miners, isLoading } = useLeaderboard(selectedJobId);
+    const { data: minersData, isLoading } = useAllMiners();
+    const miners = minersData?.miners;
 
     const sortOptions = ['Miner ID', 'Combined Score', 'Eval Score', 'Live Score', 'Participation Days'];
     const timeframes = ['1D', '7D', '30D', 'ALL'];

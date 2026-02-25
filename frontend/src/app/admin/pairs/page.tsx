@@ -19,6 +19,7 @@ import {
     useLeaderboard,
     Job
 } from '@/lib/api';
+import { formatUsd, formatFeeRate } from '@/lib/format';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -124,12 +125,6 @@ function PairRow({ job, index }: { job: Job, index: number }) {
     const { data: leaderboard } = useLeaderboard(job.job_id);
     const router = useRouter();
 
-    const formatTVL = (val: number) => {
-        if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`;
-        if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`;
-        return `$${val.toFixed(2)}`;
-    };
-
     return (
         <tr
             onClick={() => router.push(`/admin/pairs/${job.job_id}`)}
@@ -141,7 +136,7 @@ function PairRow({ job, index }: { job: Job, index: number }) {
                     {job.metadata?.pair_name || job.target}
                 </Link>
             </td>
-            <td className="py-5 font-bold text-primary/60">{formatTVL(tvl?.tvl_usd || 0)}</td>
+            <td className="py-5 font-bold text-primary/60">{formatUsd(tvl?.tvl_usd)}</td>
             <td className="py-5 font-bold text-primary/60">${(revenue?.revenue_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
             <td className="py-5 font-bold text-primary/30">{(apy?.apy_percent_token0 || 0).toFixed(1)}%</td>
             <td className="py-5 font-bold text-primary/30">{(apy?.apy_percent_token1 || 0).toFixed(1)}%</td>
@@ -162,12 +157,6 @@ function PairCard({ job }: { job: Job }) {
     const { data: apy } = useJobAPY(job.job_id, 30);
     const { data: stats } = useNetworkStats(job.job_id);
 
-    const formatTVL = (val: number) => {
-        if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`;
-        if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`;
-        return `$${val.toFixed(2)}`;
-    };
-
     return (
         <Link
             href={`/admin/pairs/${job.job_id}`}
@@ -186,7 +175,7 @@ function PairCard({ job }: { job: Job }) {
             <div className="grid grid-cols-2 gap-6 mb-8">
                 <div>
                     <p className="text-[9px] font-black text-primary/20 uppercase tracking-widest mb-1">TVL</p>
-                    <p className="text-lg font-black text-primary">{formatTVL(tvl?.tvl_usd || 0)}</p>
+                    <p className="text-lg font-black text-primary">{formatUsd(tvl?.tvl_usd)}</p>
                 </div>
                 <div>
                     <p className="text-[9px] font-black text-primary/20 uppercase tracking-widest mb-1">Revenue</p>
@@ -205,7 +194,7 @@ function PairCard({ job }: { job: Job }) {
                 </div>
                 <div className="flex justify-between items-center">
                     <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">Fee Rate</span>
-                    <span className="text-xs font-black text-primary">{(job.fee_rate * 100).toFixed(1)}%</span>
+                    <span className="text-xs font-black text-primary">{formatFeeRate(job.fee_rate)}</span>
                 </div>
             </div>
 
