@@ -64,6 +64,7 @@ export interface MinerScore {
     rank: number
     miner_uid: number
     miner_hotkey: string
+    miner_name?: string
     combined_score: number
     evaluation_score: number
     live_score: number

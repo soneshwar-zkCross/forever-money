@@ -24,6 +24,7 @@ export interface Job {
 export interface MinerScore {
     miner_uid: number;
     miner_hotkey: string;
+    miner_name: string | null;
     combined_score: number;
     evaluation_score: number;
     live_score: number;
@@ -908,6 +909,7 @@ export interface MinerJobPerformance {
 export interface MinerProfile {
     miner_uid: number;
     miner_hotkey: string;
+    miner_name: string | null;
     total_jobs: number;
     total_rounds: number;
     global_win_rate: number;

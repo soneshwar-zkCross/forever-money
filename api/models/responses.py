@@ -140,6 +140,7 @@ class MinerProfileResponse(BaseModel):
     """Complete miner profile"""
     miner_uid: int
     miner_hotkey: str
+    miner_name: Optional[str] = None
     total_jobs: int
     total_rounds: int
     global_win_rate: float

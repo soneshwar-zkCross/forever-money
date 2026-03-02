@@ -17,6 +17,7 @@ from api.models.responses import (
 from api.services.jobs_service import JobService
 from api.services.miners_service import MinersService
 from api.services.metrics_calculator import MetricsCalculator
+from api.services.identity_service import IdentityService
 from validator.repositories.job import JobRepository
 from validator.repositories.pool import PoolDataDB
 from validator.models.job import MinerScore
@@ -88,11 +89,15 @@ async def list_all_miners(
     ))
     page = miners_list[offset:offset + limit]
 
+    # Resolve on-chain identities
+    identities = await IdentityService.get_all_identities()
+
     result = []
     for score in page:
         result.append({
             "miner_uid": score.miner_uid,
             "miner_hotkey": score.miner_hotkey,
+            "miner_name": IdentityService.get_name_for_uid(score.miner_uid, identities),
             "combined_score": float(score.combined_score),
             "evaluation_score": float(score.evaluation_score),
             "live_score": float(score.live_score),
@@ -130,6 +135,10 @@ async def get_miner_profile(
         pool_db = get_pool_data_db()
         earnings = await MinersService.get_miner_earnings(uid, job_repo, pool_db)
         profile.update(earnings)
+
+    # Resolve on-chain identity name
+    identities = await IdentityService.get_all_identities()
+    profile["miner_name"] = IdentityService.get_name_for_uid(uid, identities)
 
     return MinerProfileResponse(**profile)
 

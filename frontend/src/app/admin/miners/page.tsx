@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -9,13 +9,20 @@ import {
     ChevronDown,
     ArrowRight,
     ExternalLink,
+    Search,
+    ChevronLeft,
+    ChevronRight,
 } from 'lucide-react';
 import { useAllMiners } from '@/lib/api';
+
+const MINERS_PER_PAGE = 24;
 
 export default function MinersPage() {
     const [sortBy, setSortBy] = useState('Miner ID');
     const [isSortOpen, setIsSortOpen] = useState(false);
     const [timeframe, setTimeframe] = useState('30D');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
 
     const { data: minersData, isLoading } = useAllMiners();
     const miners = minersData?.miners;
@@ -24,7 +31,7 @@ export default function MinersPage() {
     const timeframes = ['1D', '7D', '30D', 'ALL'];
 
     // Sort miners based on selected option
-    const sortedMiners = React.useMemo(() => {
+    const sortedMiners = useMemo(() => {
         if (!miners) return [];
         const sorted = [...miners];
         switch (sortBy) {
@@ -47,6 +54,44 @@ export default function MinersPage() {
         return sorted;
     }, [miners, sortBy]);
 
+    // Filter miners by search query
+    const filteredMiners = useMemo(() => {
+        if (!searchQuery.trim()) return sortedMiners;
+        const q = searchQuery.toLowerCase().trim();
+        return sortedMiners.filter((m) =>
+            String(m.miner_uid).includes(q) ||
+            m.miner_hotkey.toLowerCase().includes(q) ||
+            (m.miner_name && m.miner_name.toLowerCase().includes(q))
+        );
+    }, [sortedMiners, searchQuery]);
+
+    // Reset to page 1 when sort or search changes
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [sortBy, searchQuery]);
+
+    // Pagination calculations
+    const totalPages = Math.max(1, Math.ceil(filteredMiners.length / MINERS_PER_PAGE));
+    const safePage = Math.min(currentPage, totalPages);
+    const startIdx = (safePage - 1) * MINERS_PER_PAGE;
+    const endIdx = Math.min(startIdx + MINERS_PER_PAGE, filteredMiners.length);
+    const pagedMiners = filteredMiners.slice(startIdx, endIdx);
+
+    // Smart page number generation
+    const pageNumbers = useMemo(() => {
+        if (totalPages <= 7) {
+            return Array.from({ length: totalPages }, (_, i) => i + 1);
+        }
+        const pages: (number | '...')[] = [1];
+        if (safePage > 3) pages.push('...');
+        const start = Math.max(2, safePage - 1);
+        const end = Math.min(totalPages - 1, safePage + 1);
+        for (let i = start; i <= end; i++) pages.push(i);
+        if (safePage < totalPages - 2) pages.push('...');
+        pages.push(totalPages);
+        return pages;
+    }, [totalPages, safePage]);
+
     return (
         <AdminLayout
             title="Miners"
@@ -54,7 +99,7 @@ export default function MinersPage() {
             icon={<Users size={20} />}
         >
             <div className="space-y-6 animate-fade-in pb-20">
-                {/* Top Bar - Sort & Timeframe */}
+                {/* Top Bar - Sort, Search & Timeframe */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center space-x-4 text-[10px] font-bold uppercase tracking-widest text-primary w-full md:w-auto justify-between md:justify-start">
                         <span className="text-primary/40">Sort By</span>
@@ -86,6 +131,18 @@ export default function MinersPage() {
                         </div>
                     </div>
 
+                    {/* Search Bar */}
+                    <div className="relative w-full md:w-64">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary/30" />
+                        <input
+                            type="text"
+                            placeholder="Search UID, hotkey, or name..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full bg-white border border-cream-dark rounded-xl pl-9 pr-4 py-2 text-[11px] font-bold text-primary placeholder:text-primary/30 focus:outline-none focus:border-primary/30 transition-all shadow-sm"
+                        />
+                    </div>
+
                     {/* Timeframe Toggle */}
                     <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm self-start md:self-auto overflow-x-auto max-w-full">
                         {timeframes.map(t => (
@@ -109,72 +166,129 @@ export default function MinersPage() {
                         {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-[480px] bg-white border border-cream-dark rounded-[32px]"></div>)}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {sortedMiners?.map((miner) => (
-                            <div
-                                key={miner.miner_uid}
-                                className="bg-white p-6 rounded-[32px] border border-cream-dark shadow-sm hover:shadow-md transition-all duration-500 font-bold text-primary group flex flex-col h-full"
-                            >
-                                {/* Card Header */}
-                                <div className="flex justify-between items-center mb-5 shrink-0">
-                                    <div className="flex items-center space-x-2">
-                                        <Link href={`/admin/miners/${miner.miner_uid}`} className="hover:underline transition-all">
-                                            <h4 className="text-sm font-black tracking-tight uppercase">
-                                                UID {miner.miner_uid} - {miner.miner_hotkey.slice(0, 8)}...
-                                            </h4>
+                    <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {pagedMiners.map((miner) => (
+                                <div
+                                    key={miner.miner_uid}
+                                    className="bg-white p-6 rounded-[32px] border border-cream-dark shadow-sm hover:shadow-md transition-all duration-500 font-bold text-primary group flex flex-col h-full"
+                                >
+                                    {/* Card Header */}
+                                    <div className="flex justify-between items-center mb-5 shrink-0">
+                                        <div className="flex items-center space-x-2 min-w-0">
+                                            <Link href={`/admin/miners/${miner.miner_uid}`} className="hover:underline transition-all min-w-0">
+                                                <h4 className="text-sm font-black tracking-tight uppercase truncate">
+                                                    {miner.miner_name
+                                                        ? `${miner.miner_name} (UID ${miner.miner_uid})`
+                                                        : `UID ${miner.miner_uid} - ${miner.miner_hotkey.slice(0, 8)}...`
+                                                    }
+                                                </h4>
+                                            </Link>
+                                            <span className={`w-1.5 h-1.5 rounded-full shadow-[0_0_8px] shrink-0 ${miner.is_eligible_for_live
+                                                ? 'bg-green-500 shadow-green-500/40'
+                                                : 'bg-yellow-500 shadow-yellow-500/40'
+                                                }`} />
+                                        </div>
+                                        <Link
+                                            href={`/admin/miners/${miner.miner_uid}`}
+                                            className="flex items-center space-x-1.5 text-[9px] font-bold uppercase tracking-wider text-primary/40 hover:text-primary transition-colors group/link shrink-0 ml-2"
+                                        >
+                                            <span>Go to Vault</span>
+                                            <ArrowRight size={12} className="group-hover/link:translate-x-1 transition-transform" />
                                         </Link>
-                                        <span className={`w-1.5 h-1.5 rounded-full shadow-[0_0_8px] ${miner.is_eligible_for_live
-                                            ? 'bg-green-500 shadow-green-500/40'
-                                            : 'bg-yellow-500 shadow-yellow-500/40'
-                                            }`} />
                                     </div>
-                                    <Link
-                                        href={`/admin/miners/${miner.miner_uid}`}
-                                        className="flex items-center space-x-1.5 text-[9px] font-bold uppercase tracking-wider text-primary/40 hover:text-primary transition-colors group/link"
+
+                                    {/* Main Stats - Dashed List */}
+                                    <div className="space-y-3.5 pt-5 border-t border-dashed border-cream-dark/50 flex-1">
+                                        <StatRow label="Combined Score:" value={miner.combined_score.toFixed(6)} isBlue />
+                                        <StatRow label="Eval Score:" value={miner.evaluation_score.toFixed(6)} isBlue />
+                                        <StatRow label="Live Score:" value={miner.live_score.toFixed(6)} isBlue />
+                                        <StatRow label="Total Evaluations:" value={miner.total_evaluations.toLocaleString()} isBlue />
+                                        <StatRow label="Live Rounds:" value={miner.total_live_rounds.toLocaleString()} isBlue />
+
+                                        <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-widest pt-1">
+                                            <span className="text-primary/20">Chains:</span>
+                                            <div className="flex items-center space-x-2">
+                                                <ChainBadge name="BASE" icon="/images/base-logo.svg" />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-widest pt-1">
+                                            <span className="text-primary/20">Participation Days:</span>
+                                            <span className="text-blue-600">{miner.participation_days}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Hotkey Sub-section */}
+                                    <div className="mt-6 pt-6 border-t border-dashed border-cream-dark/50 shrink-0">
+                                        <div className="flex justify-between items-center mb-5">
+                                            <h5 className="text-[9px] font-black uppercase tracking-[0.2em] text-primary/20">Hotkey</h5>
+                                            <div className="flex items-center space-x-1.5 text-primary/40 font-mono text-[10px]">
+                                                <span>{miner.miner_hotkey.slice(0, 6)}...{miner.miner_hotkey.slice(-4)}</span>
+                                                <ExternalLink size={10} className="cursor-pointer hover:text-primary transition-colors" />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2.5">
+                                            <ContributionRow label="Eligible for Live" value={miner.is_eligible_for_live ? 'Yes' : 'No'} href={`/admin/miners/${miner.miner_uid}`} />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Pagination */}
+                        {filteredMiners.length > MINERS_PER_PAGE && (
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-primary/40">
+                                    Showing {startIdx + 1}-{endIdx} of {filteredMiners.length} miners
+                                </span>
+
+                                <div className="flex items-center space-x-1">
+                                    <button
+                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                        disabled={safePage === 1}
+                                        className="p-2 rounded-lg text-primary/40 hover:text-primary hover:bg-cream/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                                     >
-                                        <span>Go to Vault</span>
-                                        <ArrowRight size={12} className="group-hover/link:translate-x-1 transition-transform" />
-                                    </Link>
-                                </div>
+                                        <ChevronLeft size={16} />
+                                    </button>
 
-                                {/* Main Stats - Dashed List */}
-                                <div className="space-y-3.5 pt-5 border-t border-dashed border-cream-dark/50 flex-1">
-                                    <StatRow label="Combined Score:" value={miner.combined_score.toFixed(6)} isBlue />
-                                    <StatRow label="Eval Score:" value={miner.evaluation_score.toFixed(6)} isBlue />
-                                    <StatRow label="Live Score:" value={miner.live_score.toFixed(6)} isBlue />
-                                    <StatRow label="Total Evaluations:" value={miner.total_evaluations.toLocaleString()} isBlue />
-                                    <StatRow label="Live Rounds:" value={miner.total_live_rounds.toLocaleString()} isBlue />
+                                    {pageNumbers.map((page, idx) =>
+                                        page === '...' ? (
+                                            <span key={`ellipsis-${idx}`} className="px-2 text-[10px] font-bold text-primary/30">...</span>
+                                        ) : (
+                                            <button
+                                                key={page}
+                                                onClick={() => setCurrentPage(page as number)}
+                                                className={`min-w-[32px] h-8 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                                                    safePage === page
+                                                        ? 'bg-primary text-white shadow-md'
+                                                        : 'text-primary/40 hover:text-primary hover:bg-cream/30'
+                                                }`}
+                                            >
+                                                {page}
+                                            </button>
+                                        )
+                                    )}
 
-                                    <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-widest pt-1">
-                                        <span className="text-primary/20">Chains:</span>
-                                        <div className="flex items-center space-x-2">
-                                            <ChainBadge name="BASE" icon="/images/base-logo.svg" />
-                                        </div>
-                                    </div>
-
-                                    <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-widest pt-1">
-                                        <span className="text-primary/20">Participation Days:</span>
-                                        <span className="text-blue-600">{miner.participation_days}</span>
-                                    </div>
-                                </div>
-
-                                {/* Hotkey Sub-section */}
-                                <div className="mt-6 pt-6 border-t border-dashed border-cream-dark/50 shrink-0">
-                                    <div className="flex justify-between items-center mb-5">
-                                        <h5 className="text-[9px] font-black uppercase tracking-[0.2em] text-primary/20">Hotkey</h5>
-                                        <div className="flex items-center space-x-1.5 text-primary/40 font-mono text-[10px]">
-                                            <span>{miner.miner_hotkey.slice(0, 6)}...{miner.miner_hotkey.slice(-4)}</span>
-                                            <ExternalLink size={10} className="cursor-pointer hover:text-primary transition-colors" />
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-2.5">
-                                        <ContributionRow label="Eligible for Live" value={miner.is_eligible_for_live ? 'Yes' : 'No'} href={`/admin/miners/${miner.miner_uid}`} />
-                                    </div>
+                                    <button
+                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                        disabled={safePage === totalPages}
+                                        className="p-2 rounded-lg text-primary/40 hover:text-primary hover:bg-cream/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                    >
+                                        <ChevronRight size={16} />
+                                    </button>
                                 </div>
                             </div>
-                        ))}
-                    </div>
+                        )}
+
+                        {/* Empty state for search */}
+                        {filteredMiners.length === 0 && searchQuery && (
+                            <div className="text-center py-16 text-primary/40 text-[11px] font-bold uppercase tracking-widest">
+                                No miners found for &ldquo;{searchQuery}&rdquo;
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
         </AdminLayout>

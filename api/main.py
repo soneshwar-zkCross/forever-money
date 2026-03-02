@@ -60,7 +60,9 @@ async def lifespan(app: FastAPI):
         }
     )
     # Only generate schemas on the local metrics DB (reader DB is read-only)
-    await Tortoise.generate_schemas(safe=True)
+    from tortoise import connections
+    from tortoise.utils import generate_schema_for_client
+    await generate_schema_for_client(connections.get("metrics"), safe=True)
     logger.info("Database connections established")
 
     # Initialize Bittensor client
