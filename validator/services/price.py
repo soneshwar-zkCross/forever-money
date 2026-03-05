@@ -1,6 +1,7 @@
 import aiohttp
 import asyncio
 import logging
+from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 
 import bittensor as bt
@@ -77,6 +78,14 @@ class PriceService:
         10: "optimistic-ethereum",
         43114: "avalanche",
         56: "binance-smart-chain",
+    }
+
+    # Known stablecoins (return $1.0 immediately, no API call)
+    STABLECOINS = {
+        "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",  # USDC on Base
+        "0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca",  # USDbC on Base
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",  # USDC on Ethereum
+        "0xdac17f958d2ee523a2206206994597c13d831ec7",  # USDT on Ethereum
     }
 
     # GeckoTerminal network names by chain_id (fallback when CoinGecko returns 404/429)
