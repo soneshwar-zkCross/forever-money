@@ -21,7 +21,7 @@ from api.services.metrics_calculator import MetricsCalculator
 from api.services.identity_service import IdentityService
 from validator.repositories.job import JobRepository
 from validator.repositories.pool import PoolDataDB
-from validator.models.job import MinerScore
+from validator.models.job import MinerScore, Round, RoundStatus, RoundType, Prediction, LiveExecution
 
 logger = logging.getLogger(__name__)
 
@@ -534,3 +534,237 @@ async def get_miner_vaults(uid: int):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get miner vaults: {str(e)}")
+
+
+async def _resolve_pool_token_info(job) -> dict:
+    """
+    Resolve token0/token1 symbols and decimals for a pool.
+    Returns {token0_symbol, token1_symbol, token0_decimals, token1_decimals}.
+    Falls back to pair_name order if resolution fails.
+    """
+    pair_name = _resolve_pair_name(job)
+    parts = pair_name.split("/")
+    first_sym = parts[0].strip() if len(parts) > 0 else "T0"
+    second_sym = parts[1].strip() if len(parts) > 1 else "T1"
+
+    # Known token addresses on Base → (symbol, decimals)
+    KNOWN_TOKENS = {
+        "0x4200000000000000000000000000000000000006": ("WETH", 18),
+        "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": ("USDC", 6),
+        "0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca": ("USDbC", 6),
+        "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf": ("cbBTC", 8),
+        "0xa1832f7f413e6be05b0f9a191e0ceb5d69817e27": ("BID", 18),
+        "0x020897115f97e2aa031de9b30c9c88e1015c3064": ("xTAO", 18),
+    }
+
+    # Default decimals by symbol name
+    SYMBOL_DECIMALS = {
+        "USDC": 6, "USDT": 6, "USDbC": 6, "DAI": 18,
+        "WETH": 18, "WBTC": 8, "cbBTC": 8,
+        "BID": 18, "xTAO": 18, "TAO": 18,
+    }
+
+    try:
+        from api.services.metrics_calculator import _resolve_pool_tokens, _normalize_address
+        tokens = await _resolve_pool_tokens(job.chain_id, job.pair_address)
+        if tokens:
+            addr0 = _normalize_address(tokens[0])
+            addr1 = _normalize_address(tokens[1])
+            info0 = KNOWN_TOKENS.get(addr0)
+            info1 = KNOWN_TOKENS.get(addr1)
+
+            sym0 = info0[0] if info0 else "T0"
+            sym1 = info1[0] if info1 else "T1"
+            dec0 = info0[1] if info0 else 18
+            dec1 = info1[1] if info1 else 18
+
+            return {
+                "token0_symbol": sym0,
+                "token1_symbol": sym1,
+                "token0_decimals": dec0,
+                "token1_decimals": dec1,
+            }
+    except Exception as e:
+        logger.debug(f"Could not resolve pool tokens for {job.job_id}: {e}")
+
+    # Fallback: use pair name order, guess decimals from symbol
+    return {
+        "token0_symbol": first_sym,
+        "token1_symbol": second_sym,
+        "token0_decimals": SYMBOL_DECIMALS.get(first_sym.upper(), 18),
+        "token1_decimals": SYMBOL_DECIMALS.get(second_sym.upper(), 18),
+    }
+
+
+@router.get("/{uid}/jobs/{job_id}/activity")
+async def get_miner_vault_activity(uid: int, job_id: str):
+    """
+    Get round history, execution log, latest strategy, and summary
+    for a specific miner on a specific job.
+
+    All data comes from internal tables — no external API calls.
+    """
+    try:
+        from validator.models.job import Job
+
+        job = await Job.filter(job_id=job_id).first()
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+        # --- Round History ---
+        rounds = await Round.filter(
+            job=job,
+            status=RoundStatus.COMPLETED,
+        ).order_by("-round_number").limit(50)
+
+        round_history = []
+        eval_rounds = 0
+        live_rounds = 0
+        rounds_won = 0
+        all_scores_list = []
+
+        for r in rounds:
+            perf = r.performance_data or {}
+            scores = perf.get("scores", {})
+            miner_score = scores.get(str(uid))
+            is_winner = r.winner_uid == uid
+            if is_winner:
+                rounds_won += 1
+
+            rt = str(r.round_type.value) if hasattr(r.round_type, 'value') else str(r.round_type)
+            if rt == "evaluation":
+                eval_rounds += 1
+            else:
+                live_rounds += 1
+
+            if miner_score is not None:
+                all_scores_list.append(miner_score)
+
+            duration = None
+            if r.start_time and r.end_time:
+                duration = int((r.end_time - r.start_time).total_seconds())
+
+            round_history.append({
+                "round_number": r.round_number,
+                "round_type": rt,
+                "miner_score": miner_score,
+                "winner_uid": r.winner_uid,
+                "is_winner": is_winner,
+                "all_scores": scores,
+                "start_time": r.start_time.isoformat() if r.start_time else None,
+                "end_time": r.end_time.isoformat() if r.end_time else None,
+                "duration_seconds": duration,
+            })
+
+        # --- Execution Log ---
+        executions = await LiveExecution.filter(
+            job=job,
+            miner_uid=uid,
+        ).order_by("-executed_at").limit(50).prefetch_related("round")
+
+        execution_log = []
+        failed_executions = 0
+        for ex in executions:
+            strategy = ex.strategy_data or {}
+            positions = strategy.get("positions", [])
+            error_msg = None
+
+            if ex.tx_status == "failed":
+                failed_executions += 1
+                perf = ex.actual_performance or {}
+                error_msg = perf.get("error") or strategy.get("error")
+
+            execution_log.append({
+                "round_number": ex.round.round_number if ex.round else None,
+                "tx_status": ex.tx_status,
+                "tx_hash": ex.tx_hash,
+                "error": error_msg,
+                "positions": positions,
+                "executed_at": ex.executed_at.isoformat() if ex.executed_at else None,
+            })
+
+        # --- Recent Strategies (from last 50 predictions with data) ---
+        recent_predictions = await Prediction.filter(
+            job=job,
+            miner_uid=uid,
+            accepted=True,
+        ).order_by("-submitted_at").limit(50)
+
+        recent_strategies = []
+        for pred in recent_predictions:
+            pd = pred.prediction_data
+            if not pd:
+                continue
+
+            # prediction_data can be:
+            # 1. A list of rebalance steps [{old_positions, new_positions, inventory, block, price}, ...]
+            # 2. A dict with keys like {positions, inventory, ...}
+            steps = pd if isinstance(pd, list) else [pd]
+
+            for step in steps:
+                if not isinstance(step, dict):
+                    continue
+                positions = step.get("new_positions") or step.get("positions") or []
+                inventory = step.get("inventory")
+                entry = {
+                    "positions": positions,
+                    "inventory": inventory,
+                    "block": step.get("block"),
+                    "price": step.get("price"),
+                    "submitted_at": pred.submitted_at.isoformat() if pred.submitted_at else None,
+                    "round_id": str(pred.round_id) if pred.round_id else None,
+                }
+                recent_strategies.append(entry)
+
+        # Also pull positions from LiveExecution strategy_data as a fallback
+        if not recent_strategies:
+            for ex in executions:
+                strategy = ex.strategy_data or {}
+                positions = strategy.get("positions", [])
+                if positions:
+                    recent_strategies.append({
+                        "positions": positions,
+                        "inventory": None,
+                        "block": None,
+                        "price": None,
+                        "submitted_at": ex.executed_at.isoformat() if ex.executed_at else None,
+                        "round_id": None,
+                    })
+
+        latest_strategy = recent_strategies[0] if recent_strategies else None
+
+        # --- Pool Token Info ---
+        pool_tokens = await _resolve_pool_token_info(job)
+
+        # --- Summary ---
+        total_rounds = len(round_history)
+        avg_score = (sum(all_scores_list) / len(all_scores_list)) if all_scores_list else 0.0
+        best_score = max(all_scores_list) if all_scores_list else 0.0
+
+        summary = {
+            "total_rounds": total_rounds,
+            "eval_rounds": eval_rounds,
+            "live_rounds": live_rounds,
+            "rounds_won": rounds_won,
+            "avg_score": avg_score,
+            "best_score": best_score,
+            "total_executions": len(execution_log),
+            "failed_executions": failed_executions,
+        }
+
+        return {
+            "miner_uid": uid,
+            "job_id": job_id,
+            "pool_tokens": pool_tokens,
+            "round_history": round_history,
+            "execution_log": execution_log,
+            "latest_strategy": latest_strategy,
+            "recent_strategies": recent_strategies[:50],
+            "summary": summary,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get vault activity for miner {uid} job {job_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get vault activity: {str(e)}")

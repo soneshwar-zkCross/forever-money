@@ -8,11 +8,12 @@ import {
     ExternalLink,
     ChevronRight,
 } from 'lucide-react';
-import { useJobs, useNetworkStats, useLeaderboard, useJobAPY, useJobPnL, useJobTVL, useJobRevenue, useJobActivity } from '@/lib/api';
+import { useJobs, useNetworkStats, useLeaderboard, useJobAPY, useJobPnL, useJobTVL, useJobRevenue, useJobActivity, useAllRounds, useExecutions } from '@/lib/api';
 import { useJobTVLHistory } from '@/lib/metrics-hooks';
 import { formatUsd, formatFeeRate, formatTokenAmount } from '@/lib/format';
 import Link from 'next/link';
 import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip, XAxis, CartesianGrid } from 'recharts';
+import { formatDistanceToNow } from 'date-fns';
 
 export default function PairDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id: jobId } = use(params);
@@ -25,6 +26,8 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
     const { data: miners, isLoading: leaderboardLoading } = useLeaderboard(jobId);
     const { data: activity } = useJobActivity(jobId);
     const { data: tvlHistory } = useJobTVLHistory(jobId, 30);
+    const { data: roundsData } = useAllRounds(jobId, 20);
+    const { data: executions } = useExecutions(jobId);
 
     const job = jobs?.find(j => j.job_id === jobId) || {
         job_id: jobId,
@@ -38,6 +41,8 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
     };
 
     const [token0Symbol, token1Symbol] = job.metadata.pair_name.split('/') || ['cbBTC', 'USDC'];
+
+    const hasFinancialData = (tvl?.tvl_usd || 0) > 0;
 
     // Build performance chart data from real TVL history
     const tvlSeries = tvlHistory?.series || [];
@@ -87,92 +92,125 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                 </div>
 
-                {/* Main Metrics Row (7 Standardized Boxes) */}
-                <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
-                    <MetricBox label="TVL (USD)" value={formatUsd(tvl?.tvl_usd)} />
-                    <MetricBox label="Fees Earned (30D)" value={formatUsd(revenue?.revenue_usd)} />
-                    <MetricBox
-                        label={`APY ${token0Symbol} / ${token1Symbol} / USD`}
-                        value={`${(apy?.apy_percent_token0 || 0).toFixed(1)}% / ${(apy?.apy_percent_token1 || 0).toFixed(1)}% / ${(apy?.apy_percent || 0).toFixed(1)}%`}
-                        isApy
-                    />
-                    <MetricBox label="Active Miners (24h)" value={stats?.active_miners_24h?.toString() || "0"} subvalue={`${stats?.total_miners || 0} total`} />
-                    <MetricBox label={`Avg TVL (${token0Symbol})`} value={formatTokenAmount(apy?.avg_tvl_token0, token0Symbol)} />
-                    <MetricBox label={`Avg TVL (${token1Symbol})`} value={formatTokenAmount(apy?.avg_tvl_token1, token1Symbol)} />
-                    <MetricBox label="Net PnL" value={formatUsd(pnl?.pnl_usd)} highlight />
-                </div>
+                {/* Main Metrics Row */}
+                {hasFinancialData ? (
+                    <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
+                        <MetricBox label="TVL (USD)" value={formatUsd(tvl?.tvl_usd)} />
+                        <MetricBox label="Fees Earned (30D)" value={formatUsd(revenue?.revenue_usd)} />
+                        <MetricBox
+                            label={`APY ${token0Symbol} / ${token1Symbol} / USD`}
+                            value={`${(apy?.apy_percent_token0 || 0).toFixed(1)}% / ${(apy?.apy_percent_token1 || 0).toFixed(1)}% / ${(apy?.apy_percent || 0).toFixed(1)}%`}
+                            isApy
+                        />
+                        <MetricBox label="Active Miners (24h)" value={stats?.active_miners_24h?.toString() || "0"} subvalue={`${stats?.total_miners || 0} total`} />
+                        <MetricBox label={`Avg TVL (${token0Symbol})`} value={formatTokenAmount(apy?.avg_tvl_token0, token0Symbol)} />
+                        <MetricBox label={`Avg TVL (${token1Symbol})`} value={formatTokenAmount(apy?.avg_tvl_token1, token1Symbol)} />
+                        <MetricBox label="Net PnL" value={formatUsd(pnl?.pnl_usd)} highlight />
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+                        <MetricBox
+                            label="Total Rounds"
+                            value={String(activity?.round_outcomes.total_rounds || 0)}
+                        />
+                        <MetricBox
+                            label="Eval / Live"
+                            value={`${activity?.round_outcomes.eval_rounds || 0} / ${activity?.round_outcomes.live_rounds || 0}`}
+                        />
+                        <MetricBox
+                            label="Completion Rate"
+                            value={`${activity?.round_outcomes.completion_rate || 0}%`}
+                        />
+                        <MetricBox
+                            label="Active Miners (24h)"
+                            value={String(activity?.miner_activity.active_miners_24h || 0)}
+                            subvalue={`${activity?.miner_activity.total_miners || 0} total`}
+                        />
+                        <MetricBox
+                            label="Avg Response Time"
+                            value={`${(activity?.miner_activity.avg_response_time_ms || 0).toFixed(0)}ms`}
+                        />
+                        <MetricBox
+                            label="Top Score"
+                            value={(activity?.score_stats.top_combined_score || 0).toFixed(4)}
+                            highlight
+                        />
+                    </div>
+                )}
 
-                {/* Performance Chart Section */}
-                <div className="bg-white border border-cream-dark p-4 md:p-8 rounded-[32px] shadow-sm">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-                        <div className="flex flex-col space-y-4">
-                            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30 whitespace-nowrap">Performance Over Time</h3>
-                            <div className="flex flex-wrap items-center gap-4 md:gap-6">
-                                <ChartLegend label="ForeverMoney" color="#3B82F6" />
-                                <ChartLegend label="Full-range LP" color="#0D1117" />
-                                <ChartLegend label="Holding" color="#3B82F6" opacity={0.5} />
+                {/* Performance Chart Section (only when financial data exists) */}
+                {hasFinancialData && (
+                    <div className="bg-white border border-cream-dark p-4 md:p-8 rounded-[32px] shadow-sm">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                            <div className="flex flex-col space-y-4">
+                                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30 whitespace-nowrap">Performance Over Time</h3>
+                                <div className="flex flex-wrap items-center gap-4 md:gap-6">
+                                    <ChartLegend label="ForeverMoney" color="#3B82F6" />
+                                    <ChartLegend label="Full-range LP" color="#0D1117" />
+                                    <ChartLegend label="Holding" color="#3B82F6" opacity={0.5} />
+                                </div>
+                            </div>
+                            <div className="flex bg-cream/20 p-1 rounded-full border border-cream-dark/30 self-start md:self-auto overflow-x-auto max-w-full">
+                                {['1D', '7D', '30D', 'ALL'].map((tf) => (
+                                    <button
+                                        key={tf}
+                                        className={`px-3 py-1 text-[9px] font-bold rounded-full transition-all whitespace-nowrap ${tf === '30D' ? 'bg-primary text-white shadow-md' : 'text-primary/40 hover:text-primary'}`}
+                                    >
+                                        {tf}
+                                    </button>
+                                ))}
                             </div>
                         </div>
-                        <div className="flex bg-cream/20 p-1 rounded-full border border-cream-dark/30 self-start md:self-auto overflow-x-auto max-w-full">
-                            {['1D', '7D', '30D', 'ALL'].map((tf) => (
-                                <button
-                                    key={tf}
-                                    className={`px-3 py-1 text-[9px] font-bold rounded-full transition-all whitespace-nowrap ${tf === '30D' ? 'bg-primary text-white shadow-md' : 'text-primary/40 hover:text-primary'}`}
-                                >
-                                    {tf}
-                                </button>
-                            ))}
+
+                        <div className="h-[300px] w-full relative">
+                            {performanceData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={performanceData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="6 6" vertical={false} stroke="#F2EDE4" />
+                                        <XAxis
+                                            dataKey="time"
+                                            axisLine={false}
+                                            tickLine={false}
+                                            tick={{ fill: '#0C2060', opacity: 0.3, fontSize: 9, fontWeight: 700 }}
+                                            dy={10}
+                                        />
+                                        <YAxis
+                                            axisLine={false}
+                                            tickLine={false}
+                                            tick={{ fill: '#0C2060', opacity: 0.3, fontSize: 9, fontWeight: 700 }}
+                                            tickFormatter={(val) => `$${(val / 1000).toFixed(1)}k`}
+                                        />
+                                        <Tooltip
+                                            contentStyle={{ borderRadius: '12px', border: '1px solid #F2EDE4', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '10px', fontWeight: 700 }}
+                                        />
+                                        <Line type="monotone" dataKey="forever" stroke="#3B82F6" strokeWidth={2.5} dot={false} />
+                                        <Line type="monotone" dataKey="lp" stroke="#0D1117" strokeWidth={1.5} dot={false} />
+                                        <Line type="monotone" dataKey="holding" stroke="#3B82F6" strokeWidth={1.2} strokeOpacity={0.4} dot={false} />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="h-full flex items-center justify-center text-primary/20 text-xs font-black uppercase tracking-widest">
+                                    Collecting performance data...
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="mt-6 flex items-center justify-between pt-6 border-t border-cream-dark/30">
+                            <span className="text-[9px] font-bold text-primary/20 uppercase tracking-widest">Data Source: Hyperliquid</span>
+                            <span className="text-[9px] font-bold text-primary/20 uppercase tracking-widest">12M Cycles</span>
                         </div>
                     </div>
+                )}
 
-                    <div className="h-[300px] w-full relative">
-                        {performanceData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={performanceData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="6 6" vertical={false} stroke="#F2EDE4" />
-                                    <XAxis
-                                        dataKey="time"
-                                        axisLine={false}
-                                        tickLine={false}
-                                        tick={{ fill: '#0C2060', opacity: 0.3, fontSize: 9, fontWeight: 700 }}
-                                        dy={10}
-                                    />
-                                    <YAxis
-                                        axisLine={false}
-                                        tickLine={false}
-                                        tick={{ fill: '#0C2060', opacity: 0.3, fontSize: 9, fontWeight: 700 }}
-                                        tickFormatter={(val) => `$${(val / 1000).toFixed(1)}k`}
-                                    />
-                                    <Tooltip
-                                        contentStyle={{ borderRadius: '12px', border: '1px solid #F2EDE4', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontSize: '10px', fontWeight: 700 }}
-                                    />
-                                    <Line type="monotone" dataKey="forever" stroke="#3B82F6" strokeWidth={2.5} dot={false} />
-                                    <Line type="monotone" dataKey="lp" stroke="#0D1117" strokeWidth={1.5} dot={false} />
-                                    <Line type="monotone" dataKey="holding" stroke="#3B82F6" strokeWidth={1.2} strokeOpacity={0.4} dot={false} />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        ) : (
-                            <div className="h-full flex items-center justify-center text-primary/20 text-xs font-black uppercase tracking-widest">
-                                Collecting performance data...
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="mt-6 flex items-center justify-between pt-6 border-t border-cream-dark/30">
-                        <span className="text-[9px] font-bold text-primary/20 uppercase tracking-widest">Data Source: Hyperliquid</span>
-                        <span className="text-[9px] font-bold text-primary/20 uppercase tracking-widest">12M Cycles</span>
-                    </div>
-                </div>
-
-                {/* Active Vaults Section */}
+                {/* Recent Rounds Table */}
                 <div className="bg-white border border-cream-dark rounded-[32px] shadow-sm overflow-hidden">
                     <div className="px-8 py-6 border-b border-cream-dark/50 flex items-center justify-between">
                         <div>
-                            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30">Active Vaults</h3>
-                            <p className="text-[9px] font-bold text-primary/20 uppercase tracking-widest mt-1">Live Execution Records</p>
+                            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30">Recent Rounds</h3>
+                            <p className="text-[9px] font-bold text-primary/20 uppercase tracking-widest mt-1">Last {roundsData?.rounds?.length || 0} rounds</p>
                         </div>
                         <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[9px] font-bold uppercase tracking-widest">
-                            {miners?.length || 0} Active
+                            {roundsData?.total_rounds || 0} Total
                         </div>
                     </div>
 
@@ -180,47 +218,272 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                         <table className="w-full text-left">
                             <thead className="bg-cream/5">
                                 <tr className="text-[9px] text-primary/20 font-bold uppercase tracking-widest border-b border-cream-dark/50">
-                                    <th className="pl-8 py-4">Vault No.</th>
-                                    <th className="py-4">Miner</th>
-                                    <th className="py-4 whitespace-nowrap">TVL</th>
-                                    <th className="py-4 whitespace-nowrap">Fees USD</th>
-                                    <th className="py-4 whitespace-nowrap text-blue-600">Fees {token0Symbol}</th>
-                                    <th className="py-4 whitespace-nowrap text-blue-600">Fees {token1Symbol}</th>
-                                    <th className="py-4 whitespace-nowrap text-blue-600">APY {token0Symbol}</th>
-                                    <th className="py-4 whitespace-nowrap text-blue-600">APY {token1Symbol}</th>
-                                    <th className="py-4 whitespace-nowrap text-blue-600 text-right pr-4">APY (USD)</th>
-                                    <th className="pr-8 py-4"></th>
+                                    <th className="pl-8 py-4">Round #</th>
+                                    <th className="py-4">Type</th>
+                                    <th className="py-4">Winner</th>
+                                    <th className="py-4">Participants</th>
+                                    <th className="py-4">Duration</th>
+                                    <th className="py-4">Status</th>
+                                    <th className="py-4">Tx</th>
+                                    <th className="py-4 text-right pr-8">Time</th>
                                 </tr>
                             </thead>
                             <tbody className="text-[10px] font-bold">
-                                {(miners || []).map((miner, i) => (
-                                    <tr key={miner.miner_uid} className="border-b border-cream-dark/20 last:border-0 hover:bg-cream/5 transition-colors group cursor-pointer">
-                                        <td className="pl-8 py-4 text-primary/40">Vault #{miner.miner_uid}</td>
-                                        <td className="py-4">
-                                            <div className="flex flex-col">
-                                                <span>{miner.miner_hotkey?.slice(0, 10)}...</span>
-                                                <span className="text-[8px] text-primary/20 uppercase tracking-tighter">UID: {miner.miner_uid}</span>
-                                            </div>
-                                        </td>
-                                        <td className="py-4 text-blue-600">{formatUsd(tvl?.tvl_usd ? tvl.tvl_usd / (miners?.length || 1) : 0)}</td>
-                                        <td className="py-4 text-blue-500">{formatUsd(revenue?.revenue_usd ? revenue.revenue_usd / (miners?.length || 1) : 0)}</td>
-                                        <td className="py-4 text-blue-500">{(revenue?.revenue_token0 ? revenue.revenue_token0 / (miners?.length || 1) : 0).toFixed(4)}</td>
-                                        <td className="py-4 text-blue-500">{(revenue?.revenue_token1 ? revenue.revenue_token1 / (miners?.length || 1) : 0).toFixed(4)}</td>
-                                        <td className="py-4 text-blue-500">{(apy?.apy_percent_token0 || 0).toFixed(1)}%</td>
-                                        <td className="py-4 text-blue-500">{(apy?.apy_percent_token1 || 0).toFixed(1)}%</td>
-                                        <td className="py-4 text-blue-600 text-right pr-4">{(apy?.apy_percent || 0).toFixed(1)}%</td>
-                                        <td className="pr-8 py-4 text-right">
-                                            <ChevronRight size={12} className="inline text-blue-600 transition-transform group-hover:translate-x-1" />
-                                        </td>
-                                    </tr>
-                                ))}
-                                {(!miners || miners.length === 0) && (
-                                    <tr><td colSpan={10} className="py-8 text-center text-primary/20">No active vaults</td></tr>
+                                {(roundsData?.rounds || []).map((round) => {
+                                    const duration = round.start_time && round.end_time
+                                        ? (new Date(round.end_time).getTime() - new Date(round.start_time).getTime()) / 1000
+                                        : 0;
+                                    return (
+                                        <tr key={round.round_id} className="border-b border-cream-dark/20 last:border-0 hover:bg-cream/5 transition-colors">
+                                            <td className="pl-8 py-4 text-primary">#{round.round_number}</td>
+                                            <td className="py-4">
+                                                <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-widest ${
+                                                    round.round_type === 'live'
+                                                        ? 'bg-green-50 text-green-600 border border-green-100'
+                                                        : 'bg-blue-50 text-blue-600 border border-blue-100'
+                                                }`}>
+                                                    {round.round_type}
+                                                </span>
+                                            </td>
+                                            <td className="py-4 text-primary/70">
+                                                {round.winner_uid !== null ? `UID ${round.winner_uid}` : '—'}
+                                            </td>
+                                            <td className="py-4 text-primary/60">{round.participants_count}</td>
+                                            <td className="py-4 text-primary/60">{formatDuration(duration)}</td>
+                                            <td className="py-4">
+                                                <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-widest ${
+                                                    round.status === 'completed'
+                                                        ? 'bg-green-50 text-green-600'
+                                                        : 'bg-yellow-50 text-yellow-600'
+                                                }`}>
+                                                    {round.status}
+                                                </span>
+                                            </td>
+                                            <td className="py-4">
+                                                {round.execution?.tx_hash ? (
+                                                    <a
+                                                        href={`https://basescan.org/tx/${round.execution.tx_hash}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="flex items-center space-x-1 text-blue-500 hover:text-blue-700 transition-colors"
+                                                    >
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${
+                                                            round.execution.tx_status === 'success' ? 'bg-green-500' :
+                                                            round.execution.tx_status === 'failed' ? 'bg-red-500' : 'bg-yellow-500'
+                                                        }`} />
+                                                        <span className="font-mono text-[9px]">{round.execution.tx_hash.slice(0, 8)}...</span>
+                                                        <ExternalLink size={10} />
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-primary/20">—</span>
+                                                )}
+                                            </td>
+                                            <td className="py-4 text-right pr-8 text-primary/40">
+                                                {timeAgo(round.end_time || round.start_time)}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {(!roundsData?.rounds || roundsData.rounds.length === 0) && (
+                                    <tr><td colSpan={8} className="py-8 text-center text-primary/20 text-xs font-bold uppercase tracking-widest">No rounds yet</td></tr>
                                 )}
                             </tbody>
                         </table>
                     </div>
                 </div>
+
+                {/* Miner Leaderboard (replaces Active Vaults when no financial data) */}
+                {hasFinancialData ? (
+                    <div className="bg-white border border-cream-dark rounded-[32px] shadow-sm overflow-hidden">
+                        <div className="px-8 py-6 border-b border-cream-dark/50 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30">Active Vaults</h3>
+                                <p className="text-[9px] font-bold text-primary/20 uppercase tracking-widest mt-1">Live Execution Records</p>
+                            </div>
+                            <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[9px] font-bold uppercase tracking-widest">
+                                {miners?.length || 0} Active
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-cream/5">
+                                    <tr className="text-[9px] text-primary/20 font-bold uppercase tracking-widest border-b border-cream-dark/50">
+                                        <th className="pl-8 py-4">Vault No.</th>
+                                        <th className="py-4">Miner</th>
+                                        <th className="py-4 whitespace-nowrap">TVL</th>
+                                        <th className="py-4 whitespace-nowrap">Fees USD</th>
+                                        <th className="py-4 whitespace-nowrap text-blue-600">Fees {token0Symbol}</th>
+                                        <th className="py-4 whitespace-nowrap text-blue-600">Fees {token1Symbol}</th>
+                                        <th className="py-4 whitespace-nowrap text-blue-600">APY {token0Symbol}</th>
+                                        <th className="py-4 whitespace-nowrap text-blue-600">APY {token1Symbol}</th>
+                                        <th className="py-4 whitespace-nowrap text-blue-600 text-right pr-4">APY (USD)</th>
+                                        <th className="pr-8 py-4"></th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-[10px] font-bold">
+                                    {(miners || []).map((miner, i) => (
+                                        <tr key={miner.miner_uid} className="border-b border-cream-dark/20 last:border-0 hover:bg-cream/5 transition-colors group cursor-pointer">
+                                            <td className="pl-8 py-4 text-primary/40">Vault #{miner.miner_uid}</td>
+                                            <td className="py-4">
+                                                <div className="flex flex-col">
+                                                    <span>{miner.miner_hotkey?.slice(0, 10)}...</span>
+                                                    <span className="text-[8px] text-primary/20 uppercase tracking-tighter">UID: {miner.miner_uid}</span>
+                                                </div>
+                                            </td>
+                                            <td className="py-4 text-blue-600">{formatUsd(tvl?.tvl_usd ? tvl.tvl_usd / (miners?.length || 1) : 0)}</td>
+                                            <td className="py-4 text-blue-500">{formatUsd(revenue?.revenue_usd ? revenue.revenue_usd / (miners?.length || 1) : 0)}</td>
+                                            <td className="py-4 text-blue-500">{(revenue?.revenue_token0 ? revenue.revenue_token0 / (miners?.length || 1) : 0).toFixed(4)}</td>
+                                            <td className="py-4 text-blue-500">{(revenue?.revenue_token1 ? revenue.revenue_token1 / (miners?.length || 1) : 0).toFixed(4)}</td>
+                                            <td className="py-4 text-blue-500">{(apy?.apy_percent_token0 || 0).toFixed(1)}%</td>
+                                            <td className="py-4 text-blue-500">{(apy?.apy_percent_token1 || 0).toFixed(1)}%</td>
+                                            <td className="py-4 text-blue-600 text-right pr-4">{(apy?.apy_percent || 0).toFixed(1)}%</td>
+                                            <td className="pr-8 py-4 text-right">
+                                                <ChevronRight size={12} className="inline text-blue-600 transition-transform group-hover:translate-x-1" />
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {(!miners || miners.length === 0) && (
+                                        <tr><td colSpan={10} className="py-8 text-center text-primary/20">No active vaults</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-white border border-cream-dark rounded-[32px] shadow-sm overflow-hidden">
+                        <div className="px-8 py-6 border-b border-cream-dark/50 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30">Miner Leaderboard</h3>
+                                <p className="text-[9px] font-bold text-primary/20 uppercase tracking-widest mt-1">Ranked by combined score</p>
+                            </div>
+                            <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[9px] font-bold uppercase tracking-widest">
+                                {miners?.length || 0} Miners
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-cream/5">
+                                    <tr className="text-[9px] text-primary/20 font-bold uppercase tracking-widest border-b border-cream-dark/50">
+                                        <th className="pl-8 py-4">#</th>
+                                        <th className="py-4">Miner</th>
+                                        <th className="py-4 text-right">Combined</th>
+                                        <th className="py-4 text-right">Eval</th>
+                                        <th className="py-4 text-right">Live</th>
+                                        <th className="py-4 text-right">Rounds</th>
+                                        <th className="py-4">Status</th>
+                                        <th className="pr-8 py-4"></th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-[10px] font-bold">
+                                    {(miners || []).map((miner, i) => (
+                                        <Link
+                                            key={miner.miner_uid}
+                                            href={`/admin/miners/${miner.miner_uid}?pair=${jobId}`}
+                                            className="contents"
+                                        >
+                                            <tr className="border-b border-cream-dark/20 last:border-0 hover:bg-cream/5 transition-colors group cursor-pointer">
+                                                <td className="pl-8 py-4 text-primary/40">{i + 1}</td>
+                                                <td className="py-4">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-mono">{miner.miner_hotkey?.slice(0, 10)}...</span>
+                                                        <span className="text-[8px] text-primary/20 uppercase tracking-tighter">UID {miner.miner_uid}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="py-4 text-right text-primary font-mono">{miner.combined_score.toFixed(4)}</td>
+                                                <td className="py-4 text-right text-blue-500 font-mono">{miner.evaluation_score.toFixed(4)}</td>
+                                                <td className="py-4 text-right text-green-600 font-mono">{miner.live_score.toFixed(4)}</td>
+                                                <td className="py-4 text-right text-primary/60">{miner.total_evaluations + miner.total_live_rounds}</td>
+                                                <td className="py-4">
+                                                    <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-widest ${
+                                                        miner.is_active
+                                                            ? 'bg-green-50 text-green-600 border border-green-100'
+                                                            : 'bg-gray-50 text-gray-400 border border-gray-100'
+                                                    }`}>
+                                                        {miner.is_active ? 'Active' : 'Inactive'}
+                                                    </span>
+                                                </td>
+                                                <td className="pr-8 py-4 text-right">
+                                                    <ChevronRight size={12} className="inline text-blue-600 transition-transform group-hover:translate-x-1" />
+                                                </td>
+                                            </tr>
+                                        </Link>
+                                    ))}
+                                    {(!miners || miners.length === 0) && (
+                                        <tr><td colSpan={8} className="py-8 text-center text-primary/20 text-xs font-bold uppercase tracking-widest">No miners registered</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {/* Recent Executions Section */}
+                {executions && executions.length > 0 && (
+                    <div className="bg-white border border-cream-dark rounded-[32px] shadow-sm overflow-hidden">
+                        <div className="px-8 py-6 border-b border-cream-dark/50 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30">Recent Executions</h3>
+                                <p className="text-[9px] font-bold text-primary/20 uppercase tracking-widest mt-1">Live execution attempts</p>
+                            </div>
+                            <div className="px-3 py-1 bg-purple-50 text-purple-600 rounded-full text-[9px] font-bold uppercase tracking-widest">
+                                {executions.length} Executions
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-cream/5">
+                                    <tr className="text-[9px] text-primary/20 font-bold uppercase tracking-widest border-b border-cream-dark/50">
+                                        <th className="pl-8 py-4">Round #</th>
+                                        <th className="py-4">Miner UID</th>
+                                        <th className="py-4">Status</th>
+                                        <th className="py-4">Tx Hash</th>
+                                        <th className="py-4 text-right pr-8">Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-[10px] font-bold">
+                                    {executions.map((exec) => (
+                                        <tr key={exec.execution_id} className="border-b border-cream-dark/20 last:border-0 hover:bg-cream/5 transition-colors">
+                                            <td className="pl-8 py-4 text-primary">#{exec.round_number}</td>
+                                            <td className="py-4 text-primary/70">UID {exec.miner_uid}</td>
+                                            <td className="py-4">
+                                                <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-widest ${
+                                                    exec.tx_status === 'success'
+                                                        ? 'bg-green-50 text-green-600 border border-green-100'
+                                                        : exec.tx_status === 'failed'
+                                                        ? 'bg-red-50 text-red-600 border border-red-100'
+                                                        : 'bg-yellow-50 text-yellow-600 border border-yellow-100'
+                                                }`}>
+                                                    {exec.tx_status || 'Pending'}
+                                                </span>
+                                            </td>
+                                            <td className="py-4">
+                                                {exec.tx_hash ? (
+                                                    <a
+                                                        href={`https://basescan.org/tx/${exec.tx_hash}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="flex items-center space-x-1 text-blue-500 hover:text-blue-700 transition-colors"
+                                                    >
+                                                        <span className="font-mono text-[9px]">{exec.tx_hash.slice(0, 12)}...</span>
+                                                        <ExternalLink size={10} />
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-primary/20">—</span>
+                                                )}
+                                            </td>
+                                            <td className="py-4 text-right pr-8 text-primary/40">
+                                                {timeAgo(exec.executed_at)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
 
                 {/* Miner Activity Section */}
                 {activity && (
@@ -380,4 +643,17 @@ function ChartLegend({ label, color, opacity = 1 }: { label: string; color: stri
             <span className="text-[9px] font-bold uppercase tracking-widest text-primary/30">{label}</span>
         </div>
     );
+}
+
+function formatDuration(seconds: number): string {
+    if (!seconds || seconds <= 0) return '—';
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function timeAgo(isoStr: string | null): string {
+    if (!isoStr) return '—';
+    try { return formatDistanceToNow(new Date(isoStr), { addSuffix: true }); }
+    catch { return isoStr; }
 }

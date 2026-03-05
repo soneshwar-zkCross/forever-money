@@ -1081,3 +1081,99 @@ export function useJobActivity(jobId: string) {
         retry: 1,
     });
 }
+
+// Miner Vault Activity (round history, execution log, strategy)
+
+export interface RoundHistoryEntry {
+    round_number: number;
+    round_type: string;
+    miner_score: number | null;
+    winner_uid: number | null;
+    is_winner: boolean;
+    all_scores: Record<string, number>;
+    start_time: string | null;
+    end_time: string | null;
+    duration_seconds: number | null;
+}
+
+export interface ExecutionLogEntry {
+    round_number: number | null;
+    tx_status: string | null;
+    tx_hash: string | null;
+    error: string | null;
+    positions: any[];
+    executed_at: string | null;
+}
+
+export interface StrategyEntry {
+    inventory: Record<string, string> | null;
+    positions: any[];
+    block: number | null;
+    price: number | null;
+    submitted_at: string | null;
+    round_id: string | null;
+}
+
+export interface ActivitySummary {
+    total_rounds: number;
+    eval_rounds: number;
+    live_rounds: number;
+    rounds_won: number;
+    avg_score: number;
+    best_score: number;
+    total_executions: number;
+    failed_executions: number;
+}
+
+export interface PoolTokenInfo {
+    token0_symbol: string;
+    token1_symbol: string;
+    token0_decimals: number;
+    token1_decimals: number;
+}
+
+export interface MinerVaultActivity {
+    miner_uid: number;
+    job_id: string;
+    pool_tokens: PoolTokenInfo;
+    round_history: RoundHistoryEntry[];
+    execution_log: ExecutionLogEntry[];
+    latest_strategy: StrategyEntry | null;
+    recent_strategies: StrategyEntry[];
+    summary: ActivitySummary;
+}
+
+async function fetchMinerVaultActivity(uid: number, jobId: string): Promise<MinerVaultActivity> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/miners/${uid}/jobs/${jobId}/activity`);
+        if (!res.ok) throw new Error('Failed to fetch miner vault activity');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchMinerVaultActivity):', error);
+        return {
+            miner_uid: uid,
+            job_id: jobId,
+            pool_tokens: { token0_symbol: 'T0', token1_symbol: 'T1', token0_decimals: 18, token1_decimals: 18 },
+            round_history: [],
+            execution_log: [],
+            latest_strategy: null,
+            recent_strategies: [],
+            summary: {
+                total_rounds: 0, eval_rounds: 0, live_rounds: 0,
+                rounds_won: 0, avg_score: 0, best_score: 0,
+                total_executions: 0, failed_executions: 0,
+            },
+        };
+    }
+}
+
+export function useMinerVaultActivity(uid: number, jobId: string) {
+    return useQuery({
+        queryKey: ['miner-vault-activity', uid, jobId],
+        queryFn: () => fetchMinerVaultActivity(uid, jobId),
+        enabled: !!uid && !!jobId,
+        staleTime: 2 * 60 * 1000,
+        refetchInterval: 60000,
+        retry: 1,
+    });
+}
