@@ -436,13 +436,15 @@ async def get_job_tvl(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
+    # Tier 1: stored metrics (from background snapshot task)
     try:
         from api.models.metrics import JobMetrics
         latest_metric = await _try_stored_metrics(
             lambda: JobMetrics.filter(job_id=job_id).order_by("-calculated_at").first()
         )
 
-        if latest_metric:
+        if latest_metric and (latest_metric.tvl_usd or 0) > 0:
+            logger.debug(f"TVL [{job_id}]: served from stored metrics (${latest_metric.tvl_usd:.2f})")
             return JobTVLResponse(
                 job_id=job_id,
                 tvl_token0=latest_metric.tvl_token0,
@@ -452,13 +454,14 @@ async def get_job_tvl(job_id: str):
                 token1_price_usd=latest_metric.token1_price_usd,
                 updated_at=latest_metric.calculated_at.isoformat(),
             )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"TVL [{job_id}]: stored metrics failed: {e}")
 
-    # Fall back to on-chain calculation
+    # Tier 2: on-chain calculation (Web3 RPC)
     try:
         tvl_data = await MetricsCalculator.calculate_job_tvl(job)
         if tvl_data["tvl_token0"] > 0 or tvl_data["tvl_token1"] > 0:
+            logger.debug(f"TVL [{job_id}]: served from on-chain calc (${tvl_data['tvl_usd']:.2f})")
             return JobTVLResponse(
                 job_id=job_id,
                 tvl_token0=tvl_data["tvl_token0"],
@@ -468,16 +471,22 @@ async def get_job_tvl(job_id: str):
                 token1_price_usd=tvl_data.get("token1_price_usd", 0.0),
                 updated_at=datetime.now().isoformat(),
             )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"TVL [{job_id}]: on-chain calc failed: {e}")
 
-    # Final fallback: approximate TVL from mints - burns in reader DB
+    # Tier 3: approximate TVL from mints - burns in reader DB
     try:
         tvl_approx = await ReaderDBMetricsService.get_pool_tvl_approx(job.pair_address, job.sn_liquidity_manager_address)
         prices = await ReaderDBMetricsService.get_token_prices(job)
         tvl_usd = ReaderDBMetricsService.tokens_to_usd(
             tvl_approx["tvl_token0"], tvl_approx["tvl_token1"],
             prices["price0"], prices["price1"],
+        )
+        logger.info(
+            f"TVL [{job_id}]: reader DB approx: "
+            f"t0={tvl_approx['tvl_token0']:.6f} t1={tvl_approx['tvl_token1']:.6f} "
+            f"p0=${prices['price0']:.4f} p1=${prices['price1']:.4f} "
+            f"tvl=${tvl_usd:.2f}"
         )
         return JobTVLResponse(
             job_id=job_id,
@@ -488,7 +497,8 @@ async def get_job_tvl(job_id: str):
             token1_price_usd=prices["price1"],
             updated_at=datetime.now().isoformat(),
         )
-    except Exception:
+    except Exception as e:
+        logger.warning(f"TVL [{job_id}]: all fallbacks exhausted: {e}")
         return JobTVLResponse(
             job_id=job_id,
             tvl_token0=0.0,

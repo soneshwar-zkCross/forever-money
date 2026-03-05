@@ -413,7 +413,6 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
         return series.map((pt: any) => ({
             time: formatTimestamp(pt.timestamp),
             earnings_usd: pt.earnings_usd || 0,
-            total_score: pt.total_score || 0,
         }));
     }, [metricsHistory]);
 
@@ -434,7 +433,7 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-10">
                     <div className="flex flex-col space-y-1">
                         <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/30">Performance Over Time</span>
-                        {scoreData.length > 0 && (
+                        {scoreData.length >= 2 && (
                             <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-2">
                                 <LegendItem color="bg-black" label="Combined" />
                                 <LegendItem color="bg-blue-500" label="Evaluation" />
@@ -444,7 +443,7 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
                     </div>
                 </div>
                 <div className="h-80 w-full relative">
-                    {scoreData.length > 0 ? (
+                    {scoreData.length >= 2 ? (
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={scoreData}>
                                 <defs>
@@ -490,27 +489,26 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
                         </ResponsiveContainer>
                     ) : (
                         <div className="h-full flex items-center justify-center text-primary/20 text-xs font-black uppercase tracking-widest">
-                            No score history available
+                            Not enough data yet — chart requires at least 2 snapshots
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Earnings Composition Over Time */}
+            {/* Earnings Over Time */}
             <div className="bg-white p-4 md:p-8 rounded-3xl md:rounded-[40px] border border-cream-dark shadow-sm text-primary">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-10">
                     <div className="flex flex-col space-y-1">
-                        <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/30">Earnings Composition Over Time</span>
-                        {earningsData.length > 0 && (
+                        <span className="text-[11px] font-black uppercase tracking-[0.2em] text-primary/30">Earnings Over Time</span>
+                        {earningsData.length >= 2 && (
                             <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-2">
                                 <LegendItem color="bg-black" label="Earnings (USD)" />
-                                <LegendItem color="bg-blue-500" label="Score" />
                             </div>
                         )}
                     </div>
                 </div>
                 <div className="h-80 w-full relative">
-                    {earningsData.length > 0 ? (
+                    {earningsData.length >= 2 ? (
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={earningsData}>
                                 <defs>
@@ -533,15 +531,6 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
                                     tick={{ fontSize: 9, fontWeight: 900, fill: '#0C206020' }}
                                     tickFormatter={(val) => `$${val.toFixed(0)}`}
                                 />
-                                <YAxis
-                                    yAxisId="right"
-                                    orientation="right"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fontSize: 9, fontWeight: 900, fill: '#3b82f6' }}
-                                    domain={[0, 1]}
-                                    tickFormatter={(val) => val.toFixed(2)}
-                                />
                                 <Tooltip
                                     content={({ active, payload }) => (
                                         active && payload && payload.length > 0 ? (
@@ -551,7 +540,7 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
                                                     <div key={i} className="flex justify-between items-center space-x-4 mb-1 last:mb-0">
                                                         <span className="uppercase tracking-widest opacity-40">{p.name}:</span>
                                                         <span style={{ color: p.color }}>
-                                                            {p.dataKey === 'earnings_usd' ? `$${(p.value as number).toFixed(2)}` : (p.value as number).toFixed(4)}
+                                                            ${(p.value as number).toFixed(2)}
                                                         </span>
                                                     </div>
                                                 ))}
@@ -560,12 +549,11 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
                                     )}
                                 />
                                 <Area type="monotone" dataKey="earnings_usd" name="Earnings (USD)" stroke="#000" strokeWidth={2} fill="url(#colorEarnings)" dot={false} />
-                                <Area type="monotone" dataKey="total_score" name="Score" stroke="#3b82f6" strokeWidth={1.5} fill="transparent" dot={false} yAxisId="right" />
                             </AreaChart>
                         </ResponsiveContainer>
                     ) : (
                         <div className="h-full flex items-center justify-center text-primary/20 text-xs font-black uppercase tracking-widest">
-                            Collecting earnings data...
+                            Not enough data yet — chart requires at least 2 snapshots
                         </div>
                     )}
                 </div>

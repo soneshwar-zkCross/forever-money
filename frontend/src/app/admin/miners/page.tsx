@@ -12,6 +12,7 @@ import {
     Search,
     ChevronLeft,
     ChevronRight,
+    RefreshCw,
 } from 'lucide-react';
 import { useAllMiners } from '@/lib/api';
 
@@ -23,9 +24,12 @@ export default function MinersPage() {
     const [timeframe, setTimeframe] = useState('30D');
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
+    const [showInactive, setShowInactive] = useState(false);
 
-    const { data: minersData, isLoading } = useAllMiners();
+    const { data: minersData, isLoading, isFetching } = useAllMiners();
     const miners = minersData?.miners;
+    const lastSynced = minersData?.last_synced;
+    const source = minersData?.source;
 
     const sortOptions = ['Miner ID', 'Combined Score', 'Eval Score', 'Live Score', 'Participation Days'];
     const timeframes = ['1D', '7D', '30D', 'ALL'];
@@ -54,21 +58,38 @@ export default function MinersPage() {
         return sorted;
     }, [miners, sortBy]);
 
-    // Filter miners by search query
+    // Filter miners by active status and search query
     const filteredMiners = useMemo(() => {
-        if (!searchQuery.trim()) return sortedMiners;
-        const q = searchQuery.toLowerCase().trim();
-        return sortedMiners.filter((m) =>
-            String(m.miner_uid).includes(q) ||
-            m.miner_hotkey.toLowerCase().includes(q) ||
-            (m.miner_name && m.miner_name.toLowerCase().includes(q))
-        );
-    }, [sortedMiners, searchQuery]);
+        let result = sortedMiners;
 
-    // Reset to page 1 when sort or search changes
+        // Active/inactive filter
+        if (!showInactive) {
+            result = result.filter((m) => m.is_active);
+        }
+
+        // Search filter
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase().trim();
+            result = result.filter((m) =>
+                String(m.miner_uid).includes(q) ||
+                m.miner_hotkey.toLowerCase().includes(q) ||
+                (m.miner_name && m.miner_name.toLowerCase().includes(q))
+            );
+        }
+
+        return result;
+    }, [sortedMiners, searchQuery, showInactive]);
+
+    // Counts for the toggle label
+    const activeCount = useMemo(() => {
+        return sortedMiners.filter((m) => m.is_active).length;
+    }, [sortedMiners]);
+    const totalCount = sortedMiners.length;
+
+    // Reset to page 1 when sort, search, or filter changes
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [sortBy, searchQuery]);
+    }, [sortBy, searchQuery, showInactive]);
 
     // Pagination calculations
     const totalPages = Math.max(1, Math.ceil(filteredMiners.length / MINERS_PER_PAGE));
@@ -143,6 +164,28 @@ export default function MinersPage() {
                         />
                     </div>
 
+                    {/* Active / All Toggle */}
+                    <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm self-start md:self-auto">
+                        <button
+                            onClick={() => setShowInactive(false)}
+                            className={`px-4 py-1.5 rounded-lg text-[10px] font-black tracking-widest transition-all whitespace-nowrap ${!showInactive
+                                ? 'bg-primary text-white shadow-md'
+                                : 'text-primary/30 hover:text-primary/50'
+                            }`}
+                        >
+                            Active ({activeCount})
+                        </button>
+                        <button
+                            onClick={() => setShowInactive(true)}
+                            className={`px-4 py-1.5 rounded-lg text-[10px] font-black tracking-widest transition-all whitespace-nowrap ${showInactive
+                                ? 'bg-primary text-white shadow-md'
+                                : 'text-primary/30 hover:text-primary/50'
+                            }`}
+                        >
+                            All ({totalCount})
+                        </button>
+                    </div>
+
                     {/* Timeframe Toggle */}
                     <div className="flex bg-white/50 border border-cream-dark rounded-xl p-1 shadow-sm self-start md:self-auto overflow-x-auto max-w-full">
                         {timeframes.map(t => (
@@ -160,6 +203,26 @@ export default function MinersPage() {
                     </div>
                 </div>
 
+                {/* Sync Status Bar */}
+                <div className="flex items-center justify-end space-x-3 text-[10px] font-bold uppercase tracking-widest">
+                    {isFetching && !isLoading ? (
+                        <span className="flex items-center space-x-1.5 text-primary/40">
+                            <RefreshCw size={12} className="animate-spin" />
+                            <span>Syncing...</span>
+                        </span>
+                    ) : lastSynced ? (
+                        <span className="flex items-center space-x-1.5 text-primary/40">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_6px] shadow-green-500/40" />
+                            <span>Last synced: <SyncTimeAgo iso={lastSynced} /></span>
+                        </span>
+                    ) : source === 'live' ? (
+                        <span className="flex items-center space-x-1.5 text-yellow-600/60">
+                            <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 shadow-[0_0_6px] shadow-yellow-500/40" />
+                            <span>Live (no cache)</span>
+                        </span>
+                    ) : null}
+                </div>
+
                 {/* Main View - 3-Column Grid */}
                 {isLoading ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
@@ -171,7 +234,7 @@ export default function MinersPage() {
                             {pagedMiners.map((miner) => (
                                 <div
                                     key={miner.miner_uid}
-                                    className="bg-white p-6 rounded-[32px] border border-cream-dark shadow-sm hover:shadow-md transition-all duration-500 font-bold text-primary group flex flex-col h-full"
+                                    className={`bg-white p-6 rounded-[32px] border border-cream-dark shadow-sm hover:shadow-md transition-all duration-500 font-bold text-primary group flex flex-col h-full ${!miner.is_active ? 'opacity-60' : ''}`}
                                 >
                                     {/* Card Header */}
                                     <div className="flex justify-between items-center mb-5 shrink-0">
@@ -184,10 +247,10 @@ export default function MinersPage() {
                                                     }
                                                 </h4>
                                             </Link>
-                                            <span className={`w-1.5 h-1.5 rounded-full shadow-[0_0_8px] shrink-0 ${miner.is_eligible_for_live
+                                            <span className={`w-1.5 h-1.5 rounded-full shadow-[0_0_8px] shrink-0 ${miner.is_active
                                                 ? 'bg-green-500 shadow-green-500/40'
-                                                : 'bg-yellow-500 shadow-yellow-500/40'
-                                                }`} />
+                                                : 'bg-red-400 shadow-red-400/40'
+                                                }`} title={miner.is_active ? 'Active (last 24h)' : 'Inactive'} />
                                         </div>
                                         <Link
                                             href={`/admin/miners/${miner.miner_uid}`}
@@ -282,10 +345,15 @@ export default function MinersPage() {
                             </div>
                         )}
 
-                        {/* Empty state for search */}
-                        {filteredMiners.length === 0 && searchQuery && (
+                        {/* Empty state */}
+                        {filteredMiners.length === 0 && (
                             <div className="text-center py-16 text-primary/40 text-[11px] font-bold uppercase tracking-widest">
-                                No miners found for &ldquo;{searchQuery}&rdquo;
+                                {searchQuery
+                                    ? <>No miners found for &ldquo;{searchQuery}&rdquo;</>
+                                    : !showInactive
+                                        ? <>No active miners in the last 24h. <button onClick={() => setShowInactive(true)} className="underline hover:text-primary transition-colors">Show all miners</button></>
+                                        : <>No miners found</>
+                                }
                             </div>
                         )}
                     </>
@@ -328,4 +396,19 @@ function ContributionRow({ label, value, href }: { label: string; value: string;
     }
 
     return content;
+}
+
+function SyncTimeAgo({ iso }: { iso: string }) {
+    const [, setTick] = useState(0);
+    React.useEffect(() => {
+        const id = setInterval(() => setTick((t) => t + 1), 30_000);
+        return () => clearInterval(id);
+    }, []);
+
+    const diff = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+    if (diff < 60) return <span>just now</span>;
+    const mins = Math.floor(diff / 60);
+    if (mins < 60) return <span>{mins}m ago</span>;
+    const hrs = Math.floor(mins / 60);
+    return <span>{hrs}h {mins % 60}m ago</span>;
 }

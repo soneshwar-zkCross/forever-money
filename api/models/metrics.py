@@ -104,6 +104,7 @@ class MinerMetrics(Model):
     Calculated metrics per miner.
 
     Stores earnings, win rate, and performance metrics.
+    Also stores list-page fields for cache-first serving.
     """
 
     id = fields.IntField(primary_key=True)
@@ -111,19 +112,34 @@ class MinerMetrics(Model):
     # Miner reference
     miner_uid = fields.IntField(db_index=True)
     miner_hotkey = fields.CharField(max_length=66, db_index=True)
+    miner_name = fields.CharField(max_length=255, null=True)
 
     # Timestamp
     calculated_at = fields.DatetimeField(auto_now_add=True, db_index=True)
 
+    # Snapshot batch tag (all rows from same snapshot share this value)
+    snapshot_time = fields.DatetimeField(null=True, db_index=True)
+
     # Earnings
     estimated_earnings_alpha = fields.FloatField(default=0.0)
     estimated_earnings_usd = fields.FloatField(default=0.0)
+
+    # Scores (mirrors MinerScore fields for cache-first serving)
+    combined_score = fields.FloatField(default=0.0)
+    evaluation_score = fields.FloatField(default=0.0)
+    live_score = fields.FloatField(default=0.0)
 
     # Performance
     total_score = fields.FloatField(default=0.0)
     win_rate = fields.FloatField(default=0.0)
     total_wins = fields.IntField(default=0)
     total_participations = fields.IntField(default=0)
+
+    # Participation
+    participation_days = fields.IntField(default=0)
+    total_evaluations = fields.IntField(default=0)
+    total_live_rounds = fields.IntField(default=0)
+    is_eligible_for_live = fields.BooleanField(default=False)
 
     # Per-job breakdown
     job_breakdown = fields.JSONField(default=dict)  # {job_id: {earnings, score, wins}}
@@ -258,3 +274,30 @@ class SubnetMetricsSnapshot(Model):
 
     def __str__(self):
         return f"SubnetMetricsSnapshot({self.snapshot_time})"
+
+
+class CachedPrice(Model):
+    """
+    SQLite-backed price cache.
+
+    Stores token prices with a 5-minute TTL so that CoinGecko / RPC calls
+    happen at most once per snapshot interval, not on every HTTP request.
+
+    price_key formats:
+      - "tao_usd"          → TAO price in USD
+      - "alpha_tao"         → Alpha price in TAO
+      - "0xaddr:8453"       → ERC-20 token price by address:chain_id
+    """
+
+    id = fields.IntField(primary_key=True)
+    price_key = fields.CharField(max_length=120, unique=True, db_index=True)
+    price_usd = fields.FloatField(default=0.0)
+    fetched_at = fields.DatetimeField(auto_now=True)
+    source = fields.CharField(max_length=50, default="coingecko")
+
+    class Meta:
+        table = "cached_prices"
+        app = "metrics"
+
+    def __str__(self):
+        return f"CachedPrice({self.price_key}={self.price_usd})"

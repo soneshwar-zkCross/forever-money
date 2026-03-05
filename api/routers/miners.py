@@ -5,7 +5,7 @@ Endpoints for miner-related operations.
 """
 import logging
 from typing import Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Query
 
 from api.models.responses import (
@@ -14,6 +14,7 @@ from api.models.responses import (
     MinerWinRateResponse,
     ErrorResponse
 )
+from api.models.metrics import MinerMetrics
 from api.services.jobs_service import JobService
 from api.services.miners_service import MinersService
 from api.services.metrics_calculator import MetricsCalculator
@@ -25,6 +26,17 @@ from validator.models.job import MinerScore
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _resolve_pair_name(job) -> str:
+    """Extract pair name from job metadata, falling back to job_id."""
+    if job.metadata and job.metadata.get("pair_name"):
+        return job.metadata["pair_name"]
+    # Derive from job_id: "weth-usdc" → "WETH/USDC"
+    if job.job_id and "-" in job.job_id:
+        parts = job.job_id.split("-", 1)
+        return f"{parts[0].upper()}/{parts[1].upper()}"
+    return job.job_id or "Unknown"
 
 # Lazy initialization of repositories
 _job_repository: Optional[JobRepository] = None
@@ -51,6 +63,18 @@ def get_pool_data_db() -> Optional[PoolDataDB]:
     return _pool_data_db
 
 
+def _is_recently_active(dt: Optional[datetime], cutoff: datetime) -> bool:
+    """Compare datetimes safely, handling naive vs aware mismatch."""
+    if dt is None:
+        return False
+    # Make both aware (UTC) for comparison
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    if cutoff.tzinfo is None:
+        cutoff = cutoff.replace(tzinfo=timezone.utc)
+    return dt >= cutoff
+
+
 @router.get("/")
 async def list_all_miners(
     limit: int = Query(300, ge=1, le=300, description="Max miners to return"),
@@ -60,7 +84,8 @@ async def list_all_miners(
     """
     List all miners across all jobs.
 
-    Returns a flat list of miners with their best scores across jobs.
+    Serves from local SQLite cache first (instant), falls back to live
+    reader DB when cache is empty.
     """
     sort_map = {
         "combined": "-combined_score",
@@ -70,46 +95,120 @@ async def list_all_miners(
     }
     order = sort_map.get(sort_by, "-combined_score")
 
-    total = await MinerScore.all().distinct().values_list("miner_uid", flat=True)
-    total_count = len(set(total))
+    active_cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
 
-    # Get miner scores — if a miner appears in multiple jobs, we get all rows
-    # then deduplicate keeping the best combined_score per miner
-    all_scores = await MinerScore.all().order_by(order).prefetch_related("job")
+    # --- Try cache first (local SQLite) ---
+    latest_snapshot = await MinerMetrics.all().order_by("-snapshot_time").first()
 
-    # Deduplicate: keep best combined_score per miner_uid
-    seen: dict = {}
+    if latest_snapshot and latest_snapshot.snapshot_time:
+        snapshot_time = latest_snapshot.snapshot_time
+        cached_miners = await MinerMetrics.filter(
+            snapshot_time=snapshot_time
+        ).order_by(order)
+
+        # Batch-fetch last_active from live MinerScore table
+        last_active_map: dict = {}
+        for r in await MinerScore.all().values("miner_uid", "last_active"):
+            uid = r["miner_uid"]
+            la = r["last_active"]
+            if uid not in last_active_map or (la and la > last_active_map[uid]):
+                last_active_map[uid] = la
+
+        total_count = len(cached_miners)
+        page = cached_miners[offset:offset + limit]
+
+        result = []
+        for m in page:
+            last_active_dt = last_active_map.get(m.miner_uid)
+            result.append({
+                "miner_uid": m.miner_uid,
+                "miner_hotkey": m.miner_hotkey,
+                "miner_name": m.miner_name,
+                "combined_score": m.combined_score,
+                "evaluation_score": m.evaluation_score,
+                "live_score": m.live_score,
+                "participation_days": m.participation_days,
+                "is_eligible_for_live": m.is_eligible_for_live,
+                "total_evaluations": m.total_evaluations,
+                "total_live_rounds": m.total_live_rounds,
+                "last_active": last_active_dt.isoformat() if last_active_dt else None,
+                "is_active": _is_recently_active(last_active_dt, active_cutoff),
+            })
+
+        return {
+            "total_miners": total_count,
+            "miners": result,
+            "last_synced": snapshot_time.isoformat(),
+            "source": "cache",
+        }
+
+    # --- Fallback: live reader DB ---
+    # Aggregate stats across ALL jobs for each miner_uid
+    all_scores = await MinerScore.all().prefetch_related("job")
+
+    aggregated: dict = {}
     for score in all_scores:
         uid = score.miner_uid
-        if uid not in seen or float(score.combined_score) > float(seen[uid].combined_score):
-            seen[uid] = score
+        if uid not in aggregated:
+            aggregated[uid] = {
+                "miner_uid": uid,
+                "miner_hotkey": score.miner_hotkey,
+                "combined_score": 0.0,
+                "evaluation_score": 0.0,
+                "live_score": 0.0,
+                "participation_days": 0,
+                "is_eligible_for_live": False,
+                "total_evaluations": 0,
+                "total_live_rounds": 0,
+                "last_active": None,
+            }
 
-    miners_list = sorted(seen.values(), key=lambda s: (
-        -float(s.combined_score) if sort_by != "uid" else s.miner_uid
-    ))
+        agg = aggregated[uid]
+        # Scores: take the max across jobs (best performance)
+        agg["combined_score"] = max(agg["combined_score"], float(score.combined_score))
+        agg["evaluation_score"] = max(agg["evaluation_score"], float(score.evaluation_score))
+        agg["live_score"] = max(agg["live_score"], float(score.live_score))
+        # Counts: sum across all jobs
+        agg["total_evaluations"] += score.total_evaluations
+        agg["total_live_rounds"] += score.total_live_rounds
+        agg["participation_days"] += score.participation_days
+        # Eligible if eligible in ANY job
+        if score.is_eligible_for_live:
+            agg["is_eligible_for_live"] = True
+        # last_active: most recent across jobs
+        if score.last_active:
+            if agg["last_active"] is None or score.last_active > agg["last_active"]:
+                agg["last_active"] = score.last_active
+
+    total_count = len(aggregated)
+
+    # Sort
+    sort_key_map = {
+        "combined": lambda m: -m["combined_score"],
+        "evaluation": lambda m: -m["evaluation_score"],
+        "live": lambda m: -m["live_score"],
+        "uid": lambda m: m["miner_uid"],
+    }
+    miners_list = sorted(aggregated.values(), key=sort_key_map.get(sort_by, sort_key_map["combined"]))
     page = miners_list[offset:offset + limit]
 
-    # Resolve on-chain identities
     identities = await IdentityService.get_all_identities()
 
     result = []
-    for score in page:
+    for m in page:
+        last_active_dt = m["last_active"]
         result.append({
-            "miner_uid": score.miner_uid,
-            "miner_hotkey": score.miner_hotkey,
-            "miner_name": IdentityService.get_name_for_uid(score.miner_uid, identities),
-            "combined_score": float(score.combined_score),
-            "evaluation_score": float(score.evaluation_score),
-            "live_score": float(score.live_score),
-            "participation_days": score.participation_days,
-            "is_eligible_for_live": score.is_eligible_for_live,
-            "total_evaluations": score.total_evaluations,
-            "total_live_rounds": score.total_live_rounds,
+            **m,
+            "miner_name": IdentityService.get_name_for_uid(m["miner_uid"], identities),
+            "last_active": last_active_dt.isoformat() if last_active_dt else None,
+            "is_active": _is_recently_active(last_active_dt, active_cutoff),
         })
 
     return {
         "total_miners": total_count,
         "miners": result,
+        "last_synced": None,
+        "source": "live",
     }
 
 
@@ -395,7 +494,7 @@ async def get_miner_vaults(uid: int):
             vault = {
                 "vault_id": f"vault_{uid}_{job.job_id}",
                 "job_id": job.job_id,
-                "pair_name": job.metadata.get("pair_name", "Unknown") if job.metadata else "Unknown",
+                "pair_name": _resolve_pair_name(job),
                 "pair_address": job.pair_address,
 
                 # Miner performance

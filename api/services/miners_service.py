@@ -19,6 +19,16 @@ from api.utils.bittensor_client import BittensorClient
 logger = logging.getLogger(__name__)
 
 
+def _resolve_pair_name(job) -> str:
+    """Extract pair name from job metadata, falling back to job_id."""
+    if job.metadata and job.metadata.get("pair_name"):
+        return job.metadata["pair_name"]
+    if job.job_id and "-" in job.job_id:
+        parts = job.job_id.split("-", 1)
+        return f"{parts[0].upper()}/{parts[1].upper()}"
+    return job.job_id or "Unknown"
+
+
 class MinersService:
     """Service for miner operations"""
 
@@ -45,7 +55,7 @@ class MinersService:
         for score in scores:
             jobs.append({
                 "job_id": score.job.job_id,
-                "pair_name": score.job.metadata.get("pair_name") if score.job.metadata else None,
+                "pair_name": _resolve_pair_name(score.job),
                 "combined_score": float(score.combined_score),
                 "evaluation_score": float(score.evaluation_score),
                 "live_score": float(score.live_score),

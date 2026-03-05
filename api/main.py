@@ -72,9 +72,16 @@ async def lifespan(app: FastAPI):
 
     # Start background metrics snapshot task
     logger.info("Starting metrics snapshot background task...")
-    from api.tasks.metrics_snapshot import snapshot_all_metrics
+    from api.tasks.metrics_snapshot import snapshot_all_metrics, _snapshot_miner_metrics, prewarm_price_cache
     asyncio.create_task(snapshot_all_metrics(interval_seconds=300))  # 5 minutes
     logger.info("Metrics snapshot task started")
+
+    # Pre-warm price cache so first dashboard load is instant
+    asyncio.create_task(prewarm_price_cache())
+
+    # Eager miner snapshot so the first /api/miners/ request is instant
+    logger.info("Initial miner snapshot triggered")
+    asyncio.create_task(_snapshot_miner_metrics())
 
     yield
 

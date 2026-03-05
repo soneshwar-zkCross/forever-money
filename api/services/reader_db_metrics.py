@@ -164,7 +164,10 @@ class ReaderDBMetricsService:
     # ------------------------------------------------------------------
     @staticmethod
     async def get_volume_24h(pair_address: str) -> Dict[str, float]:
-        """Get 24h trading volume from swaps."""
+        """Get 24h trading volume from swaps.
+
+        Note: The reader DB normalises all amounts to 18 decimals.
+        """
         cache_key = f"volume:{pair_address}"
         cached = _get_cached(cache_key)
         if cached is not None:
@@ -172,9 +175,6 @@ class ReaderDBMetricsService:
 
         from validator.models.pool_events import SwapEvent
         addr = normalize_evt_address(pair_address)
-        config = _get_pool_config(pair_address)
-        dec0 = config["token0"]["decimals"]
-        dec1 = config["token1"]["decimals"]
 
         cutoff = int((datetime.utcnow() - timedelta(hours=24)).timestamp())
 
@@ -183,8 +183,8 @@ class ReaderDBMetricsService:
             evt_block_time__gte=cutoff,
         )
 
-        vol0 = sum(abs(float(s.amount0)) for s in swaps) / (10 ** dec0)
-        vol1 = sum(abs(float(s.amount1)) for s in swaps) / (10 ** dec1)
+        vol0 = sum(abs(float(s.amount0)) for s in swaps) / 1e18
+        vol1 = sum(abs(float(s.amount1)) for s in swaps) / 1e18
 
         result = {"volume_token0": vol0, "volume_token1": vol1}
         _set_cached(cache_key, result, ttl=30)
@@ -195,7 +195,10 @@ class ReaderDBMetricsService:
     # ------------------------------------------------------------------
     @staticmethod
     async def get_fees_24h(pair_address: str) -> Dict[str, float]:
-        """Estimate 24h fees as input_volume * fee_tier."""
+        """Estimate 24h fees as input_volume * fee_tier.
+
+        Note: The reader DB normalises all amounts to 18 decimals.
+        """
         cache_key = f"fees:{pair_address}"
         cached = _get_cached(cache_key)
         if cached is not None:
@@ -204,8 +207,6 @@ class ReaderDBMetricsService:
         from validator.models.pool_events import SwapEvent
         addr = normalize_evt_address(pair_address)
         config = _get_pool_config(pair_address)
-        dec0 = config["token0"]["decimals"]
-        dec1 = config["token1"]["decimals"]
         fee_tier = config.get("fee_tier", 0.003)
 
         cutoff = int((datetime.utcnow() - timedelta(hours=24)).timestamp())
@@ -216,8 +217,8 @@ class ReaderDBMetricsService:
         )
 
         # Input volume: amount > 0 means tokens flowing into the pool
-        input0 = sum(float(s.amount0) for s in swaps if float(s.amount0) > 0) / (10 ** dec0)
-        input1 = sum(float(s.amount1) for s in swaps if float(s.amount1) > 0) / (10 ** dec1)
+        input0 = sum(float(s.amount0) for s in swaps if float(s.amount0) > 0) / 1e18
+        input1 = sum(float(s.amount1) for s in swaps if float(s.amount1) > 0) / 1e18
 
         result = {
             "fees_token0": input0 * fee_tier,
@@ -239,6 +240,9 @@ class ReaderDBMetricsService:
 
         If vault_address is provided, filter by owner = vault_address.
         Otherwise sum all collects for the pool.
+
+        Note: The reader DB normalises all amounts to 18 decimals,
+        so we always divide by 1e18 regardless of the token.
         """
         cache_key = f"revenue:{pair_address}:{vault_address}"
         cached = _get_cached(cache_key)
@@ -247,9 +251,6 @@ class ReaderDBMetricsService:
 
         from validator.models.pool_events import CollectEvent
         addr = normalize_evt_address(pair_address)
-        config = _get_pool_config(pair_address)
-        dec0 = config["token0"]["decimals"]
-        dec1 = config["token1"]["decimals"]
 
         filters = {"evt_address": addr}
         if vault_address:
@@ -257,8 +258,8 @@ class ReaderDBMetricsService:
 
         collects = await CollectEvent.filter(**filters)
 
-        rev0 = sum(abs(float(c.amount0)) for c in collects) / (10 ** dec0)
-        rev1 = sum(abs(float(c.amount1)) for c in collects) / (10 ** dec1)
+        rev0 = sum(abs(float(c.amount0)) for c in collects) / 1e18
+        rev1 = sum(abs(float(c.amount1)) for c in collects) / 1e18
 
         result = {"revenue_token0": rev0, "revenue_token1": rev1}
         _set_cached(cache_key, result, ttl=60)
@@ -277,6 +278,8 @@ class ReaderDBMetricsService:
 
         If vault_address is provided, only counts that vault's deposits/withdrawals
         (filtered by the `owner` field on mint/burn events).
+
+        Note: The reader DB normalises all amounts to 18 decimals.
         """
         cache_key = f"tvl:{pair_address}:{vault_address}"
         cached = _get_cached(cache_key)
@@ -285,9 +288,6 @@ class ReaderDBMetricsService:
 
         from validator.models.pool_events import MintEvent, BurnEvent
         addr = normalize_evt_address(pair_address)
-        config = _get_pool_config(pair_address)
-        dec0 = config["token0"]["decimals"]
-        dec1 = config["token1"]["decimals"]
 
         mint_filters: Dict[str, Any] = {"evt_address": addr}
         burn_filters: Dict[str, Any] = {"evt_address": addr}
@@ -299,10 +299,10 @@ class ReaderDBMetricsService:
         mints = await MintEvent.filter(**mint_filters)
         burns = await BurnEvent.filter(**burn_filters)
 
-        mint0 = sum(abs(float(m.amount0)) for m in mints) / (10 ** dec0)
-        mint1 = sum(abs(float(m.amount1)) for m in mints) / (10 ** dec1)
-        burn0 = sum(abs(float(b.amount0)) for b in burns) / (10 ** dec0)
-        burn1 = sum(abs(float(b.amount1)) for b in burns) / (10 ** dec1)
+        mint0 = sum(abs(float(m.amount0)) for m in mints) / 1e18
+        mint1 = sum(abs(float(m.amount1)) for m in mints) / 1e18
+        burn0 = sum(abs(float(b.amount0)) for b in burns) / 1e18
+        burn1 = sum(abs(float(b.amount1)) for b in burns) / 1e18
 
         net0 = max(0.0, mint0 - burn0)
         net1 = max(0.0, mint1 - burn1)
@@ -319,20 +319,36 @@ class ReaderDBMetricsService:
         """
         Get USD prices for a job's token0 and token1.
 
+        Resolution order:
+          1. POOL_CONFIGS token addresses → PriceService (swap-derived, cached)
+          2. Web3 RPC pool token resolution → PriceService
+          3. Default $1.0 per token
+
         Returns {"price0": float, "price1": float}.
-        Falls back to 0.0 if prices unavailable.
         """
         cache_key = f"token_prices:{job.job_id}"
         cached = _get_cached(cache_key)
         if cached is not None:
             return cached
 
-        price0, price1 = 0.0, 0.0
+        price0, price1 = 1.0, 1.0
+
         try:
-            from api.services.metrics_calculator import MetricsCalculator
-            tvl_data = await MetricsCalculator.calculate_job_tvl(job)
-            price0 = tvl_data.get("token0_price_usd", 0.0)
-            price1 = tvl_data.get("token1_price_usd", 0.0)
+            from validator.services.price import PriceService, _resolve_pool_tokens_from_config
+
+            # Try resolving from static POOL_CONFIGS first (no RPC needed)
+            pool_tokens = _resolve_pool_tokens_from_config(job.pair_address)
+            if pool_tokens:
+                t0_addr, t1_addr = pool_tokens
+                price0 = await PriceService.get_token_price(t0_addr, job.chain_id)
+                price1 = await PriceService.get_token_price(t1_addr, job.chain_id)
+            else:
+                # Fallback to Web3 RPC resolution
+                from api.services.metrics_calculator import _resolve_pool_tokens
+                tokens = await _resolve_pool_tokens(job.chain_id, job.pair_address)
+                if tokens:
+                    price0 = await PriceService.get_token_price(tokens[0], job.chain_id)
+                    price1 = await PriceService.get_token_price(tokens[1], job.chain_id)
         except Exception as e:
             logger.warning(f"Could not get token prices for {job.job_id}: {e}")
 

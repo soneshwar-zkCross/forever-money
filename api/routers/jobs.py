@@ -19,6 +19,7 @@ from api.models.responses import (
 )
 from api.services.jobs_service import JobService
 from api.services.candle_service import CandleService
+from api.services.activity_service import ActivityService
 from validator.repositories.pool import PoolDataDB
 
 router = APIRouter()
@@ -397,3 +398,21 @@ async def sync_pool_data(
         "sync_time": datetime.utcnow().isoformat(),
         "pool_data": job.metadata["pool_data"]
     }
+
+
+@router.get("/{job_id}/activity")
+async def get_job_activity(job_id: str):
+    """
+    Get miner activity metrics for a job.
+
+    Returns purely internal analytics (MinerScore, Round, Prediction) —
+    no external API calls.
+
+    - **job_id**: Unique job identifier
+    """
+    activity = await ActivityService.get_job_activity(job_id)
+
+    if not activity:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    return activity

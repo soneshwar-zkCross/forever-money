@@ -10,7 +10,7 @@ from tortoise.functions import Count
 import logging
 
 from validator.models.job import Job, Round, MinerScore, RoundStatus, LiveExecution, Prediction
-from validator.models.pool_events import SwapEvent
+from validator.models.pool_events import SwapEvent, CollectEvent
 from validator.repositories.pool import PoolDataDB
 from api.utils.address import normalize_evt_address
 from api.utils.pool_data_service import POOL_CONFIGS
@@ -162,14 +162,21 @@ class JobService:
             }
 
         try:
-            # Get vault fees from pool data
-            vault_fees = await pool_data_db.get_miner_vault_fees(
-                sn_liquidity_manager_addresses=[job.sn_liquidity_manager_address],
-                start_block=0,
-                end_block=999999999,
+            # Query CollectEvent directly with BOTH vault owner AND pool address
+            # to avoid cross-pool fee contamination.
+            vault_addr = normalize_evt_address(job.sn_liquidity_manager_address)
+            pool_addr = normalize_evt_address(job.pair_address)
+
+            collects = await CollectEvent.filter(
+                owner=vault_addr,
+                evt_address=pool_addr,
             )
 
-            if job.sn_liquidity_manager_address not in vault_fees:
+            if not collects:
+                logger.info(
+                    f"Revenue [{job.job_id}]: no CollectEvents for "
+                    f"vault={vault_addr[:12]}... pool={pool_addr[:12]}..."
+                )
                 return {
                     "revenue_usd": 0.0,
                     "revenue_token0": 0.0,
@@ -177,11 +184,10 @@ class JobService:
                     "avg_revenue_per_round": 0.0,
                 }
 
-            fees = vault_fees[job.sn_liquidity_manager_address]
-            fee0_wei = fees.get("fee0", 0.0)
-            fee1_wei = fees.get("fee1", 0.0)
+            fee0_wei = sum(abs(float(c.amount0)) for c in collects)
+            fee1_wei = sum(abs(float(c.amount1)) for c in collects)
 
-            # Convert from wei to tokens
+            # The reader DB normalises all amounts to 18 decimals
             fee0_tokens = float(fee0_wei) / 1e18
             fee1_tokens = float(fee1_wei) / 1e18
 
@@ -190,6 +196,14 @@ class JobService:
             prices = await ReaderDBMetricsService.get_token_prices(job)
             revenue_usd = ReaderDBMetricsService.tokens_to_usd(
                 fee0_tokens, fee1_tokens, prices["price0"], prices["price1"]
+            )
+
+            logger.info(
+                f"Revenue [{job.job_id}]: "
+                f"fee0_raw={float(fee0_wei):.0f} fee1_raw={float(fee1_wei):.0f} "
+                f"fee0_tok={fee0_tokens:.6f} fee1_tok={fee1_tokens:.6f} "
+                f"p0=${prices['price0']:.4f} p1=${prices['price1']:.4f} "
+                f"rev_usd=${revenue_usd:.2f}"
             )
 
             # Calculate average revenue per round
@@ -204,7 +218,7 @@ class JobService:
             }
 
         except Exception as e:
-            logger.error(f"Failed to get job revenue for {job.job_id}: {e}")
+            logger.error(f"Failed to get job revenue for {job.job_id}: {e}", exc_info=True)
             return {
                 "revenue_usd": 0.0,
                 "revenue_token0": 0.0,
@@ -412,7 +426,8 @@ class JobService:
             price_change_percent = (price_change / price_24h_ago * 100) if price_24h_ago != 0 else 0
 
             # Calculate volume with proper decimals
-            volume_24h = sum(abs(float(s.amount1)) / (10 ** dec1) for s in swaps_24h)
+            # Reader DB normalises all amounts to 18 decimals
+            volume_24h = sum(abs(float(s.amount1)) / 1e18 for s in swaps_24h)
 
             # Get current position
             current_position = await JobService.get_current_position(job)

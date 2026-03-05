@@ -17,7 +17,8 @@ from tortoise.exceptions import IntegrityError
 from validator.models.job import Job, MinerScore, Round, RoundStatus
 from validator.repositories.job import JobRepository
 from validator.repositories.pool import PoolDataDB
-from api.services.metrics_calculator import MetricsCalculator
+from api.services.metrics_calculator import MetricsCalculator, _resolve_pool_tokens
+from api.services.identity_service import IdentityService
 from api.models.metrics import JobMetrics, MinerMetrics, SubnetMetricsSnapshot, VaultBalanceSnapshot
 
 logger = logging.getLogger(__name__)
@@ -198,51 +199,58 @@ async def _store_subnet_snapshot(
 
 
 async def _snapshot_miner_metrics():
-    """Snapshot metrics for all active miners (reads reader DB, writes local DB)."""
+    """Snapshot metrics for all active miners (reads reader DB, writes local DB).
+
+    Aggregates stats across ALL jobs for each miner so the list page shows
+    correct totals. Scores use max (best job), counts use sum (all jobs).
+
+    Stores all fields the miners list page needs so the endpoint can serve
+    from SQLite cache instead of hitting the remote PostgreSQL on every request.
+    Historical rows are kept for /{uid}/metrics-history.
+    """
     all_scores = await MinerScore.all().prefetch_related("job")
 
-    # Group by miner_uid
-    miner_map: dict = {}
+    # Aggregate across all jobs per miner_uid
+    aggregated: dict[int, dict] = {}
     for score in all_scores:
         uid = score.miner_uid
-        if uid not in miner_map:
-            miner_map[uid] = {
-                "hotkey": score.miner_hotkey,
-                "scores": [],
+        if uid not in aggregated:
+            aggregated[uid] = {
+                "miner_hotkey": score.miner_hotkey,
+                "combined_score": 0.0,
+                "evaluation_score": 0.0,
+                "live_score": 0.0,
+                "total_evaluations": 0,
+                "total_live_rounds": 0,
+                "participation_days": 0,
+                "is_eligible_for_live": False,
             }
-        miner_map[uid]["scores"].append(score)
 
-    logger.info(f"Snapshotting metrics for {len(miner_map)} miners")
+        agg = aggregated[uid]
+        # Scores: max across jobs
+        agg["combined_score"] = max(agg["combined_score"], float(score.combined_score))
+        agg["evaluation_score"] = max(agg["evaluation_score"], float(score.evaluation_score))
+        agg["live_score"] = max(agg["live_score"], float(score.live_score))
+        # Counts: sum across all jobs
+        agg["total_evaluations"] += score.total_evaluations
+        agg["total_live_rounds"] += score.total_live_rounds
+        agg["participation_days"] += score.participation_days
+        # Eligible if eligible in any job
+        if score.is_eligible_for_live:
+            agg["is_eligible_for_live"] = True
 
-    for miner_uid, data in miner_map.items():
+    # Resolve on-chain identities once for the whole batch
+    identities = await IdentityService.get_all_identities()
+
+    snapshot_time = datetime.utcnow()
+
+    logger.info(f"Snapshotting metrics for {len(aggregated)} miners")
+
+    for miner_uid, agg in aggregated.items():
         try:
-            scores = data["scores"]
-            hotkey = data["hotkey"]
-
-            # Aggregate across all jobs
-            total_score = max(float(s.combined_score) for s in scores)
-            total_wins = 0
-            total_participations = 0
-            job_breakdown = {}
-
-            for score in scores:
-                job_id = score.job.job_id
-                wins = await Round.filter(
-                    job=score.job,
-                    status=RoundStatus.COMPLETED,
-                    winner_uid=miner_uid,
-                ).count()
-                participations = score.total_evaluations + score.total_live_rounds
-                total_wins += wins
-                total_participations += participations
-
-                job_breakdown[job_id] = {
-                    "combined_score": float(score.combined_score),
-                    "wins": wins,
-                    "participations": participations,
-                }
-
-            win_rate = total_wins / total_participations if total_participations > 0 else 0.0
+            total_evals = agg["total_evaluations"]
+            total_live = agg["total_live_rounds"]
+            total_participations = total_evals + total_live
 
             estimated_earnings_alpha = 0.0
             estimated_earnings_usd = 0.0
@@ -256,21 +264,93 @@ async def _snapshot_miner_metrics():
 
             await MinerMetrics.create(
                 miner_uid=miner_uid,
-                miner_hotkey=hotkey,
+                miner_hotkey=agg["miner_hotkey"],
+                miner_name=IdentityService.get_name_for_uid(miner_uid, identities),
+                snapshot_time=snapshot_time,
+                # Scores (max across jobs)
+                combined_score=agg["combined_score"],
+                evaluation_score=agg["evaluation_score"],
+                live_score=agg["live_score"],
+                total_score=agg["combined_score"],
+                # Participation (summed across all jobs)
+                participation_days=agg["participation_days"],
+                total_evaluations=total_evals,
+                total_live_rounds=total_live,
+                is_eligible_for_live=agg["is_eligible_for_live"],
+                # Earnings
                 estimated_earnings_alpha=estimated_earnings_alpha,
                 estimated_earnings_usd=estimated_earnings_usd,
-                total_score=total_score,
-                win_rate=win_rate,
-                total_wins=total_wins,
+                # Legacy
+                win_rate=0.0,
+                total_wins=0,
                 total_participations=total_participations,
-                job_breakdown=job_breakdown,
             )
 
             logger.debug(
                 f"Stored miner metrics for UID {miner_uid}: "
-                f"score={total_score:.4f}, win_rate={win_rate:.2%}"
+                f"combined={agg['combined_score']:.4f} "
+                f"evals={total_evals} live={total_live}"
             )
 
         except Exception as e:
             logger.error(f"Failed to snapshot miner {miner_uid}: {e}")
             continue
+
+
+async def prewarm_price_cache():
+    """
+    Pre-warm the SQLite price cache on startup.
+
+    Fetches TAO price + token prices for all active jobs so the very first
+    dashboard load serves cached prices instead of hitting CoinGecko.
+
+    Throttles requests (2s between each) to stay under CoinGecko's free-tier
+    rate limit and avoid colliding with the concurrent snapshot task.
+    """
+    from validator.services.price import PriceService
+
+    # Small initial delay so the snapshot task gets a head start and we
+    # don't fire two CoinGecko bursts simultaneously on boot.
+    await asyncio.sleep(5)
+
+    logger.info("Pre-warming price cache...")
+
+    # 1. TAO price
+    try:
+        tao = await PriceService.get_tao_price_usd()
+        logger.info(f"  TAO price cached: ${tao}")
+    except Exception as e:
+        logger.warning(f"  Failed to pre-warm TAO price: {e}")
+
+    await asyncio.sleep(2)
+
+    # 2. Token prices for every active job
+    try:
+        job_repo = JobRepository()
+        active_jobs = await job_repo.get_active_jobs()
+
+        seen_tokens: set[str] = set()
+        for job in active_jobs:
+            try:
+                tokens = await _resolve_pool_tokens(job.chain_id, job.pair_address)
+                if not tokens:
+                    continue
+                token0, token1 = tokens
+                for token_addr in (token0, token1):
+                    key = f"{token_addr.lower()}:{job.chain_id}"
+                    if key in seen_tokens:
+                        continue
+                    seen_tokens.add(key)
+                    try:
+                        price = await PriceService.get_token_price(token_addr, job.chain_id)
+                        logger.info(f"  Token {token_addr[:10]}... cached: ${price:.4f}")
+                    except Exception as e:
+                        logger.warning(f"  Failed to cache token {token_addr[:10]}...: {e}")
+                    # Throttle: 2s between CoinGecko calls to avoid 429s
+                    await asyncio.sleep(2)
+            except Exception as e:
+                logger.warning(f"  Failed to resolve tokens for job {job.job_id}: {e}")
+
+        logger.info(f"Price cache pre-warm complete ({len(seen_tokens)} tokens)")
+    except Exception as e:
+        logger.error(f"Failed to pre-warm token prices: {e}")

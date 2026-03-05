@@ -1,28 +1,14 @@
 'use client';
 
-import React, { use, useState } from 'react';
+import React, { use } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import {
     Terminal,
     ArrowLeft,
-    Activity,
-    TrendingUp,
-    Users,
-    Clock,
-    CheckCircle2,
-    XCircle,
-    AlertCircle,
     ExternalLink,
-    Layers,
-    Zap,
-    RefreshCw,
     ChevronRight,
-    ArrowRight,
-    Plus,
-    Calendar,
-    Coins
 } from 'lucide-react';
-import { useJobs, useNetworkStats, useLeaderboard, useJobAPY, useJobPnL, useJobTVL, useJobRevenue } from '@/lib/api';
+import { useJobs, useNetworkStats, useLeaderboard, useJobAPY, useJobPnL, useJobTVL, useJobRevenue, useJobActivity } from '@/lib/api';
 import { useJobTVLHistory } from '@/lib/metrics-hooks';
 import { formatUsd, formatFeeRate, formatTokenAmount } from '@/lib/format';
 import Link from 'next/link';
@@ -37,6 +23,7 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
     const { data: tvl } = useJobTVL(jobId);
     const { data: revenue } = useJobRevenue(jobId, 30);
     const { data: miners, isLoading: leaderboardLoading } = useLeaderboard(jobId);
+    const { data: activity } = useJobActivity(jobId);
     const { data: tvlHistory } = useJobTVLHistory(jobId, 30);
 
     const job = jobs?.find(j => j.job_id === jobId) || {
@@ -113,126 +100,6 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                     <MetricBox label={`Avg TVL (${token0Symbol})`} value={formatTokenAmount(apy?.avg_tvl_token0, token0Symbol)} />
                     <MetricBox label={`Avg TVL (${token1Symbol})`} value={formatTokenAmount(apy?.avg_tvl_token1, token1Symbol)} />
                     <MetricBox label="Net PnL" value={formatUsd(pnl?.pnl_usd)} highlight />
-                </div>
-
-                {/* Strategy Comparison Section */}
-                <div className="bg-white border border-cream-dark p-8 rounded-[32px] shadow-sm">
-                    <div className="flex items-center justify-between mb-8">
-                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30">Strategy Comparison & Benchmarking</h3>
-                        <div className="px-3 py-1 bg-cream/30 rounded-full border border-cream-dark/30 text-[9px] font-bold text-primary/40 uppercase tracking-widest">
-                            30-Day Period
-                        </div>
-                    </div>
-
-                    <div className="mb-8">
-                        <h2 className="text-xl font-black text-primary mb-1">Put Crypto to work via AI Managed Liquidity</h2>
-                    </div>
-
-                    {/* Calculator UI - Clean Horizontal Line */}
-                    <div className="flex flex-col xl:flex-row items-center justify-between gap-6 mb-10 text-[9px] font-bold uppercase tracking-widest bg-cream/5 p-4 rounded-2xl border border-cream-dark/10 xl:bg-transparent xl:p-0 xl:border-none">
-                        <div className="flex flex-wrap items-center justify-center gap-3 whitespace-nowrap w-full xl:w-auto">
-                            <span className="text-primary/30">If you have</span>
-                            <div className="flex items-center bg-white xl:bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2">
-                                <input type="text" defaultValue="1" className="bg-transparent border-none focus:ring-0 w-6 text-primary font-bold p-0 text-[10px] text-center" />
-                                <span className="text-primary/30 ml-1">BTC</span>
-                            </div>
-                            <span className="text-primary/30">and</span>
-                            <div className="flex items-center bg-white xl:bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2">
-                                <input type="text" defaultValue="65k" className="bg-transparent border-none focus:ring-0 w-8 text-primary font-bold p-0 text-[10px] text-center" />
-                                <span className="text-primary/30 ml-1">USDC</span>
-                            </div>
-                            <span className="text-primary/30">for</span>
-                            <div className="flex items-center bg-white xl:bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2 min-w-24 justify-between">
-                                <span className="text-primary font-bold">365 Days</span>
-                                <ChevronRight size={12} className="ml-2 text-primary/20 rotate-90" />
-                            </div>
-                        </div>
-
-                        <div className="flex flex-col md:flex-row items-center gap-4 xl:gap-6 xl:border-l border-cream-dark/50 xl:pl-6 w-full xl:w-auto">
-                            <div className="flex items-center space-x-3 whitespace-nowrap justify-center w-full md:w-auto">
-                                <span className="text-primary/30">Pair</span>
-                                <div className="flex items-center bg-white xl:bg-cream/20 border border-cream-dark/50 rounded-lg px-3 py-2 w-full md:w-auto justify-between">
-                                    <span className="text-primary font-bold">BTC / USDC</span>
-                                    <ChevronRight size={12} className="ml-2 text-primary/20 rotate-90" />
-                                </div>
-                            </div>
-
-                            <div className="flex flex-wrap justify-center items-center gap-4 md:border-l border-cream-dark/50 md:pl-6 w-full md:w-auto">
-                                <span className="text-primary/30 hidden md:inline">APY</span>
-                                <div className="flex items-center justify-center space-x-4 w-full md:w-auto">
-                                    <span className="text-primary font-bold">(USD): {(apy?.apy_percent || 0).toFixed(1)}%</span>
-                                    <span className="text-primary font-bold">{token0Symbol}: {(apy?.apy_percent_token0 || 0).toFixed(1)}%</span>
-                                    <span className="text-primary font-bold">{token1Symbol}: {(apy?.apy_percent_token1 || 0).toFixed(1)}%</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Comparison Table */}
-                    <div className="overflow-x-auto pb-2">
-                        <table className="w-full min-w-[800px]">
-                            <thead>
-                                <tr className="text-[9px] font-bold uppercase tracking-[0.2em] text-primary/20 border-b border-cream-dark/50">
-                                    <th className="text-left py-4">Strategy</th>
-                                    <th className="text-left py-4">BTC Balance</th>
-                                    <th className="text-left py-4">Change</th>
-                                    <th className="text-left py-4">APY (USDC)</th>
-                                    <th className="text-left py-4">USDC Balance</th>
-                                    <th className="text-left py-4">Change</th>
-                                    <th className="text-left py-4">APY (USDC)</th>
-                                    <th className="text-right py-4">APY (USD)</th>
-                                </tr>
-                            </thead>
-                            <tbody className="text-[11px] font-bold text-primary">
-                                <StrategyRow
-                                    name="ForeverMoney"
-                                    isBest
-                                    btc={`${(tvl?.tvl_token0 || 0).toFixed(4)} ${token0Symbol}`}
-                                    btcChange={pnl?.pnl_token0 ? `${pnl.pnl_token0 >= 0 ? '+' : ''}${pnl.pnl_token0.toFixed(4)}` : "—"}
-                                    btcChangePct={apy?.apy_percent_token0 ? `${apy.apy_percent_token0.toFixed(1)}%` : "—"}
-                                    btcChangeColor="text-green-500"
-                                    apyUsdc1={`${(apy?.apy_percent_token0 || 0).toFixed(1)}%`}
-                                    usdc={`${(tvl?.tvl_token1 || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${token1Symbol}`}
-                                    usdcChange={pnl?.pnl_token1 ? `${pnl.pnl_token1 >= 0 ? '+' : ''}${pnl.pnl_token1.toFixed(4)}` : "—"}
-                                    usdcChangePct={apy?.apy_percent_token1 ? `${apy.apy_percent_token1.toFixed(1)}%` : "—"}
-                                    apyUsdc2={`${(apy?.apy_percent_token1 || 0).toFixed(1)}%`}
-                                    apyTotal={`${(apy?.apy_percent || 0).toFixed(1)}%`}
-                                />
-                                <StrategyRow
-                                    name="Full-range LP"
-                                    btc="—"
-                                    btcChange="—"
-                                    btcChangePct="—"
-                                    btcChangeColor="text-primary"
-                                    apyUsdc1="—"
-                                    usdc="—"
-                                    usdcChange="—"
-                                    usdcChangePct="—"
-                                    apyUsdc2="—"
-                                    apyTotal="—"
-                                />
-                                <StrategyRow
-                                    name="Holding"
-                                    btc="—"
-                                    btcChange="—"
-                                    btcChangePct="—"
-                                    btcChangeColor="text-primary"
-                                    apyUsdc1="0.0%"
-                                    usdc="—"
-                                    usdcChange="—"
-                                    usdcChangePct="—"
-                                    apyUsdc2="0.0%"
-                                    apyTotal="0.0%"
-                                />
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div className="mt-8 p-6 bg-cream/10 rounded-2xl border border-cream-dark/20">
-                        <p className="text-[10px] font-medium text-primary/40 leading-relaxed text-center">
-                            ForeverMoney Strategy demonstrates superior performance with AI-managed liquidity optimization. The strategy actively rebalances positions to maximize fee capture and token appreciation, resulting in higher absolute gains and APY compared to passive approaches.
-                        </p>
-                    </div>
                 </div>
 
                 {/* Performance Chart Section */}
@@ -355,6 +222,114 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                 </div>
 
+                {/* Miner Activity Section */}
+                {activity && (
+                    <div className="space-y-3">
+                        {/* Stats Row */}
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            <MetricBox
+                                label="Active Miners (24h)"
+                                value={String(activity.miner_activity.active_miners_24h)}
+                                subvalue={`${activity.miner_activity.total_miners} total`}
+                            />
+                            <MetricBox
+                                label="Avg Response Time"
+                                value={`${activity.miner_activity.avg_response_time_ms.toFixed(0)}ms`}
+                            />
+                            <MetricBox
+                                label="Avg Combined Score"
+                                value={activity.score_stats.avg_combined_score.toFixed(4)}
+                                subvalue={`Top: ${activity.score_stats.top_combined_score.toFixed(4)}`}
+                            />
+                            <MetricBox
+                                label="Round Completion"
+                                value={`${activity.round_outcomes.completion_rate}%`}
+                                subvalue={`${activity.round_outcomes.total_rounds} rounds`}
+                            />
+                        </div>
+
+                        {/* Round Breakdown + Score Distribution */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                            {/* Round Breakdown */}
+                            <div className="bg-white border border-cream-dark p-6 rounded-[24px] shadow-sm">
+                                <h4 className="text-[9px] font-bold uppercase tracking-[0.2em] text-primary/30 mb-4">Round Breakdown</h4>
+                                <div className="space-y-3 text-[10px] font-bold">
+                                    <div className="flex justify-between">
+                                        <span className="text-primary/40">Evaluation Rounds</span>
+                                        <span className="text-primary">{activity.round_outcomes.eval_rounds}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-primary/40">Live Rounds</span>
+                                        <span className="text-primary">{activity.round_outcomes.live_rounds}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-primary/40">Avg Duration</span>
+                                        <span className="text-primary">{activity.round_outcomes.avg_round_duration_seconds > 0 ? `${Math.round(activity.round_outcomes.avg_round_duration_seconds)}s` : '—'}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Score Distribution */}
+                            <div className="bg-white border border-cream-dark p-6 rounded-[24px] shadow-sm">
+                                <h4 className="text-[9px] font-bold uppercase tracking-[0.2em] text-primary/30 mb-4">Score Distribution</h4>
+                                <div className="space-y-3 text-[10px] font-bold">
+                                    <div className="flex justify-between">
+                                        <span className="text-primary/40">Min</span>
+                                        <span className="text-primary">{activity.score_stats.score_distribution.min.toFixed(4)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-primary/40">Q25</span>
+                                        <span className="text-primary">{activity.score_stats.score_distribution.q25.toFixed(4)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-primary/40">Median</span>
+                                        <span className="text-primary">{activity.score_stats.score_distribution.q50.toFixed(4)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-primary/40">Q75</span>
+                                        <span className="text-primary">{activity.score_stats.score_distribution.q75.toFixed(4)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-primary/40">Max</span>
+                                        <span className="text-primary">{activity.score_stats.score_distribution.max.toFixed(4)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Top Winners Table */}
+                        {activity.win_distribution.length > 0 && (
+                            <div className="bg-white border border-cream-dark rounded-[24px] shadow-sm overflow-hidden">
+                                <div className="px-6 py-4 border-b border-cream-dark/50">
+                                    <h4 className="text-[9px] font-bold uppercase tracking-[0.2em] text-primary/30">Top Winners</h4>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-cream/5">
+                                            <tr className="text-[9px] text-primary/20 font-bold uppercase tracking-widest border-b border-cream-dark/50">
+                                                <th className="pl-6 py-3">Miner UID</th>
+                                                <th className="py-3">Hotkey</th>
+                                                <th className="py-3 text-right">Wins</th>
+                                                <th className="py-3 text-right pr-6">Win Rate</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="text-[10px] font-bold">
+                                            {activity.win_distribution.map((w) => (
+                                                <tr key={w.miner_uid} className="border-b border-cream-dark/20 last:border-0">
+                                                    <td className="pl-6 py-3 text-primary">UID {w.miner_uid}</td>
+                                                    <td className="py-3 text-primary/60 font-mono">{w.miner_hotkey.slice(0, 10)}...</td>
+                                                    <td className="py-3 text-right text-blue-600">{w.wins}</td>
+                                                    <td className="py-3 text-right pr-6 text-green-600">{w.win_rate}%</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {/* Pair Configuration Section */}
                 <div className="bg-white border border-cream-dark p-8 rounded-[32px] shadow-sm">
                     <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary/30 mb-6 pb-4 border-b border-cream-dark/30">Pair Configuration</h3>
@@ -386,58 +361,6 @@ function MetricBox({ label, value, subvalue, highlight, isApy }: { label: string
                 )}
             </div>
         </div>
-    );
-}
-
-function StrategyRow({
-    name,
-    isBest,
-    btc, btcChange, btcChangePct, btcChangeColor,
-    apyUsdc1, usdc, usdcChange, usdcChangePct,
-    apyUsdc2, apyTotal
-}: any) {
-    return (
-        <tr className="border-b border-cream-dark/30 last:border-0">
-            <td className="py-5">
-                <div className="flex items-center space-x-2">
-                    <span className="font-black text-primary">{name}</span>
-                    {isBest && <span className="px-1.5 py-0.5 bg-green-500 text-white rounded-[2px] text-[7px] font-black uppercase tracking-widest">Best</span>}
-                </div>
-                {isBest && <p className="text-[8px] font-bold text-primary/20 uppercase mt-0.5">AI Managed Liquidity</p>}
-            </td>
-            <td className="py-5 whitespace-nowrap">{btc}</td>
-            <td className="py-5">
-                <div className="flex flex-col">
-                    <span className={btcChangeColor}>{btcChange}</span>
-                    <span className="text-[8px] text-green-500 opacity-60 font-bold">{btcChangePct}</span>
-                </div>
-            </td>
-            <td className="py-5">
-                <div className="flex items-center space-x-1.5">
-                    <TrendingUp size={10} className="text-green-500" />
-                    <span className="text-green-500">{apyUsdc1}</span>
-                </div>
-            </td>
-            <td className="py-5 whitespace-nowrap">{usdc}</td>
-            <td className="py-5">
-                <div className="flex flex-col">
-                    <span className="text-green-600">{usdcChange}</span>
-                    <span className="text-[8px] text-green-600/60 font-bold">{usdcChangePct}</span>
-                </div>
-            </td>
-            <td className="py-5">
-                <div className="flex items-center space-x-1.5">
-                    <TrendingUp size={10} className="text-green-600" />
-                    <span className="text-green-600">{apyUsdc2}</span>
-                </div>
-            </td>
-            <td className="py-5 text-right">
-                <div className="flex items-center justify-end space-x-1.5">
-                    <TrendingUp size={12} className="text-green-600" />
-                    <span className="text-lg text-green-600">{apyTotal}</span>
-                </div>
-            </td>
-        </tr>
     );
 }
 

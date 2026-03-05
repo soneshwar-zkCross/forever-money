@@ -139,20 +139,32 @@ class MetricsService:
                 end_block=999999999,
             )
 
-            if job.sn_liquidity_manager_address not in vault_fees:
+            # PoolDataDB returns keys without 0x prefix
+            vault_key = job.sn_liquidity_manager_address.lower().replace("0x", "")
+            if vault_key not in vault_fees:
                 return {"revenue_usd": 0.0, "revenue_token0": 0.0, "revenue_token1": 0.0}
 
-            fees = vault_fees[job.sn_liquidity_manager_address]
+            fees = vault_fees[vault_key]
             fee0_wei = fees.get("fee0", 0.0)
             fee1_wei = fees.get("fee1", 0.0)
 
-            # Convert from wei to tokens
+            # The indexer normalises all amounts to 18 decimals,
+            # so divide by 1e18 regardless of the token.
             fee0_tokens = float(fee0_wei) / 1e18
             fee1_tokens = float(fee1_wei) / 1e18
 
-            # Simplified USD conversion (token0 = $1, token1 = $1)
-            # TODO: Use actual token prices from PriceService
-            revenue_usd = fee0_tokens + fee1_tokens
+            # Get real token prices (swap-derived → cache → CoinGecko)
+            price0, price1 = 1.0, 1.0
+            try:
+                from api.services.metrics_calculator import _resolve_pool_tokens
+                tokens = await _resolve_pool_tokens(job.chain_id, job.pair_address)
+                if tokens:
+                    price0 = await PriceService.get_token_price(tokens[0], job.chain_id)
+                    price1 = await PriceService.get_token_price(tokens[1], job.chain_id)
+            except Exception as e:
+                logger.warning(f"Could not get token prices for revenue calc ({job.job_id}): {e}")
+
+            revenue_usd = fee0_tokens * price0 + fee1_tokens * price1
 
             return {
                 "revenue_usd": revenue_usd,

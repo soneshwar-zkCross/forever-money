@@ -32,6 +32,8 @@ export interface MinerScore {
     is_eligible_for_live: boolean;
     total_evaluations: number;
     total_live_rounds: number;
+    last_active: string | null;
+    is_active: boolean;
 }
 
 export interface Round {
@@ -303,14 +305,21 @@ async function fetchExecutions(jobId: string): Promise<LiveExecution[]> {
     }
 }
 
-async function fetchAllMiners(limit: number = 300, offset: number = 0, sortBy: string = 'uid'): Promise<{ total_miners: number; miners: MinerScore[] }> {
+export interface AllMinersResponse {
+    total_miners: number;
+    miners: MinerScore[];
+    last_synced: string | null;
+    source: 'cache' | 'live';
+}
+
+async function fetchAllMiners(limit: number = 300, offset: number = 0, sortBy: string = 'uid'): Promise<AllMinersResponse> {
     try {
         const res = await fetch(`${API_BASE_URL}/miners/?limit=${limit}&offset=${offset}&sort_by=${sortBy}`);
         if (!res.ok) throw new Error('Failed to fetch miners');
         return await res.json();
     } catch (error) {
         console.warn('API Error (fetchAllMiners):', error);
-        return { total_miners: 0, miners: [] };
+        return { total_miners: 0, miners: [], last_synced: null, source: 'live' };
     }
 }
 
@@ -581,6 +590,7 @@ export function useAllMiners(limit: number = 300, offset: number = 0, sortBy: st
         queryKey: ['all-miners', limit, offset, sortBy],
         queryFn: () => fetchAllMiners(limit, offset, sortBy),
         staleTime: 2 * 60 * 1000,
+        refetchInterval: 5 * 60 * 1000,
     });
 }
 
@@ -928,6 +938,7 @@ async function fetchMinerProfile(uid: number): Promise<MinerProfile> {
         return {
             miner_uid: uid,
             miner_hotkey: '',
+            miner_name: null,
             total_jobs: 0,
             total_rounds: 0,
             global_win_rate: 0,
@@ -1001,6 +1012,70 @@ export function useMinerVaults(uid: number) {
         queryKey: ['miner-vaults', uid],
         queryFn: () => fetchMinerVaults(uid),
         enabled: !!uid,
+        staleTime: 2 * 60 * 1000,
+        refetchInterval: 60000,
+        retry: 1,
+    });
+}
+
+// Job Activity (miner activity metrics — internal data only)
+
+export interface ScoreDistribution {
+    min: number;
+    q25: number;
+    q50: number;
+    q75: number;
+    max: number;
+}
+
+export interface JobActivity {
+    job_id: string;
+    miner_activity: {
+        active_miners_24h: number;
+        total_miners: number;
+        avg_response_time_ms: number;
+    };
+    score_stats: {
+        avg_combined_score: number;
+        top_combined_score: number;
+        score_distribution: ScoreDistribution;
+    };
+    round_outcomes: {
+        total_rounds: number;
+        eval_rounds: number;
+        live_rounds: number;
+        completion_rate: number;
+        avg_round_duration_seconds: number;
+        recent_winners: Array<{
+            round_number: number;
+            round_type: string;
+            winner_uid: number;
+        }>;
+    };
+    win_distribution: Array<{
+        miner_uid: number;
+        miner_hotkey: string;
+        wins: number;
+        win_rate: number;
+    }>;
+}
+
+async function fetchJobActivity(jobId: string): Promise<JobActivity | null> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/jobs/${jobId}/activity`);
+        if (!res.ok) throw new Error('Failed to fetch job activity');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchJobActivity):', error);
+        return null;
+    }
+}
+
+export function useJobActivity(jobId: string) {
+    return useQuery({
+        queryKey: ['job-activity', jobId],
+        queryFn: () => fetchJobActivity(jobId),
+        enabled: !!jobId,
         staleTime: 2 * 60 * 1000,
         refetchInterval: 60000,
         retry: 1,
