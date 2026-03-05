@@ -60,8 +60,8 @@ async def lifespan(app: FastAPI):
         }
     )
     # Only generate schemas on the local metrics DB (reader DB is read-only)
-    from tortoise import connections
     from tortoise.utils import generate_schema_for_client
+    from tortoise import connections
     await generate_schema_for_client(connections.get("metrics"), safe=True)
     logger.info("Database connections established")
 
