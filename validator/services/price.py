@@ -1,9 +1,11 @@
 import aiohttp
-import logging
-from datetime import datetime, timedelta
-from typing import Dict, Optional
-import bittensor as bt
 import asyncio
+import logging
+from typing import Dict, Optional, Tuple
+
+import bittensor as bt
+
+from validator.utils.cache import async_ttl_cache
 
 logger = logging.getLogger(__name__)
 
@@ -77,147 +79,89 @@ class PriceService:
         56: "binance-smart-chain",
     }
 
-    # Known stablecoins (USD-pegged, price = $1.0)
-    STABLECOINS: set = {
-        "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",  # USDC on Base
+    # GeckoTerminal network names by chain_id (fallback when CoinGecko returns 404/429)
+    GECKOTERMINAL_BASE_URL = "https://api.geckoterminal.com/api/v2"
+    CHAIN_ID_TO_NETWORK: Dict[int, str] = {
+        1: "eth",
+        8453: "base",
+        137: "polygon_pos",
+        42161: "arbitrum",
+        10: "optimism",
+        43114: "avax",
+        56: "bsc",
     }
 
+    MAX_RETRIES = 10
+    RETRY_DELAY = 10  # seconds when 429 from CoinGecko
+
     @staticmethod
-    async def _get_price_from_swaps(token_address: str) -> Optional[float]:
+    async def _get_json(
+        url: str,
+        params: dict = None,
+        timeout: float = 15,
+        retry_on_429: bool = True,
+    ) -> Tuple[int, Optional[dict]]:
         """
-        Derive a token's USD price from the latest swap tick in our own DB.
-
-        Uses POOL_CONFIGS to find a pool containing this token, reads the
-        latest SwapEvent tick, and converts to USD.  For tokens paired with
-        a non-USD token (e.g. BID/WETH), resolves the intermediary first.
-
-        Returns None if no swap data is available.
+        GET request.
+        retry_on_429=True: on 429, sleep RETRY_DELAY and retry up to MAX_RETRIES (use for CoinGecko).
+        retry_on_429=False: on 429, return (429, None) immediately (use for GeckoTerminal).
+        Returns (status_code, json_data). json_data is None for non-200 responses.
         """
-        try:
-            from api.utils.pool_data_service import POOL_CONFIGS
-            from validator.models.pool_events import SwapEvent
-            from api.utils.address import normalize_evt_address
-
-            addr_low = token_address.lower()
-
-            # Stablecoins are always $1
-            if addr_low in PriceService.STABLECOINS:
-                return 1.0
-
-            # Find a pool that contains this token
-            for pool_addr, cfg in POOL_CONFIGS.items():
-                t0_dec = cfg["token0"]["decimals"]
-                t1_dec = cfg["token1"]["decimals"]
-
-                is_token0 = False
-                is_token1 = False
-                other_is_usd = False
-
-                # Resolve token addresses from pool contract (cached)
-                pool_tokens = _resolve_pool_tokens_from_config(pool_addr)
-                if not pool_tokens:
-                    continue
-                pool_t0_addr, pool_t1_addr = pool_tokens
-
-                if pool_t0_addr == addr_low:
-                    is_token0 = True
-                    other_is_usd = pool_t1_addr in PriceService.STABLECOINS
-                elif pool_t1_addr == addr_low:
-                    is_token1 = True
-                    other_is_usd = pool_t0_addr in PriceService.STABLECOINS
-
-                if not is_token0 and not is_token1:
-                    continue
-
-                # Get latest swap tick
-                evt_addr = normalize_evt_address(pool_addr)
-                swap = await SwapEvent.filter(
-                    evt_address=evt_addr
-                ).order_by("-evt_block_time").first()
-                if not swap:
-                    continue
-
-                decimal_adj = 10 ** (t0_dec - t1_dec)
-                # raw_price = price of token0 in terms of token1
-                raw_price = (1.0001 ** int(swap.tick)) * decimal_adj
-
-                if other_is_usd:
-                    # One side is USDC — we can get USD price directly.
-                    # raw_price = token0 priced in token1 (Uniswap math).
-                    # invert_price is a display flag only; doesn't affect USD calc.
-                    if is_token0:
-                        # token1 is USDC → raw_price = token0 in USD
-                        usd_price = raw_price
-                    else:
-                        # token0 is USDC → 1/raw_price = token1 in USD
-                        if raw_price > 0:
-                            usd_price = 1.0 / raw_price
-                        else:
+        if retry_on_429:
+            max_attempts = PriceService.MAX_RETRIES + 1
+        else:
+            max_attempts = 1
+        for attempt in range(max_attempts):
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url, params=params, timeout=aiohttp.ClientTimeout(total=timeout)
+                ) as response:
+                    if response.status == 429:
+                        if retry_on_429 and attempt < PriceService.MAX_RETRIES:
+                            logger.warning(
+                                f"Rate limited (429) on {url}, retrying in "
+                                f"{PriceService.RETRY_DELAY}s "
+                                f"({attempt + 1}/{PriceService.MAX_RETRIES})"
+                            )
+                            await asyncio.sleep(PriceService.RETRY_DELAY)
                             continue
-                    logger.debug(
-                        f"Swap-derived price for {addr_low[:10]}...: ${usd_price:.4f} "
-                        f"(pool {pool_addr[:10]}...)"
-                    )
-                    return usd_price
-                else:
-                    # Neither side is USDC — need intermediary price
-                    # e.g., BID/WETH pool: get BID in WETH, then WETH in USD
-                    other_addr = pool_t1_addr if is_token0 else pool_t0_addr
-                    other_usd = await PriceService._get_price_from_swaps(other_addr)
-                    if other_usd is None:
-                        continue
-
-                    if is_token0:
-                        usd_price = raw_price * other_usd
-                    else:
-                        usd_price = (1.0 / raw_price) * other_usd if raw_price > 0 else 0.0
-
-                    logger.debug(
-                        f"Swap-derived price for {addr_low[:10]}...: ${usd_price:.4f} "
-                        f"(via {other_addr[:10]}...)"
-                    )
-                    return usd_price
-
-        except Exception as e:
-            logger.debug(f"Swap-derived pricing failed for {token_address}: {e}")
-
-        return None
+                        return response.status, None
+                    if response.status == 200:
+                        return response.status, await response.json()
+                    return response.status, None
+        return 429, None
 
     @staticmethod
+    @async_ttl_cache(ttl=2.0)
     async def get_tao_price_usd() -> float:
         """
         Get current price of TAO (Bittensor) token in USD from Coingecko.
+        On 429, retries with delay. No GeckoTerminal (TAO is not contract-based).
 
         Returns:
             TAO price in USD, or 1.0 as fallback
         """
-        # --- cache check ---
-        cached = await _get_cached_price("tao_usd")
-        if cached is not None:
-            return cached
-
+        url = f"{PriceService.BASE_URL}/simple/price"
+        params = {
+            "ids": PriceService.COINGECKO_TAO_ID,
+            "vs_currencies": "usd",
+        }
         try:
-            async with aiohttp.ClientSession() as session:
-                url = f"{PriceService.BASE_URL}/simple/price"
-                params = {
-                    "ids": PriceService.COINGECKO_TAO_ID,
-                    "vs_currencies": "usd",
-                }
-                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        tao_price = data.get(PriceService.COINGECKO_TAO_ID, {}).get("usd", 1.0)
-                        price = float(tao_price)
-                        await _set_cached_price("tao_usd", price, source="coingecko")
-                        return price
-                    else:
-                        logger.warning(f"Coingecko API returned status {response.status}")
+            status, data = await PriceService._get_json(
+                url, params=params, timeout=10, retry_on_429=True
+            )
+            if status == 200:
+                tao_price = data.get(PriceService.COINGECKO_TAO_ID, {}).get("usd", 1.0)
+                return float(tao_price)
+            else:
+                logger.warning(f"Coingecko API returned status {status}")
         except asyncio.TimeoutError:
             logger.warning("Timeout fetching TAO price from Coingecko")
         except Exception as e:
             logger.error(f"Failed to fetch TAO price: {e}")
 
     @staticmethod
+    @async_ttl_cache(ttl=2.0)
     async def get_alpha_price_tao(subtensor: bt.Subtensor, netuid: int) -> float:
         """
         Get Alpha price in TAO (how many TAO per 1 Alpha).
@@ -242,6 +186,7 @@ class PriceService:
             logger.error(f"Failed to fetch Alpha price (TAO): {e}")
 
     @staticmethod
+    @async_ttl_cache(ttl=2.0)
     async def get_alpha_price_usd(subtensor: bt.Subtensor, netuid: int) -> float:
         """
         Get Alpha price in USD using tao_price_usd and alpha_price_tao.
@@ -255,12 +200,13 @@ class PriceService:
         try:
             tao_price_usd = await PriceService.get_tao_price_usd()
             alpha_price_tao = await PriceService.get_alpha_price_tao(subtensor, netuid)
-            alpha_price_usd = alpha_price_tao * tao_price_usd      
+            alpha_price_usd = alpha_price_tao * tao_price_usd
             return alpha_price_usd
         except Exception as e:
             logger.error(f"Failed to fetch Alpha price (USD): {e}")
 
     @staticmethod
+    @async_ttl_cache(ttl=2.0)
     async def get_token_price(token_address: str, chain_id: int = 8453) -> float:
         """
         Get current token price in USD.
@@ -273,7 +219,7 @@ class PriceService:
 
         Raises:
             ValueError: On invalid args (unknown chain_id, empty token_address).
-            RuntimeError: On fetch failure (all sources exhausted).
+            RuntimeError: On fetch failure (timeout, HTTP error, no prices).
 
         Returns:
             Token price in USD.
@@ -313,40 +259,104 @@ class PriceService:
         )
         params = {"vs_currency": "usd", "days": "1"}
 
+        # 1) Try CoinGecko (retries on 429 with delay)
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    url, params=params, timeout=aiohttp.ClientTimeout(total=15)
-                ) as response:
-                    if response.status != 200:
-                        raise RuntimeError(
-                            f"CoinGecko returned status {response.status} "
-                            f"for {token_address} on {platform}"
-                        )
-                    data = await response.json()
-        except asyncio.TimeoutError as e:
-            logger.warning(
-                f"Timeout fetching token price for {token_address} (chain_id={chain_id})"
+            status, data = await PriceService._get_json(
+                url, params=params, retry_on_429=False
             )
+            if status == 200:
+                prices = data.get("prices") or []
+                if not prices:
+                    raise RuntimeError(
+                        f"No prices returned for {token_address} on {platform}"
+                    )
+                prices.sort(key=lambda p: p[0])
+                _, last_price = prices[-1]
+                return float(last_price)
+            if status not in (404, 429):
+                raise RuntimeError(
+                    f"CoinGecko returned status {status} "
+                    f"for {token_address} on {platform}"
+                )
+        except asyncio.TimeoutError as e:
             raise RuntimeError(
                 f"Timeout fetching token price for {token_address} "
                 f"(chain_id={chain_id})"
             ) from e
         except (ValueError, RuntimeError):
             raise
-        except Exception as e:
-            logger.error(f"Failed to fetch token price for {token_address}: {e}")
-            raise
 
-        prices = data.get("prices") or []
-        if not prices:
-            raise RuntimeError(
-                f"No prices returned for {token_address} on {platform}"
+        # 2) 404 or 429 from CoinGecko → try GeckoTerminal (no delay, no retry on 429)
+        logger.info(
+            f"CoinGecko {status} for {token_address} on {platform}, "
+            f"trying GeckoTerminal"
+        )
+        try:
+            return await PriceService._get_token_price_geckoterminal(addr, chain_id)
+        except Exception:
+            pass
+
+        # 3) GeckoTerminal failed → try CoinGecko again (with retry on 429)
+        logger.info(
+            f"GeckoTerminal failed for {token_address}, retrying CoinGecko"
+        )
+        status2, data2 = await PriceService._get_json(
+            url, params=params, retry_on_429=True
+        )
+        if status2 == 200:
+            prices = data2.get("prices") or []
+            if not prices:
+                raise RuntimeError(
+                    f"No prices returned for {token_address} on {platform}"
+                )
+            prices.sort(key=lambda p: p[0])
+            _, last_price = prices[-1]
+            return float(last_price)
+        raise RuntimeError(
+            f"Could not get token price for {token_address} "
+            f"(CoinGecko status={status2}, GeckoTerminal failed)"
+        )
+
+    @staticmethod
+    async def _get_token_price_geckoterminal(
+        token_address: str, chain_id: int
+    ) -> float:
+        """
+        Get token price in USD from GeckoTerminal.
+        Does not retry on 429 so caller can fall back to CoinGecko.
+
+        Raises:
+            ValueError: If chain_id has no GeckoTerminal network mapping.
+            RuntimeError: On fetch failure or missing price data.
+        """
+        network = PriceService.CHAIN_ID_TO_NETWORK.get(chain_id)
+        if not network:
+            raise ValueError(
+                f"chain_id={chain_id} not in CHAIN_ID_TO_NETWORK"
             )
 
-        # prices = [[timestamp_ms, price], ...]; use latest (last) price
-        prices.sort(key=lambda p: p[0])
-        _, last_price = prices[-1]
-        price = float(last_price)
-        await _set_cached_price(cache_key, price, source="coingecko")
-        return price
+        url = (
+            f"{PriceService.GECKOTERMINAL_BASE_URL}/simple/networks/{network}"
+            f"/token_price/{token_address}"
+        )
+
+        status, data = await PriceService._get_json(
+            url, timeout=15, retry_on_429=False
+        )
+        if status != 200:
+            raise RuntimeError(
+                f"GeckoTerminal returned status {status} "
+                f"for {token_address} on {network}"
+            )
+
+        token_prices = (
+            data.get("data", {})
+            .get("attributes", {})
+            .get("token_prices", {})
+        )
+        price_str = token_prices.get(token_address)
+        if not price_str:
+            raise RuntimeError(
+                f"No price returned from GeckoTerminal for {token_address} on {network}"
+            )
+        return float(price_str)

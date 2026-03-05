@@ -32,11 +32,14 @@ from validator.orchestrator.round_loops import (
     run_with_miners_batch_for_evaluation,
 )
 from validator.orchestrator.winner import select_winner
+from validator.utils.whitelist import is_miner_whitelisted
 
 logger = logging.getLogger(__name__)
 
 # Max miners to evaluate concurrently per batch (avoids overload with many miners)
 EVALUATION_BATCH_SIZE = 20
+# Max concurrent DB score/participation updates (reduces evaluation round tail latency).
+SCORE_UPDATE_BATCH_SIZE = 51
 
 
 class AsyncRoundOrchestrator:
@@ -100,7 +103,7 @@ class AsyncRoundOrchestrator:
                 )
                 await asyncio.sleep(job.round_duration_seconds)
             except Exception as e:
-                logger.error(f"Error in job {job.job_id}: {e}", exc_info=True)
+                logger.error(f"Error in job {job.job_id}: {e}")
                 await asyncio.sleep(job.round_duration_seconds)
 
     async def run_evaluation_round(self, job: Job) -> None:
@@ -114,7 +117,7 @@ class AsyncRoundOrchestrator:
         active_uids = [
             uid
             for uid in range(len(self.metagraph.S))
-            if my_uid is None or uid != my_uid
+            if (my_uid is None or uid != my_uid) and is_miner_whitelisted(self.metagraph.hotkeys[uid])
         ]
         if not active_uids:
             logger.warning("No active miners found.")
@@ -138,40 +141,62 @@ class AsyncRoundOrchestrator:
         initial_positions = await liq_manager.get_current_positions()
         logger.info(f"Loaded {len(initial_positions)} initial positions from on-chain")
 
-        scores = await self._evaluate_miners(
-            job=job,
-            round_=round_obj,
-            active_uids=active_uids,
-            initial_positions=initial_positions,
-            start_block=current_block,
-            inventory=inventory,
-            liq_manager=liq_manager,
-        )
-
-        winner = await select_winner(self.job_repository, job.job_id, scores)
-        if winner:
-            logger.info(
-                f"Evaluation round {round_number} winner: Miner {winner['miner_uid']} "
-                f"(Score: {winner['score']:.4f})"
+        try:
+            scores = await self._evaluate_miners(
+                job=job,
+                round_=round_obj,
+                active_uids=active_uids,
+                initial_positions=initial_positions,
+                start_block=current_block,
+                inventory=inventory,
+                liq_manager=liq_manager,
             )
-        else:
-            logger.warning(f"No winner for evaluation round {round_number}")
 
-        await self.job_repository.complete_round(
-            round_id=round_obj.round_id,
-            winner_uid=winner["miner_uid"] if winner else None,
-            performance_data={"scores": {str(k): v["score"] for k, v in scores.items()}},
-        )
-        for uid, data in scores.items():
+            winner = await select_winner(self.job_repository, job.job_id, scores)
+            if winner:
+                logger.info(
+                    f"Winner (evaluation round #{round_number}, job {job.job_id}): "
+                    f"Miner UID={winner['miner_uid']}, score={winner['score']:.4f}, "
+                    f"hotkey={winner['hotkey']}"
+                )
+            else:
+                logger.warning(f"No winner for evaluation round {round_number}")
+
+            await self.job_repository.complete_round(
+                round_id=round_obj.round_id,
+                winner_uid=winner["miner_uid"] if winner else None,
+                performance_data={"scores": {str(k): v["score"] for k, v in scores.items()}},
+            )
+        except Exception as e:
+            logger.error(f"Evaluation round failed for job {job.job_id}: {e}")
+            await self.job_repository.complete_round(
+                round_id=round_obj.round_id,
+                winner_uid=None,
+                performance_data={"error": str(e)},
+            )
+            return
+        # Run score + participation updates in parallel batches to reduce DB latency
+        job_id = job.job_id
+        items = list(scores.items())
+
+        async def _update_one(uid: int, data: dict) -> None:
+            accepted = data["accepted"]
             await self.job_repository.update_miner_score(
-                job_id=job.job_id,
+                job_id=job_id,
                 miner_uid=uid,
                 miner_hotkey=data["hotkey"],
                 evaluation_score=data["score"],
                 round_type=RoundType.EVALUATION,
+                accepted=accepted,
             )
             await self.job_repository.update_miner_participation(
-                job_id=job.job_id, miner_uid=uid, participated=True
+                job_id=job_id, miner_uid=uid, accepted=accepted
+            )
+
+        for i in range(0, len(items), SCORE_UPDATE_BATCH_SIZE):
+            batch = items[i : i + SCORE_UPDATE_BATCH_SIZE]
+            await asyncio.gather(
+                *[_update_one(uid, data) for uid, data in batch]
             )
         logger.info(f"Completed evaluation round {round_number}")
 
@@ -194,6 +219,7 @@ class AsyncRoundOrchestrator:
         eligible_uids = {
             s.miner_uid
             for s in await self.job_repository.get_eligible_miners(job.job_id)
+            if is_miner_whitelisted(s.miner_hotkey)
         }
         winner_uid = None
         for uid in ranking:
@@ -218,6 +244,10 @@ class AsyncRoundOrchestrator:
         self.round_numbers[job.job_id]["live"] = round_obj.round_number
         round_number = round_obj.round_number
         logger.info("=" * 60)
+        logger.info(
+            f"Winner for live execution (job {job.job_id}, round #{round_number}): "
+            f"Miner UID={winner_uid}, hotkey={self.metagraph.hotkeys[winner_uid]}"
+        )
         logger.info(
             f"Starting LIVE round #{round_number} for job {job.job_id} with Miner {winner_uid}"
         )
@@ -251,6 +281,33 @@ class AsyncRoundOrchestrator:
             execution_failures = result.get("execution_failures", 0)
             execution_results = result.get("execution_results", [])
             total_executions = len(execution_results)
+            rebalance_history = result.get("rebalance_history", [])
+            logger.info(
+                f"Live execution summary (job {job.job_id}, round #{round_number}, "
+                f"winner Miner {winner_uid}): {len(rebalance_history)} rebalance(s), "
+                f"{total_executions - execution_failures}/{total_executions} on-chain execution(s) succeeded, "
+                f"score={result.get('score', 0):.4f}"
+            )
+            if rebalance_history:
+                for i, step in enumerate(rebalance_history):
+                    new_pos = step.get("new_positions") or []
+                    n_pos = len(new_pos)
+                    pos_desc = []
+                    for p in new_pos[:5]:  # log up to 5 positions
+                        if hasattr(p, "tick_lower"):
+                            pos_desc.append(
+                                f"[tick_{p.tick_lower}_{p.tick_upper} "
+                                f"a0={getattr(p, 'allocation0', '?')} a1={getattr(p, 'allocation1', '?')}]"
+                            )
+                        else:
+                            pos_desc.append(str(p)[:80])
+                    if len(new_pos) > 5:
+                        pos_desc.append(f"...+{len(new_pos) - 5} more")
+                    logger.info(
+                        f"  Live strategy step {i + 1}: {n_pos} position(s) "
+                        f"block={step.get('block')} tx_hash={step.get('tx_hash') or 'N/A'} "
+                        f"positions={', '.join(pos_desc) if pos_desc else 'none'}"
+                    )
             if total_executions > 0 and execution_failures == total_executions:
                 logger.error(
                     f"All {total_executions} executions failed for miner {winner_uid} "
@@ -270,6 +327,7 @@ class AsyncRoundOrchestrator:
                     miner_hotkey=self.metagraph.hotkeys[winner_uid],
                     live_score=live_score,
                     round_type=RoundType.LIVE,
+                    accepted=True,
                 )
             await self.job_repository.save_rebalance_decision(
                 round_id=round_obj.round_id,
@@ -303,60 +361,65 @@ class AsyncRoundOrchestrator:
         inventory: Inventory,
         liq_manager,
     ) -> Dict[int, Dict]:
-        """Evaluate all active miners via batched dendrite calls (up to 20 miners per batch)."""
-        batch_size = EVALUATION_BATCH_SIZE
+        """Evaluate all active miners via batched dendrite calls (up to EVALUATION_BATCH_SIZE per batch)."""
+        results = await run_with_miners_batch_for_evaluation(
+            miner_uids=active_uids,
+            job=job,
+            round_=round_,
+            initial_positions=initial_positions,
+            start_block=start_block,
+            initial_inventory=inventory,
+            rebalance_check_interval=self.rebalance_check_interval,
+            liq_manager=liq_manager,
+            job_repository=self.job_repository,
+            dendrite=self.dendrite,
+            metagraph=self.metagraph,
+            backtester=self.backtester,
+            get_block_fn=self._get_latest_block,
+            query_batch_size=EVALUATION_BATCH_SIZE,
+        )
         scores: Dict[int, Dict] = {}
+        for uid, res in results.items():
+            score_val = res["score"] if res["accepted"] else 0.0
+            scores[uid] = {
+                "hotkey": self.metagraph.hotkeys[uid],
+                "score": score_val,
+                "accepted": res["accepted"],
+                "result": res,
+            }
 
-        for batch_start in range(0, len(active_uids), batch_size):
-            batch_uids = active_uids[batch_start : batch_start + batch_size]
-            results = await run_with_miners_batch_for_evaluation(
-                miner_uids=batch_uids,
-                job=job,
-                round_=round_,
-                initial_positions=initial_positions,
-                start_block=start_block,
-                initial_inventory=inventory,
-                rebalance_check_interval=self.rebalance_check_interval,
-                liq_manager=liq_manager,
-                job_repository=self.job_repository,
-                dendrite=self.dendrite,
-                metagraph=self.metagraph,
-                backtester=self.backtester,
-                get_block_fn=self._get_latest_block,
+        round_id = round_.round_id
+        job_id = job.job_id
+
+        async def _save_one(uid: int, res: dict) -> None:
+            if res["accepted"]:
+                await self.job_repository.save_rebalance_decision(
+                    round_id=round_id,
+                    job_id=job_id,
+                    miner_uid=uid,
+                    miner_hotkey=self.metagraph.hotkeys[uid],
+                    accepted=True,
+                    rebalance_data=res["rebalance_history"],
+                    refusal_reason=None,
+                    response_time_ms=res.get("total_query_time_ms", 0),
+                )
+            else:
+                await self.job_repository.save_rebalance_decision(
+                    round_id=round_id,
+                    job_id=job_id,
+                    miner_uid=uid,
+                    miner_hotkey=self.metagraph.hotkeys[uid],
+                    accepted=False,
+                    rebalance_data=None,
+                    refusal_reason=res.get("refusal_reason"),
+                    response_time_ms=res.get("total_query_time_ms", 0),
+                )
+
+        items = list(results.items())
+        for i in range(0, len(items), SCORE_UPDATE_BATCH_SIZE):
+            batch = items[i : i + SCORE_UPDATE_BATCH_SIZE]
+            await asyncio.gather(
+                *[_save_one(uid, res) for uid, res in batch]
             )
-
-            for uid, res in results.items():
-                score_val = res["score"] if res["accepted"] else 0.0
-                scores[uid] = {
-                    "hotkey": self.metagraph.hotkeys[uid],
-                    "score": score_val,
-                    "accepted": res["accepted"],
-                    "result": res,
-                }
-                if res["accepted"]:
-                    await self.job_repository.save_rebalance_decision(
-                        round_id=round_.round_id,
-                        job_id=job.job_id,
-                        miner_uid=uid,
-                        miner_hotkey=self.metagraph.hotkeys[uid],
-                        accepted=True,
-                        rebalance_data=res["rebalance_history"],
-                        refusal_reason=None,
-                        response_time_ms=res.get("total_query_time_ms", 0),
-                    )
-                else:
-                    logger.info(
-                        f"Miner {uid} refused job: {res.get('refusal_reason')}"
-                    )
-                    await self.job_repository.save_rebalance_decision(
-                        round_id=round_.round_id,
-                        job_id=job.job_id,
-                        miner_uid=uid,
-                        miner_hotkey=self.metagraph.hotkeys[uid],
-                        accepted=False,
-                        rebalance_data=None,
-                        refusal_reason=res.get("refusal_reason"),
-                        response_time_ms=res.get("total_query_time_ms", 0),
-                    )
 
         return scores
