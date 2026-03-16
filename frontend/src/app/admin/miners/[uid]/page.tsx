@@ -15,8 +15,8 @@ import {
 } from 'recharts';
 import { useMinerWinRate } from '@/lib/metrics-hooks';
 import { useJobTVLHistory } from '@/lib/metrics-hooks';
-import { useJobs, useMinerVaults, useMinerProfile, useJobTVL, useJobAPY, useJobRevenue, useJobPnL, useMinerScoreHistory, useMinerMetricsHistory, useMinerVaultActivity } from '@/lib/api';
-import type { RoundHistoryEntry, ExecutionLogEntry, StrategyEntry } from '@/lib/api';
+import { useJobs, useMinerVaults, useMinerProfile, useJobTVL, useJobAPY, useJobRevenue, useJobPnL, useMinerScoreHistory, useMinerMetricsHistory, useMinerVaultActivity, usePoolOnchainState, useVaultOnchainState, useMetagraph } from '@/lib/api';
+import type { RoundHistoryEntry, ExecutionLogEntry, StrategyEntry, MetagraphNeuron } from '@/lib/api';
 import { formatUsd } from '@/lib/format';
 import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
@@ -152,9 +152,15 @@ function VaultPerformanceView({ minerUid, jobId, token0Symbol, token1Symbol, win
 
     const { data: tvlHistory } = useJobTVLHistory(jobId || '', days);
     const { data: activity } = useMinerVaultActivity(minerUid, jobId || '');
+    const { data: poolState } = usePoolOnchainState(jobId || '');
+    const { data: vaultState } = useVaultOnchainState(jobId || '');
+    const { data: metagraph } = useMetagraph();
     const series = tvlHistory?.series || [];
 
     const hasFinancialData = (tvl?.tvl_usd || 0) > 0;
+
+    // Find this miner in the metagraph
+    const neuron: MetagraphNeuron | undefined = metagraph?.neurons?.find((n: MetagraphNeuron) => n.uid === minerUid);
 
     const growthData = useMemo(() => {
         return series.map((pt: any) => ({
@@ -197,12 +203,12 @@ function VaultPerformanceView({ minerUid, jobId, token0Symbol, token1Symbol, win
                 </div>
             ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <MiniStatBox label="Vault Value" value={vaultState?.total_value_usd ? formatUsd(vaultState.total_value_usd) : '—'} subvalue={vaultState?.token0 && vaultState?.token1 ? `${vaultState.token0.balance.toFixed(4)} ${vaultState.token0.symbol} / ${vaultState.token1.balance.toFixed(2)} ${vaultState.token1.symbol}` : undefined} />
+                    <MiniStatBox label="Pool Price" value={poolState?.pool_price ? poolState.pool_price.toFixed(6) : '—'} subvalue={poolState?.token0 && poolState?.token1 ? `${poolState.token0.symbol}/${poolState.token1.symbol}` : undefined} />
                     <MiniStatBox label="Combined Score" value={(vaultData?.combined_score ?? 0).toFixed(4)} />
-                    <MiniStatBox label="Eval Score" value={(vaultData?.evaluation_score ?? 0).toFixed(4)} />
-                    <MiniStatBox label="Rounds Won" value={`${summary?.rounds_won ?? winRateData?.total_wins ?? 0}`} />
-                    <MiniStatBox label="Total Rounds" value={`${summary?.total_rounds ?? winRateData?.total_participations ?? 0}`} />
-                    <MiniStatBox label="Live Executions" value={`${summary?.total_executions ?? 0}`} />
-                    <MiniStatBox label="Avg Score" value={`${(summary?.avg_score ?? 0).toFixed(4)}`} />
+                    <MiniStatBox label="Rounds Won" value={`${summary?.rounds_won ?? winRateData?.total_wins ?? 0} / ${summary?.total_rounds ?? winRateData?.total_participations ?? 0}`} />
+                    <MiniStatBox label="Stake" value={neuron ? `${neuron.stake.toFixed(0)} TAO` : '—'} />
+                    <MiniStatBox label="Incentive" value={neuron ? neuron.incentive.toFixed(6) : '—'} />
                 </div>
             )}
 
@@ -566,6 +572,15 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
 
     const { data: scoreHistory } = useMinerScoreHistory(minerUid);
     const { data: metricsHistory } = useMinerMetricsHistory(minerUid, 30);
+    const { data: metagraph } = useMetagraph();
+
+    // Find this miner in the metagraph
+    const neuron: MetagraphNeuron | undefined = metagraph?.neurons?.find((n: MetagraphNeuron) => n.uid === minerUid);
+
+    // Fetch on-chain vault state for each vault to get real balances
+    const vaults = minerVaults?.vaults || [];
+    const firstJobId = vaults[0]?.job_id || '';
+    const { data: firstVaultState } = useVaultOnchainState(firstJobId);
 
     // Use best (max) score across jobs — same logic as backend list_all_miners
     const jobs = minerProfile?.jobs || [];
@@ -599,14 +614,23 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
 
     return (
         <div className="space-y-6 animate-fade-in">
-            {/* Summary Metrics (6 boxes) */}
+            {/* Summary Metrics */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                 <MiniStatBox label="Best Combined" value={bestCombined.toFixed(4)} />
                 <MiniStatBox label="Best Eval" value={bestEval.toFixed(4)} />
-                <MiniStatBox label="Best Live" value={bestLive.toFixed(4)} />
                 <MiniStatBox label="Win Rate" value={`${(winRateData?.win_rate || 0).toFixed(1)}%`} />
                 <MiniStatBox label="Total Rounds" value={`${winRateData?.total_participations || 0}`} />
+                <MiniStatBox label="Stake" value={neuron ? `${neuron.stake.toFixed(0)} TAO` : '—'} />
+                <MiniStatBox label="Emission" value={neuron ? neuron.emission.toFixed(6) : '—'} />
+            </div>
+            {/* Metagraph Row */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <MiniStatBox label="Incentive" value={neuron ? neuron.incentive.toFixed(6) : '—'} />
+                <MiniStatBox label="Dividends" value={neuron ? neuron.dividends.toFixed(6) : '—'} />
+                <MiniStatBox label="Consensus" value={neuron ? neuron.consensus.toFixed(6) : '—'} />
+                <MiniStatBox label="Trust" value={neuron ? neuron.trust.toFixed(6) : '—'} />
                 <MiniStatBox label="Active Vaults" value={`${minerVaults?.active_vaults || 0}`} />
+                <MiniStatBox label="Axon" value={neuron?.axon?.is_serving ? `${neuron.axon.ip}:${neuron.axon.port}` : 'Not Serving'} />
             </div>
 
             {/* Performance Over Time */}
@@ -798,8 +822,8 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
 
                             <div className="grid grid-cols-2 gap-4 border-t border-dashed border-cream-dark/50 pt-4">
                                 <div>
-                                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Revenue</div>
-                                    <div className="text-xs font-black text-primary">{formatUsd(vault.revenue_usd)}</div>
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Vault Value</div>
+                                    <div className="text-xs font-black text-primary"><VaultValueCell jobId={vault.job_id} fallback={vault.revenue_usd} /></div>
                                 </div>
                                 <div>
                                     <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Rounds</div>
@@ -821,7 +845,7 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
                                 <th className="pb-4 uppercase tracking-widest">Chain</th>
                                 <th className="pb-4 uppercase tracking-widest">Combined</th>
                                 <th className="pb-4 uppercase tracking-widest">Eval Score</th>
-                                <th className="pb-4 uppercase tracking-widest">Revenue USD</th>
+                                <th className="pb-4 uppercase tracking-widest">Vault Value</th>
                                 <th className="pb-4 uppercase tracking-widest">Rounds</th>
                                 <th className="pb-4"></th>
                             </tr>
@@ -849,7 +873,7 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
                                     <td className="py-5 opacity-40 uppercase">Base</td>
                                     <td className="py-5 font-black">{vault.combined_score.toFixed(4)}</td>
                                     <td className="py-5 text-blue-600 font-black">{vault.evaluation_score.toFixed(4)}</td>
-                                    <td className="py-5 font-black">{formatUsd(vault.revenue_usd)}</td>
+                                    <td className="py-5 font-black"><VaultValueCell jobId={vault.job_id} fallback={vault.revenue_usd} /></td>
                                     <td className="py-5">{vault.total_evaluations + vault.total_live_rounds}</td>
                                     <td className="py-5 text-right">
                                         <ChevronRight size={14} className="text-primary/20 group-hover:text-primary transition-colors inline" />
@@ -957,7 +981,16 @@ function formatTokenAmount(raw: string | number | undefined, decimals: number = 
     return value.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
-function MiniStatBox({ label, value }: { label: string; value: string }) {
+function VaultValueCell({ jobId, fallback }: { jobId: string; fallback: number }) {
+    const { data: vaultState } = useVaultOnchainState(jobId);
+    const totalValue = vaultState?.total_value_usd;
+    if (totalValue && totalValue > 0) {
+        return <>{formatUsd(totalValue)}</>;
+    }
+    return <>{formatUsd(fallback)}</>;
+}
+
+function MiniStatBox({ label, value, subvalue }: { label: string; value: string; subvalue?: string }) {
     return (
         <div className="bg-white p-6 rounded-2xl md:rounded-[32px] border border-cream-dark shadow-sm flex flex-col justify-between h-full hover:bg-cream/5 transition-all duration-300">
             <span className="text-[9px] font-black text-primary/30 uppercase tracking-[0.15em] mb-4 leading-none">
@@ -966,6 +999,11 @@ function MiniStatBox({ label, value }: { label: string; value: string }) {
             <span className="text-base font-black text-primary tracking-tight leading-none">
                 {value}
             </span>
+            {subvalue && (
+                <span className="text-[9px] font-bold text-primary/30 mt-1.5 leading-none truncate">
+                    {subvalue}
+                </span>
+            )}
         </div>
     );
 }

@@ -3,12 +3,14 @@ Execute strategy on-chain via executor bot HTTP API.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Dict, List
 
 import httpx
 
 from validator.models.job import Job, Round
+from validator.utils.web3 import AsyncWeb3Helper
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +118,9 @@ async def execute_strategy_onchain(
                     ex.actual_performance = {"error": error}
                     await ex.save()
                     logger.warning(f"Live execution {execution_id} marked as failed: {error}")
+                elif tx_hash:
+                    # Confirm tx on-chain in background
+                    asyncio.create_task(_confirm_tx_onchain(ex, job.chain_id))
             except Exception as db_err:
                 logger.error(f"Failed to create live execution record: {db_err}", exc_info=True)
                 execution_id = None
@@ -165,6 +170,40 @@ async def execute_strategy_onchain(
             job_repository, job, round_obj, miner_uid, positions, err_msg
         )
         return {"success": False, "execution_id": eid, "tx_hash": None, "error": err_msg}
+
+
+async def _confirm_tx_onchain(execution, chain_id: int, max_attempts: int = 10, delay: float = 3.0):
+    """Check on-chain tx receipt and update execution status."""
+    if not execution.tx_hash:
+        return
+    try:
+        w3 = AsyncWeb3Helper.make_web3(chain_id)
+        for attempt in range(max_attempts):
+            try:
+                receipt = await w3.web3.eth.get_transaction_receipt(execution.tx_hash)
+                if receipt is not None:
+                    status = receipt.get("status", None)
+                    if status == 1:
+                        execution.tx_status = "success"
+                        execution.actual_performance = {
+                            "block_number": receipt.get("blockNumber"),
+                            "gas_used": receipt.get("gasUsed"),
+                        }
+                        await execution.save()
+                        logger.info(f"Tx {execution.tx_hash} confirmed on-chain (block {receipt.get('blockNumber')})")
+                    else:
+                        execution.tx_status = "failed"
+                        execution.actual_performance = {"error": "Transaction reverted on-chain"}
+                        await execution.save()
+                        logger.warning(f"Tx {execution.tx_hash} reverted on-chain")
+                    return
+            except Exception:
+                pass  # receipt not available yet
+            if attempt < max_attempts - 1:
+                await asyncio.sleep(delay)
+        logger.warning(f"Tx {execution.tx_hash} not confirmed after {max_attempts} attempts, staying pending")
+    except Exception as e:
+        logger.error(f"Error confirming tx {execution.tx_hash}: {e}")
 
 
 async def _create_failed_execution_async(

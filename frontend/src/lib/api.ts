@@ -1177,3 +1177,253 @@ export function useMinerVaultActivity(uid: number, jobId: string) {
         retry: 1,
     });
 }
+
+// ========== On-Chain Data Types & Hooks ==========
+
+export interface PoolOnchainState {
+    job_id: string;
+    pool_address: string;
+    chain_id: number;
+    slot0?: {
+        sqrt_price_x96: string;
+        tick: number;
+        observation_index: number | null;
+        unlocked: boolean;
+    };
+    liquidity?: string;
+    fee?: number;
+    pool_price?: number;
+    token0?: {
+        address: string;
+        symbol: string;
+        decimals: number;
+        price_usd: number;
+    };
+    token1?: {
+        address: string;
+        symbol: string;
+        decimals: number;
+        price_usd: number;
+    };
+    error?: string;
+    updated_at: string;
+}
+
+export interface VaultPosition {
+    tick_lower: number;
+    tick_upper: number;
+    price_lower: number;
+    price_upper: number;
+    amount0: number;
+    amount1: number;
+}
+
+export interface VaultOnchainState {
+    job_id: string;
+    vault_address: string;
+    chain_id?: number;
+    token0?: {
+        address: string;
+        symbol: string;
+        decimals: number;
+        idle: number;
+        deployed: number;
+        balance: number;
+        balance_usd: number;
+        price_usd: number;
+    };
+    token1?: {
+        address: string;
+        symbol: string;
+        decimals: number;
+        idle: number;
+        deployed: number;
+        balance: number;
+        balance_usd: number;
+        price_usd: number;
+    };
+    positions?: VaultPosition[];
+    idle_value_usd?: number;
+    deployed_value_usd?: number;
+    total_value_usd?: number;
+    fee_split?: number | null;
+    owner?: string | null;
+    operator?: string | null;
+    error?: string;
+    updated_at: string;
+}
+
+export interface MetagraphNeuron {
+    uid: number;
+    hotkey: string;
+    coldkey: string | null;
+    stake: number;
+    incentive: number;
+    emission: number;
+    dividends: number;
+    consensus: number;
+    trust: number;
+    active: number;
+    axon: {
+        ip: string;
+        port: number;
+        is_serving: boolean;
+        version: number;
+    };
+}
+
+export interface MetagraphSnapshot {
+    netuid: number;
+    block: number | null;
+    total_neurons: number;
+    neurons: MetagraphNeuron[];
+    error?: string;
+    updated_at: string;
+}
+
+export interface BaseScanTransaction {
+    hash: string;
+    from: string;
+    to: string;
+    value: string;
+    timeStamp: string;
+    functionName: string;
+    isError: string;
+    blockNumber: string;
+    gasUsed: string;
+    gasPrice: string;
+    input: string;
+}
+
+async function fetchPoolOnchainState(jobId: string): Promise<PoolOnchainState> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/onchain/jobs/${jobId}/pool-state`);
+        if (!res.ok) throw new Error('Failed to fetch pool state');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchPoolOnchainState):', error);
+        return { job_id: jobId, pool_address: '', chain_id: 8453, updated_at: new Date().toISOString(), error: 'Failed to connect' };
+    }
+}
+
+async function fetchVaultOnchainState(jobId: string): Promise<VaultOnchainState> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/onchain/jobs/${jobId}/vault-state`);
+        if (!res.ok) throw new Error('Failed to fetch vault state');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchVaultOnchainState):', error);
+        return { job_id: jobId, vault_address: '', updated_at: new Date().toISOString(), error: 'Failed to connect' };
+    }
+}
+
+async function fetchMetagraph(): Promise<MetagraphSnapshot> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/onchain/metagraph`);
+        if (!res.ok) throw new Error('Failed to fetch metagraph');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchMetagraph):', error);
+        return { netuid: 98, block: null, total_neurons: 0, neurons: [], updated_at: new Date().toISOString(), error: 'Failed to connect' };
+    }
+}
+
+async function fetchBaseScanTransactions(address: string, limit: number = 20): Promise<BaseScanTransaction[]> {
+    try {
+        const res = await fetch(
+            `https://api.basescan.org/api?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=${limit}&sort=desc&apikey=YourApiKeyToken`
+        );
+        if (!res.ok) throw new Error('BaseScan API failed');
+        const data = await res.json();
+        if (data.status === '1' && Array.isArray(data.result)) {
+            return data.result;
+        }
+        return [];
+    } catch (error) {
+        console.warn('BaseScan API Error:', error);
+        return [];
+    }
+}
+
+export function usePoolOnchainState(jobId: string) {
+    return useQuery({
+        queryKey: ['pool-onchain-state', jobId],
+        queryFn: () => fetchPoolOnchainState(jobId),
+        enabled: !!jobId,
+        staleTime: 30 * 1000,
+        refetchInterval: 30000,
+        retry: 1,
+    });
+}
+
+export function useVaultOnchainState(jobId: string) {
+    return useQuery({
+        queryKey: ['vault-onchain-state', jobId],
+        queryFn: () => fetchVaultOnchainState(jobId),
+        enabled: !!jobId,
+        staleTime: 30 * 1000,
+        refetchInterval: 30000,
+        retry: 1,
+    });
+}
+
+export function useMetagraph() {
+    return useQuery({
+        queryKey: ['metagraph'],
+        queryFn: fetchMetagraph,
+        staleTime: 5 * 60 * 1000,
+        refetchInterval: 5 * 60 * 1000,
+        retry: 1,
+    });
+}
+
+export function useBaseScanTransactions(address: string, limit: number = 20) {
+    return useQuery({
+        queryKey: ['basescan-txs', address, limit],
+        queryFn: () => fetchBaseScanTransactions(address, limit),
+        enabled: !!address,
+        staleTime: 60 * 1000,
+        refetchInterval: 60000,
+        retry: 1,
+    });
+}
+
+// ========== Vaults Summary (bulk on-chain TVL for all pairs) ==========
+
+export interface VaultSummaryEntry {
+    job_id: string;
+    vault_address: string;
+    pair_name: string;
+    total_value_usd: number;
+    idle_value_usd: number;
+    deployed_value_usd: number;
+    token0: { symbol: string; balance: number; price_usd: number } | null;
+    token1: { symbol: string; balance: number; price_usd: number } | null;
+}
+
+export interface VaultsSummaryResponse {
+    total_tvl_usd: number;
+    vaults: VaultSummaryEntry[];
+    updated_at: string;
+}
+
+async function fetchVaultsSummary(): Promise<VaultsSummaryResponse> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/onchain/vaults-summary`);
+        if (!res.ok) throw new Error('Failed to fetch vaults summary');
+        return await res.json();
+    } catch (error) {
+        console.warn('API Error (fetchVaultsSummary):', error);
+        return { total_tvl_usd: 0, vaults: [], updated_at: '' };
+    }
+}
+
+export function useVaultsSummary() {
+    return useQuery({
+        queryKey: ['vaults-summary'],
+        queryFn: fetchVaultsSummary,
+        staleTime: 60 * 1000,
+        refetchInterval: 60000,
+        retry: 1,
+    });
+}

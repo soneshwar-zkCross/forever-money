@@ -5,7 +5,7 @@ Provides miner-activity analytics for a job using purely internal data
 (MinerScore, Round, Prediction).  Zero external API calls.
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 from tortoise.functions import Avg
@@ -46,9 +46,9 @@ class ActivityService:
         scores = await MinerScore.filter(job=job).all()
         total_miners = len(scores)
 
-        cutoff_24h = datetime.utcnow() - timedelta(hours=24)
+        cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
         active_24h = sum(
-            1 for s in scores if s.last_active and s.last_active >= cutoff_24h
+            1 for s in scores if s.last_active and s.last_active.replace(tzinfo=timezone.utc) >= cutoff_24h
         )
 
         # Average response time from recent predictions

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState, useMemo } from 'react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import {
     Terminal,
@@ -12,26 +12,39 @@ import {
 } from 'lucide-react';
 import {
     useJobs,
-    useNetworkStats,
-    useJobRevenue,
-    useJobTVL,
-    useJobAPY,
-    useLeaderboard,
-    Job
+    useJobActivity,
+    useVaultsSummary,
+    Job,
 } from '@/lib/api';
-import { formatUsd, formatFeeRate } from '@/lib/format';
+import type { VaultSummaryEntry } from '@/lib/api';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export default function PairsPage() {
     const { data: jobs, isLoading } = useJobs();
+    const { data: vaultsSummary } = useVaultsSummary();
     const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
-    const router = useRouter();
 
     const displayJobs = jobs || [];
 
+    // Index vault data by job_id for quick lookup
+    const vaultByJobId = useMemo(() => {
+        const map: Record<string, VaultSummaryEntry> = {};
+        for (const v of vaultsSummary?.vaults || []) {
+            map[v.job_id] = v;
+        }
+        return map;
+    }, [vaultsSummary]);
+
     const headerActions = (
         <div className="flex items-center space-x-2 md:space-x-4">
+            {/* Total TVL badge */}
+            {(vaultsSummary?.total_tvl_usd || 0) > 0 && (
+                <div className="hidden md:flex items-center space-x-2 px-4 py-2 bg-cream/50 border border-cream-dark/50 rounded-xl">
+                    <span className="text-[9px] font-black text-primary/30 uppercase tracking-widest">Total TVL</span>
+                    <span className="text-sm font-black text-primary">${vaultsSummary!.total_tvl_usd.toFixed(2)}</span>
+                </div>
+            )}
             <div className="hidden md:flex bg-cream/50 p-1 rounded-xl border border-cream-dark/50 space-x-1">
                 <button
                     onClick={() => setViewMode('list')}
@@ -67,10 +80,10 @@ export default function PairsPage() {
                     </div>
                 ) : (
                     <>
-                        {/* Mobile: Always Grid/Card View */}
+                        {/* Mobile: Always Card View */}
                         <div className="md:hidden grid grid-cols-1 gap-4">
                             {displayJobs.map((job) => (
-                                <PairCard key={job.job_id} job={job as Job} />
+                                <PairCard key={job.job_id} job={job as Job} vault={vaultByJobId[job.job_id]} />
                             ))}
                         </div>
 
@@ -85,19 +98,19 @@ export default function PairsPage() {
                                                     <th className="pb-4">#</th>
                                                     <th className="pb-4">Pair</th>
                                                     <th className="pb-4">TVL</th>
-                                                    <th className="pb-4">Fees Collected</th>
-                                                    <th className="pb-4">T1 APY</th>
-                                                    <th className="pb-4">T2 APY</th>
-                                                    <th className="pb-4">USD APY</th>
-                                                    <th className="pb-4">vs HODL</th>
-                                                    <th className="pb-4">vs FULL RANGE</th>
-                                                    <th className="pb-4">Vaults</th>
+                                                    <th className="pb-4">Deployed</th>
+                                                    <th className="pb-4">Idle</th>
+                                                    <th className="pb-4">Token0</th>
+                                                    <th className="pb-4">Token1</th>
+                                                    <th className="pb-4">Rounds</th>
+                                                    <th className="pb-4">Miners</th>
+                                                    <th className="pb-4">Status</th>
                                                     <th className="pb-4"></th>
                                                 </tr>
                                             </thead>
                                             <tbody className="text-xs">
                                                 {displayJobs.map((job, i) => (
-                                                    <PairRow key={job.job_id} job={job as Job} index={i + 1} />
+                                                    <PairRow key={job.job_id} job={job as Job} index={i + 1} vault={vaultByJobId[job.job_id]} />
                                                 ))}
                                             </tbody>
                                         </table>
@@ -106,7 +119,7 @@ export default function PairsPage() {
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
                                     {displayJobs.map((job) => (
-                                        <PairCard key={job.job_id} job={job as Job} />
+                                        <PairCard key={job.job_id} job={job as Job} vault={vaultByJobId[job.job_id]} />
                                     ))}
                                 </div>
                             )}
@@ -118,12 +131,17 @@ export default function PairsPage() {
     );
 }
 
-function PairRow({ job, index }: { job: Job, index: number }) {
-    const { data: tvl } = useJobTVL(job.job_id);
-    const { data: revenue } = useJobRevenue(job.job_id, 30);
-    const { data: apy } = useJobAPY(job.job_id, 30);
-    const { data: leaderboard } = useLeaderboard(job.job_id);
+function PairRow({ job, index, vault }: { job: Job; index: number; vault?: any }) {
+    const { data: activity } = useJobActivity(job.job_id);
     const router = useRouter();
+
+    const totalRounds = activity?.round_outcomes?.total_rounds || 0;
+    const totalMiners = activity?.miner_activity?.total_miners || 0;
+    const tvl = vault?.total_value_usd || 0;
+    const deployed = vault?.deployed_value_usd || 0;
+    const idle = vault?.idle_value_usd || 0;
+    const t0 = vault?.token0;
+    const t1 = vault?.token1;
 
     return (
         <tr
@@ -132,18 +150,31 @@ function PairRow({ job, index }: { job: Job, index: number }) {
         >
             <td className="py-5 font-black text-primary/20">{index}</td>
             <td className="py-5 font-black">
-                <Link href={`/admin/pairs/${job.job_id}`} className="hover:underline hover:text-blue-600 transition-all">
+                <Link href={`/admin/pairs/${job.job_id}`} className="hover:underline hover:text-blue-600 transition-all"
+                    onClick={(e) => e.stopPropagation()}>
                     {job.metadata?.pair_name || job.target}
                 </Link>
             </td>
-            <td className="py-5 font-bold text-primary/60">{formatUsd(tvl?.tvl_usd)}</td>
-            <td className="py-5 font-bold text-primary/60">${(revenue?.revenue_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-            <td className="py-5 font-bold text-primary/30">{(apy?.apy_percent_token0 || 0).toFixed(1)}%</td>
-            <td className="py-5 font-bold text-primary/30">{(apy?.apy_percent_token1 || 0).toFixed(1)}%</td>
-            <td className="py-5 font-black text-primary">{(apy?.apy_percent || 0).toFixed(1)}%</td>
-            <td className="py-5 font-bold text-primary/30">-</td>
-            <td className="py-5 font-bold text-primary/30">-</td>
-            <td className="py-5 font-bold text-primary/60">{leaderboard?.length || 0}</td>
+            <td className="py-5 font-black text-primary">{tvl > 0 ? `$${tvl.toFixed(2)}` : '$0'}</td>
+            <td className="py-5 font-bold text-green-600">{deployed > 0 ? `$${deployed.toFixed(2)}` : '$0'}</td>
+            <td className="py-5 font-bold text-primary/40">{idle > 0 ? `$${idle.toFixed(2)}` : '$0'}</td>
+            <td className="py-5 font-bold text-primary/50 font-mono text-[10px]">
+                {t0 ? `${t0.balance.toFixed(t0.balance > 1 ? 4 : 8)} ${t0.symbol}` : '-'}
+            </td>
+            <td className="py-5 font-bold text-primary/50 font-mono text-[10px]">
+                {t1 ? `${t1.balance.toFixed(t1.balance > 1 ? 2 : 6)} ${t1.symbol}` : '-'}
+            </td>
+            <td className="py-5 font-bold text-primary/60">{totalRounds}</td>
+            <td className="py-5 font-bold text-primary/60">{totalMiners}</td>
+            <td className="py-5">
+                <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-widest ${
+                    job.is_active
+                        ? 'bg-green-50 text-green-600 border border-green-100'
+                        : 'bg-gray-50 text-gray-400 border border-gray-100'
+                }`}>
+                    {job.is_active ? 'Active' : 'Inactive'}
+                </span>
+            </td>
             <td className="py-5 text-right">
                 <ChevronRight size={14} className="text-primary/20 group-hover:text-primary transition-colors inline" />
             </td>
@@ -151,11 +182,15 @@ function PairRow({ job, index }: { job: Job, index: number }) {
     );
 }
 
-function PairCard({ job }: { job: Job }) {
-    const { data: tvl } = useJobTVL(job.job_id);
-    const { data: revenue } = useJobRevenue(job.job_id, 30);
-    const { data: apy } = useJobAPY(job.job_id, 30);
-    const { data: stats } = useNetworkStats(job.job_id);
+function PairCard({ job, vault }: { job: Job; vault?: any }) {
+    const { data: activity } = useJobActivity(job.job_id);
+
+    const tvl = vault?.total_value_usd || 0;
+    const deployed = vault?.deployed_value_usd || 0;
+    const totalRounds = activity?.round_outcomes?.total_rounds || 0;
+    const totalMiners = activity?.miner_activity?.total_miners || 0;
+    const t0 = vault?.token0;
+    const t1 = vault?.token1;
 
     return (
         <Link
@@ -165,7 +200,9 @@ function PairCard({ job }: { job: Job }) {
             <div className="flex justify-between items-start mb-6">
                 <div>
                     <h3 className="text-lg font-black text-primary mb-1">{job.metadata?.pair_name || job.target}</h3>
-                    <p className="text-[10px] font-black text-primary/20 uppercase tracking-widest">{job.is_active ? 'Active Pair' : 'Inactive Pair'}</p>
+                    <p className="text-[10px] font-black text-primary/20 uppercase tracking-widest">
+                        {job.is_active ? 'Active' : 'Inactive'} · {totalRounds} rounds · {totalMiners} miners
+                    </p>
                 </div>
                 <div className="bg-primary/5 p-2 rounded-xl">
                     <Terminal size={16} className="text-primary/40" />
@@ -175,26 +212,30 @@ function PairCard({ job }: { job: Job }) {
             <div className="grid grid-cols-2 gap-6 mb-8">
                 <div>
                     <p className="text-[9px] font-black text-primary/20 uppercase tracking-widest mb-1">TVL</p>
-                    <p className="text-lg font-black text-primary">{formatUsd(tvl?.tvl_usd)}</p>
+                    <p className="text-lg font-black text-primary">{tvl > 0 ? `$${tvl.toFixed(2)}` : '$0'}</p>
                 </div>
                 <div>
-                    <p className="text-[9px] font-black text-primary/20 uppercase tracking-widest mb-1">Revenue</p>
-                    <p className="text-lg font-black text-primary">${(revenue?.revenue_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                    <p className="text-[9px] font-black text-primary/20 uppercase tracking-widest mb-1">In Pool</p>
+                    <p className="text-lg font-black text-green-600">{deployed > 0 ? `$${deployed.toFixed(2)}` : '$0'}</p>
                 </div>
             </div>
 
             <div className="space-y-3 pt-6 border-t border-cream-dark/50">
+                {t0 && (
+                    <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">{t0.symbol}</span>
+                        <span className="text-xs font-black text-primary">{t0.balance.toFixed(t0.balance > 1 ? 4 : 8)}</span>
+                    </div>
+                )}
+                {t1 && (
+                    <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">{t1.symbol}</span>
+                        <span className="text-xs font-black text-primary">{t1.balance.toFixed(t1.balance > 1 ? 2 : 6)}</span>
+                    </div>
+                )}
                 <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">USD APY</span>
-                    <span className="text-xs font-black text-primary">{(apy?.apy_percent || 0).toFixed(1)}%</span>
-                </div>
-                <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">Miners</span>
-                    <span className="text-xs font-black text-primary">{stats?.total_miners || 0}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">Fee Rate</span>
-                    <span className="text-xs font-black text-primary">{formatFeeRate(job.fee_rate)}</span>
+                    <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">Rounds</span>
+                    <span className="text-xs font-black text-primary">{totalRounds}</span>
                 </div>
             </div>
 

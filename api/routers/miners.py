@@ -669,14 +669,20 @@ async def get_miner_vault_activity(uid: int, job_id: str):
             positions = strategy.get("positions", [])
             error_msg = None
 
-            if ex.tx_status == "failed":
+            # Resolve pending tx status from on-chain receipt (cached in metrics DB)
+            resolved_status = ex.tx_status
+            if ex.tx_status == "pending" and ex.tx_hash:
+                from api.routers.executions import _resolve_pending_tx
+                resolved_status, _ = await _resolve_pending_tx(ex.tx_hash, job.chain_id)
+
+            if resolved_status == "failed":
                 failed_executions += 1
                 perf = ex.actual_performance or {}
                 error_msg = perf.get("error") or strategy.get("error")
 
             execution_log.append({
                 "round_number": ex.round.round_number if ex.round else None,
-                "tx_status": ex.tx_status,
+                "tx_status": resolved_status,
                 "tx_hash": ex.tx_hash,
                 "error": error_msg,
                 "positions": positions,

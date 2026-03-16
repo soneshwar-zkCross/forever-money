@@ -301,3 +301,25 @@ class CachedPrice(Model):
 
     def __str__(self):
         return f"CachedPrice({self.price_key}={self.price_usd})"
+
+
+class TxStatusCache(Model):
+    """
+    Cache of on-chain tx confirmation status.
+
+    The reader DB (validator) is read-only from the API's perspective.
+    This table lets the API store on-chain receipt results locally so
+    'pending' tx_status values can be resolved without writing to the
+    reader DB.
+    """
+
+    id = fields.IntField(primary_key=True)
+    tx_hash = fields.CharField(max_length=66, unique=True, db_index=True)
+    tx_status = fields.CharField(max_length=20)  # success | failed
+    block_number = fields.IntField(null=True)
+    gas_used = fields.IntField(null=True)
+    checked_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        table = "tx_status_cache"
+        app = "metrics"

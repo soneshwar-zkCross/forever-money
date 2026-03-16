@@ -256,13 +256,7 @@ class PriceService:
         if cached is not None:
             return cached
 
-        # 3. Swap-derived price (local DB, zero external calls)
-        swap_price = await PriceService._get_price_from_swaps(addr)
-        if swap_price is not None and swap_price > 0:
-            await _set_cached_price(cache_key, swap_price, source="swap_tick")
-            return swap_price
-
-        # 4. CoinGecko fallback
+        # 3. CoinGecko / GeckoTerminal fallback
         url = (
             f"{PriceService.BASE_URL}/coins/{platform}/contract/{addr}/market_chart"
         )

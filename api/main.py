@@ -83,6 +83,7 @@ async def lifespan(app: FastAPI):
     logger.info("Initial miner snapshot triggered")
     asyncio.create_task(_snapshot_miner_metrics())
 
+
     yield
 
     # Shutdown
@@ -189,6 +190,9 @@ app.include_router(rounds.router, prefix="/api/jobs", tags=["Rounds"])
 app.include_router(miners.router, prefix="/api/miners", tags=["Miners"])
 app.include_router(executions.router, prefix="/api/jobs", tags=["Executions"])
 app.include_router(metrics.router, prefix="/api/metrics", tags=["Metrics"])
+
+from api.routers import onchain
+app.include_router(onchain.router, prefix="/api/onchain", tags=["On-Chain"])
 
 
 # Root endpoint
