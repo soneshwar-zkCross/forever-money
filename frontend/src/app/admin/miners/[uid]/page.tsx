@@ -466,8 +466,21 @@ function VaultPerformanceView({ minerUid, jobId, token0Symbol, token1Symbol, win
                                                 }`}>
                                                     {ex.tx_status || '?'}
                                                 </span>
-                                                <div className="flex-1 min-w-0">
-                                                    <span className="font-bold text-red-500/80">{cleanErrorMessage(ex.error)}</span>
+                                                <div className="flex-1 min-w-0 space-y-0.5">
+                                                    {ex.tx_hash && (
+                                                        <a
+                                                            href={`https://basescan.org/tx/${ex.tx_hash}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="font-mono text-[9px] text-blue-500 hover:text-blue-700 hover:underline transition-colors block"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            {ex.tx_hash.slice(0, 10)}...{ex.tx_hash.slice(-6)}
+                                                        </a>
+                                                    )}
+                                                    {ex.error && (
+                                                        <span className="font-bold text-red-500/80">{cleanErrorMessage(ex.error)}</span>
+                                                    )}
                                                 </div>
                                                 <span className="shrink-0 text-primary/30 font-bold">{ex.positions.length} pos</span>
                                                 <span className="shrink-0 text-primary/25 font-bold">{ex.executed_at ? timeAgo(ex.executed_at) : ''}</span>
@@ -579,9 +592,6 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
 
     // Fetch on-chain vault state for each vault to get real balances
     const vaults = minerVaults?.vaults || [];
-    const firstJobId = vaults[0]?.job_id || '';
-    const { data: firstVaultState } = useVaultOnchainState(firstJobId);
-
     // Use best (max) score across jobs — same logic as backend list_all_miners
     const jobs = minerProfile?.jobs || [];
     const bestCombined = jobs.length > 0
@@ -589,9 +599,6 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
         : 0;
     const bestEval = jobs.length > 0
         ? Math.max(...jobs.map((j: any) => j.evaluation_score))
-        : 0;
-    const bestLive = jobs.length > 0
-        ? Math.max(...jobs.map((j: any) => j.live_score))
         : 0;
 
     const scoreData = useMemo(() => {
@@ -822,8 +829,8 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
 
                             <div className="grid grid-cols-2 gap-4 border-t border-dashed border-cream-dark/50 pt-4">
                                 <div>
-                                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Vault Value</div>
-                                    <div className="text-xs font-black text-primary"><VaultValueCell jobId={vault.job_id} fallback={vault.revenue_usd} /></div>
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Live Score</div>
+                                    <div className="text-xs font-black text-primary">{vault.live_score.toFixed(4)}</div>
                                 </div>
                                 <div>
                                     <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Rounds</div>
@@ -845,7 +852,7 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
                                 <th className="pb-4 uppercase tracking-widest">Chain</th>
                                 <th className="pb-4 uppercase tracking-widest">Combined</th>
                                 <th className="pb-4 uppercase tracking-widest">Eval Score</th>
-                                <th className="pb-4 uppercase tracking-widest">Vault Value</th>
+                                <th className="pb-4 uppercase tracking-widest">Live Score</th>
                                 <th className="pb-4 uppercase tracking-widest">Rounds</th>
                                 <th className="pb-4"></th>
                             </tr>
@@ -873,7 +880,7 @@ function MinerPerformanceView({ minerUid, minerVaults, minerProfile, winRateData
                                     <td className="py-5 opacity-40 uppercase">Base</td>
                                     <td className="py-5 font-black">{vault.combined_score.toFixed(4)}</td>
                                     <td className="py-5 text-blue-600 font-black">{vault.evaluation_score.toFixed(4)}</td>
-                                    <td className="py-5 font-black"><VaultValueCell jobId={vault.job_id} fallback={vault.revenue_usd} /></td>
+                                    <td className="py-5 font-black">{vault.live_score.toFixed(4)}</td>
                                     <td className="py-5">{vault.total_evaluations + vault.total_live_rounds}</td>
                                     <td className="py-5 text-right">
                                         <ChevronRight size={14} className="text-primary/20 group-hover:text-primary transition-colors inline" />
@@ -979,15 +986,6 @@ function formatTokenAmount(raw: string | number | undefined, decimals: number = 
     if (Math.abs(value) >= 1000) return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
     if (Math.abs(value) >= 1) return value.toLocaleString(undefined, { maximumFractionDigits: 4 });
     return value.toLocaleString(undefined, { maximumFractionDigits: 6 });
-}
-
-function VaultValueCell({ jobId, fallback }: { jobId: string; fallback: number }) {
-    const { data: vaultState } = useVaultOnchainState(jobId);
-    const totalValue = vaultState?.total_value_usd;
-    if (totalValue && totalValue > 0) {
-        return <>{formatUsd(totalValue)}</>;
-    }
-    return <>{formatUsd(fallback)}</>;
 }
 
 function MiniStatBox({ label, value, subvalue }: { label: string; value: string; subvalue?: string }) {

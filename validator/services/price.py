@@ -100,8 +100,8 @@ class PriceService:
         56: "bsc",
     }
 
-    MAX_RETRIES = 10
-    RETRY_DELAY = 10  # seconds when 429 from CoinGecko
+    MAX_RETRIES = 2
+    RETRY_DELAY = 3  # seconds when 429 from CoinGecko
 
     @staticmethod
     async def _get_json(

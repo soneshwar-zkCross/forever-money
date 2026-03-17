@@ -1367,6 +1367,10 @@ export function useVaultOnchainState(jobId: string) {
     });
 }
 
+export async function refreshVaultData(jobId: string): Promise<void> {
+    await fetch(`${API_BASE_URL}/onchain/refresh/${jobId}`, { method: 'POST' });
+}
+
 export function useMetagraph() {
     return useQuery({
         queryKey: ['metagraph'],
@@ -1422,8 +1426,8 @@ export function useVaultsSummary() {
     return useQuery({
         queryKey: ['vaults-summary'],
         queryFn: fetchVaultsSummary,
-        staleTime: 60 * 1000,
-        refetchInterval: 60000,
+        staleTime: 5 * 60 * 1000,
+        refetchInterval: 5 * 60 * 1000,
         retry: 1,
     });
 }

@@ -8,11 +8,13 @@ import {
     ArrowLeft,
     ExternalLink,
     ChevronRight,
+    RefreshCw,
 } from 'lucide-react';
-import { useJobs, useNetworkStats, useLeaderboard, useJobAPY, useJobPnL, useJobTVL, useJobRevenue, useJobActivity, useAllRounds, useExecutions, usePoolOnchainState, useVaultOnchainState, useMetagraph, useBaseScanTransactions } from '@/lib/api';
+import { useJobs, useNetworkStats, useLeaderboard, useJobAPY, useJobPnL, useJobTVL, useJobRevenue, useJobActivity, useAllRounds, useExecutions, usePoolOnchainState, useVaultOnchainState, useMetagraph, useBaseScanTransactions, refreshVaultData } from '@/lib/api';
+import { useQueryClient } from '@tanstack/react-query';
 import type { MetagraphNeuron } from '@/lib/api';
 import { useJobTVLHistory } from '@/lib/metrics-hooks';
-import { formatUsd, formatFeeRate, formatTokenAmount } from '@/lib/format';
+import { formatUsd, formatFeeRate } from '@/lib/format';
 import Link from 'next/link';
 import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip, XAxis, CartesianGrid } from 'recharts';
 import { formatDistanceToNow } from 'date-fns';
@@ -31,8 +33,17 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
     const { data: tvlHistory } = useJobTVLHistory(jobId, 30);
     const { data: roundsData } = useAllRounds(jobId, 20);
     const { data: executions } = useExecutions(jobId);
-    const { data: poolState } = usePoolOnchainState(jobId);
-    const { data: vaultState } = useVaultOnchainState(jobId);
+    const { data: poolState, isLoading: poolLoading, refetch: refetchPool } = usePoolOnchainState(jobId);
+    const { data: vaultState, isLoading: vaultLoading, refetch: refetchVault } = useVaultOnchainState(jobId);
+    const queryClient = useQueryClient();
+
+    const handleRefreshOnchain = async () => {
+        // Server-side: expire cache, fetch fresh from RPC, cache the result
+        await refreshVaultData(jobId);
+        // Client-side: refetch from server (now has fresh data)
+        await Promise.all([refetchPool(), refetchVault()]);
+        queryClient.invalidateQueries({ queryKey: ['vaults-summary'] });
+    };
     const { data: metagraph } = useMetagraph();
 
     const job = jobs?.find(j => j.job_id === jobId) || {
@@ -48,7 +59,10 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
 
     const { data: basescanTxs } = useBaseScanTransactions(job.sn_liquidity_manager_address);
 
-    const [token0Symbol, token1Symbol] = job.metadata.pair_name.split('/') || ['cbBTC', 'USDC'];
+    // Derive token symbols: on-chain data > job_id > metadata
+    const jobIdParts = jobId.replace(/[-_]/g, '/').toUpperCase().split('/');
+    const fallbackT0 = jobIdParts[0] || '?';
+    const fallbackT1 = jobIdParts[1] || '?';
 
     const hasFinancialData = (tvl?.tvl_usd || 0) > 0;
 
@@ -76,14 +90,14 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
         };
     });
 
-    // Token symbols from on-chain or fallback
-    const t0 = poolState?.token0?.symbol || token0Symbol;
-    const t1 = poolState?.token1?.symbol || token1Symbol;
+    // Token symbols: prefer on-chain data, fallback to job_id parts
+    const t0 = vaultState?.token0?.symbol || poolState?.token0?.symbol || fallbackT0;
+    const t1 = vaultState?.token1?.symbol || poolState?.token1?.symbol || fallbackT1;
 
     return (
         <AdminLayout
             title={`${t0} / ${t1} | Aerodrome | Base`}
-            description={`POOL — ${job.sn_liquidity_manager_address}`}
+            description={`POOL — ${job.pair_address}`}
             icon={<Terminal size={20} />}
         >
             <div className="space-y-4 pb-20 animate-fade-in">
@@ -123,22 +137,30 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                             ? (poolState.pool_price < 0.01 ? poolState.pool_price.toExponential(3) : poolState.pool_price.toFixed(poolState.pool_price > 100 ? 2 : 6))
                             : '—'}
                         subvalue={`${t1}/${t0}`}
+                        loading={poolLoading}
+                        onRefresh={handleRefreshOnchain}
                     />
                     <MetricBox
                         label={`${t0} Price`}
                         value={poolState?.token0?.price_usd ? `$${poolState.token0.price_usd.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : formatUsd(tvl?.token0_price_usd)}
+                        loading={poolLoading}
+                        onRefresh={handleRefreshOnchain}
                     />
                     <MetricBox
                         label={`${t1} Price`}
                         value={poolState?.token1?.price_usd ? `$${poolState.token1.price_usd.toLocaleString(undefined, { maximumFractionDigits: 4 })}` : formatUsd(tvl?.token1_price_usd)}
+                        loading={poolLoading}
+                        onRefresh={handleRefreshOnchain}
                     />
                     <MetricBox
                         label="Vault TVL"
-                        value={hasFinancialData ? formatUsd(tvl?.tvl_usd) : (vaultTotalUsd > 0 ? `$${vaultTotalUsd.toFixed(2)}` : '$0.00')}
+                        value={hasFinancialData ? formatUsd(tvl?.tvl_usd) : (vaultTotalUsd > 0 ? `$${vaultTotalUsd.toFixed(2)}` : '—')}
                         subvalue={vaultState?.deployed_value_usd != null && vaultState?.idle_value_usd != null
                             ? `$${vaultState.deployed_value_usd.toFixed(2)} in pool · $${vaultState.idle_value_usd.toFixed(2)} idle`
                             : undefined}
                         highlight
+                        loading={vaultLoading}
+                        onRefresh={handleRefreshOnchain}
                     />
                     <MetricBox
                         label="Active Miners (24h)"
@@ -161,15 +183,21 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                 <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
                     <MetricBox
                         label="Pool Fee"
-                        value={poolState?.fee ? `${(poolState.fee / 10000).toFixed(2)}%` : formatFeeRate(job.fee_rate)}
+                        value={poolState?.fee ? `${(poolState.fee / 10000).toFixed(2)}%` : '—'}
+                        loading={poolLoading}
+                        onRefresh={handleRefreshOnchain}
                     />
                     <MetricBox
                         label="Current Tick"
                         value={poolState?.slot0?.tick?.toLocaleString() || '—'}
+                        loading={poolLoading}
+                        onRefresh={handleRefreshOnchain}
                     />
                     <MetricBox
-                        label="Pool Liquidity"
-                        value={poolState?.liquidity ? abbreviateNumber(BigInt(poolState.liquidity)) : '—'}
+                        label="Positions"
+                        value={vaultState?.positions ? `${vaultState.positions.length} active` : '—'}
+                        loading={vaultLoading}
+                        onRefresh={handleRefreshOnchain}
                     />
                     <MetricBox
                         label="Avg Response Time"
@@ -228,7 +256,10 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
                                                     {inRange && <span className="ml-2 px-1.5 py-0.5 rounded text-[7px] font-bold uppercase bg-green-50 text-green-600 border border-green-100">In Range</span>}
                                                 </td>
                                                 <td className="py-4 font-mono text-primary/60">
-                                                    {pos.price_lower >= 0.001 ? pos.price_lower.toFixed(6) : pos.price_lower.toExponential(2)} → {pos.price_upper >= 0.001 ? pos.price_upper.toFixed(6) : pos.price_upper.toExponential(2)}
+                                                    {isFullRange(pos.tick_lower, pos.tick_upper)
+                                                        ? <span className="text-primary/40 italic">Full Range</span>
+                                                        : <>{formatPrice(pos.price_lower)} → {formatPrice(pos.price_upper)}</>
+                                                    }
                                                 </td>
                                                 <td className="py-4 text-right font-mono">{pos.amount0.toFixed(pos.amount0 > 1 ? 4 : 8)}</td>
                                                 <td className="py-4 text-right font-mono">{pos.amount1.toFixed(pos.amount1 > 1 ? 2 : 6)}</td>
@@ -744,15 +775,37 @@ export default function PairDetailPage({ params }: { params: Promise<{ id: strin
     );
 }
 
-function MetricBox({ label, value, subvalue, highlight, isApy }: { label: string; value: string; subvalue?: string; highlight?: boolean; isApy?: boolean }) {
+function MetricBox({ label, value, subvalue, highlight, isApy, loading, onRefresh }: { label: string; value: string; subvalue?: string; highlight?: boolean; isApy?: boolean; loading?: boolean; onRefresh?: () => void }) {
+    const showSyncing = loading && value !== '—' && value !== '$0.00';
+    const [spinning, setSpinning] = React.useState(false);
+
+    const handleClick = async () => {
+        if (!onRefresh || spinning) return;
+        setSpinning(true);
+        try { onRefresh(); } finally { setTimeout(() => setSpinning(false), 2000); }
+    };
+
     return (
         <div className={`bg-white border border-cream-dark p-5 rounded-[20px] shadow-sm flex flex-col justify-between hover:shadow-md transition-all group ${highlight ? 'bg-cream/5 border-primary/10' : ''}`}>
-            <span className="text-[8px] font-bold text-primary/30 uppercase tracking-widest leading-none mb-4 group-hover:text-primary transition-colors">{label}</span>
+            <div className="flex items-center justify-between mb-4">
+                <span className="text-[8px] font-bold text-primary/30 uppercase tracking-widest leading-none group-hover:text-primary transition-colors">{label}</span>
+                {showSyncing ? (
+                    <span className="text-[7px] font-bold uppercase tracking-widest text-amber-500 animate-pulse">Syncing</span>
+                ) : onRefresh ? (
+                    <button onClick={handleClick} className="text-primary/15 hover:text-primary/50 transition-colors" title="Refresh">
+                        <RefreshCw size={10} className={spinning ? 'animate-spin' : ''} />
+                    </button>
+                ) : null}
+            </div>
             <div>
-                <span className={`text-base font-black tracking-tighter leading-tight block ${highlight ? 'text-primary' : 'text-primary/70 group-hover:text-primary'}`}>
-                    {value}
-                </span>
-                {subvalue && (
+                {loading && (value === '—' || value === '$0.00' || value === '0') ? (
+                    <div className="h-5 w-20 bg-cream-dark/30 rounded animate-pulse" />
+                ) : (
+                    <span className={`text-base font-black tracking-tighter leading-tight block ${highlight ? 'text-primary' : 'text-primary/70 group-hover:text-primary'}`}>
+                        {value}
+                    </span>
+                )}
+                {subvalue && !loading && (
                     <p className={`text-[8px] font-bold uppercase mt-1 ${isApy ? 'text-primary/10' : 'text-primary/30'}`}>
                         {subvalue}
                     </p>
@@ -793,13 +846,18 @@ function timeAgo(isoStr: string | null): string {
     catch { return isoStr; }
 }
 
-function abbreviateNumber(n: bigint): string {
-    const num = Number(n);
-    if (num >= 1e18) return `${(num / 1e18).toFixed(1)}E`;
-    if (num >= 1e15) return `${(num / 1e15).toFixed(1)}P`;
-    if (num >= 1e12) return `${(num / 1e12).toFixed(1)}T`;
-    if (num >= 1e9) return `${(num / 1e9).toFixed(1)}B`;
-    if (num >= 1e6) return `${(num / 1e6).toFixed(1)}M`;
-    if (num >= 1e3) return `${(num / 1e3).toFixed(1)}K`;
-    return num.toString();
+function isFullRange(tickLower: number, tickUpper: number): boolean {
+    // Full-range ticks are typically at or near the min/max tick bounds
+    return tickLower <= -887200 || tickUpper >= 887200;
 }
+
+function formatPrice(price: number): string {
+    if (price === 0) return '0';
+    if (price >= 1_000_000) return `${(price / 1_000_000).toFixed(1)}M`;
+    if (price >= 1000) return price.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    if (price >= 1) return price.toFixed(4);
+    if (price >= 0.001) return price.toFixed(6);
+    if (price >= 0.000001) return price.toFixed(9);
+    return price.toFixed(12);
+}
+

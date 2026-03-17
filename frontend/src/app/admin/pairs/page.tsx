@@ -8,7 +8,8 @@ import {
     LayoutGrid,
     List,
     ChevronRight,
-    ArrowRight
+    ArrowRight,
+    Loader2
 } from 'lucide-react';
 import {
     useJobs,
@@ -22,10 +23,11 @@ import { useRouter } from 'next/navigation';
 
 export default function PairsPage() {
     const { data: jobs, isLoading } = useJobs();
-    const { data: vaultsSummary } = useVaultsSummary();
+    const { data: vaultsSummary, isLoading: vaultsLoading, isFetching: vaultsFetching } = useVaultsSummary();
     const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+    const vaultsReady = !!vaultsSummary;
 
-    const displayJobs = jobs || [];
+    const displayJobs = (jobs || []).filter(j => j.is_active);
 
     // Index vault data by job_id for quick lookup
     const vaultByJobId = useMemo(() => {
@@ -83,7 +85,7 @@ export default function PairsPage() {
                         {/* Mobile: Always Card View */}
                         <div className="md:hidden grid grid-cols-1 gap-4">
                             {displayJobs.map((job) => (
-                                <PairCard key={job.job_id} job={job as Job} vault={vaultByJobId[job.job_id]} />
+                                <PairCard key={job.job_id} job={job as Job} vault={vaultByJobId[job.job_id]} vaultsLoading={vaultsLoading} />
                             ))}
                         </div>
 
@@ -110,7 +112,7 @@ export default function PairsPage() {
                                             </thead>
                                             <tbody className="text-xs">
                                                 {displayJobs.map((job, i) => (
-                                                    <PairRow key={job.job_id} job={job as Job} index={i + 1} vault={vaultByJobId[job.job_id]} />
+                                                    <PairRow key={job.job_id} job={job as Job} index={i + 1} vault={vaultByJobId[job.job_id]} vaultsLoading={vaultsLoading} vaultsFetching={vaultsFetching} />
                                                 ))}
                                             </tbody>
                                         </table>
@@ -119,7 +121,7 @@ export default function PairsPage() {
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
                                     {displayJobs.map((job) => (
-                                        <PairCard key={job.job_id} job={job as Job} vault={vaultByJobId[job.job_id]} />
+                                        <PairCard key={job.job_id} job={job as Job} vault={vaultByJobId[job.job_id]} vaultsLoading={vaultsLoading} />
                                     ))}
                                 </div>
                             )}
@@ -131,7 +133,7 @@ export default function PairsPage() {
     );
 }
 
-function PairRow({ job, index, vault }: { job: Job; index: number; vault?: any }) {
+function PairRow({ job, index, vault, vaultsLoading, vaultsFetching }: { job: Job; index: number; vault?: any; vaultsLoading: boolean; vaultsFetching: boolean }) {
     const { data: activity } = useJobActivity(job.job_id);
     const router = useRouter();
 
@@ -142,6 +144,8 @@ function PairRow({ job, index, vault }: { job: Job; index: number; vault?: any }
     const idle = vault?.idle_value_usd || 0;
     const t0 = vault?.token0;
     const t1 = vault?.token1;
+    const showLoader = vaultsLoading && !vault;
+    const syncing = vaultsFetching && !!vault;
 
     return (
         <tr
@@ -152,17 +156,26 @@ function PairRow({ job, index, vault }: { job: Job; index: number; vault?: any }
             <td className="py-5 font-black">
                 <Link href={`/admin/pairs/${job.job_id}`} className="hover:underline hover:text-blue-600 transition-all"
                     onClick={(e) => e.stopPropagation()}>
-                    {job.metadata?.pair_name || job.target}
+                    {vault?.token0?.symbol && vault?.token1?.symbol
+                        ? `${vault.token0.symbol}/${vault.token1.symbol}`
+                        : job.job_id.replace(/[-_]/g, '/').toUpperCase()}
                 </Link>
+                {syncing && <Loader2 size={10} className="inline ml-1.5 animate-spin text-primary/30" />}
             </td>
-            <td className="py-5 font-black text-primary">{tvl > 0 ? `$${tvl.toFixed(2)}` : '$0'}</td>
-            <td className="py-5 font-bold text-green-600">{deployed > 0 ? `$${deployed.toFixed(2)}` : '$0'}</td>
-            <td className="py-5 font-bold text-primary/40">{idle > 0 ? `$${idle.toFixed(2)}` : '$0'}</td>
-            <td className="py-5 font-bold text-primary/50 font-mono text-[10px]">
-                {t0 ? `${t0.balance.toFixed(t0.balance > 1 ? 4 : 8)} ${t0.symbol}` : '-'}
+            <td className="py-5 font-black text-primary">
+                {showLoader ? <span className="inline-block w-16 h-4 bg-cream-dark/40 rounded animate-pulse" /> : tvl > 0 ? `$${tvl.toFixed(2)}` : '$0'}
+            </td>
+            <td className="py-5 font-bold text-green-600">
+                {showLoader ? <span className="inline-block w-14 h-4 bg-cream-dark/40 rounded animate-pulse" /> : deployed > 0 ? `$${deployed.toFixed(2)}` : '$0'}
+            </td>
+            <td className="py-5 font-bold text-primary/40">
+                {showLoader ? <span className="inline-block w-14 h-4 bg-cream-dark/40 rounded animate-pulse" /> : idle > 0 ? `$${idle.toFixed(2)}` : '$0'}
             </td>
             <td className="py-5 font-bold text-primary/50 font-mono text-[10px]">
-                {t1 ? `${t1.balance.toFixed(t1.balance > 1 ? 2 : 6)} ${t1.symbol}` : '-'}
+                {showLoader ? <span className="inline-block w-20 h-4 bg-cream-dark/40 rounded animate-pulse" /> : t0 ? `${t0.balance.toFixed(t0.balance > 1 ? 4 : 8)} ${t0.symbol}` : '-'}
+            </td>
+            <td className="py-5 font-bold text-primary/50 font-mono text-[10px]">
+                {showLoader ? <span className="inline-block w-20 h-4 bg-cream-dark/40 rounded animate-pulse" /> : t1 ? `${t1.balance.toFixed(t1.balance > 1 ? 2 : 6)} ${t1.symbol}` : '-'}
             </td>
             <td className="py-5 font-bold text-primary/60">{totalRounds}</td>
             <td className="py-5 font-bold text-primary/60">{totalMiners}</td>
@@ -182,7 +195,7 @@ function PairRow({ job, index, vault }: { job: Job; index: number; vault?: any }
     );
 }
 
-function PairCard({ job, vault }: { job: Job; vault?: any }) {
+function PairCard({ job, vault, vaultsLoading }: { job: Job; vault?: any; vaultsLoading: boolean }) {
     const { data: activity } = useJobActivity(job.job_id);
 
     const tvl = vault?.total_value_usd || 0;
@@ -191,6 +204,7 @@ function PairCard({ job, vault }: { job: Job; vault?: any }) {
     const totalMiners = activity?.miner_activity?.total_miners || 0;
     const t0 = vault?.token0;
     const t1 = vault?.token1;
+    const showLoader = vaultsLoading && !vault;
 
     return (
         <Link
@@ -199,39 +213,58 @@ function PairCard({ job, vault }: { job: Job; vault?: any }) {
         >
             <div className="flex justify-between items-start mb-6">
                 <div>
-                    <h3 className="text-lg font-black text-primary mb-1">{job.metadata?.pair_name || job.target}</h3>
+                    <h3 className="text-lg font-black text-primary mb-1">
+                        {vault?.token0?.symbol && vault?.token1?.symbol
+                            ? `${vault.token0.symbol}/${vault.token1.symbol}`
+                            : job.job_id.replace(/[-_]/g, '/').toUpperCase()}
+                    </h3>
                     <p className="text-[10px] font-black text-primary/20 uppercase tracking-widest">
                         {job.is_active ? 'Active' : 'Inactive'} · {totalRounds} rounds · {totalMiners} miners
                     </p>
                 </div>
                 <div className="bg-primary/5 p-2 rounded-xl">
-                    <Terminal size={16} className="text-primary/40" />
+                    {showLoader ? <Loader2 size={16} className="text-primary/40 animate-spin" /> : <Terminal size={16} className="text-primary/40" />}
                 </div>
             </div>
 
             <div className="grid grid-cols-2 gap-6 mb-8">
                 <div>
                     <p className="text-[9px] font-black text-primary/20 uppercase tracking-widest mb-1">TVL</p>
-                    <p className="text-lg font-black text-primary">{tvl > 0 ? `$${tvl.toFixed(2)}` : '$0'}</p>
+                    {showLoader
+                        ? <div className="h-7 w-24 bg-cream-dark/40 rounded animate-pulse" />
+                        : <p className="text-lg font-black text-primary">{tvl > 0 ? `$${tvl.toFixed(2)}` : '$0'}</p>
+                    }
                 </div>
                 <div>
                     <p className="text-[9px] font-black text-primary/20 uppercase tracking-widest mb-1">In Pool</p>
-                    <p className="text-lg font-black text-green-600">{deployed > 0 ? `$${deployed.toFixed(2)}` : '$0'}</p>
+                    {showLoader
+                        ? <div className="h-7 w-24 bg-cream-dark/40 rounded animate-pulse" />
+                        : <p className="text-lg font-black text-green-600">{deployed > 0 ? `$${deployed.toFixed(2)}` : '$0'}</p>
+                    }
                 </div>
             </div>
 
             <div className="space-y-3 pt-6 border-t border-cream-dark/50">
-                {t0 && (
-                    <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">{t0.symbol}</span>
-                        <span className="text-xs font-black text-primary">{t0.balance.toFixed(t0.balance > 1 ? 4 : 8)}</span>
-                    </div>
-                )}
-                {t1 && (
-                    <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">{t1.symbol}</span>
-                        <span className="text-xs font-black text-primary">{t1.balance.toFixed(t1.balance > 1 ? 2 : 6)}</span>
-                    </div>
+                {showLoader ? (
+                    <>
+                        <div className="h-4 w-full bg-cream-dark/40 rounded animate-pulse" />
+                        <div className="h-4 w-full bg-cream-dark/40 rounded animate-pulse" />
+                    </>
+                ) : (
+                    <>
+                        {t0 && (
+                            <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">{t0.symbol}</span>
+                                <span className="text-xs font-black text-primary">{t0.balance.toFixed(t0.balance > 1 ? 4 : 8)}</span>
+                            </div>
+                        )}
+                        {t1 && (
+                            <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">{t1.symbol}</span>
+                                <span className="text-xs font-black text-primary">{t1.balance.toFixed(t1.balance > 1 ? 2 : 6)}</span>
+                            </div>
+                        )}
+                    </>
                 )}
                 <div className="flex justify-between items-center">
                     <span className="text-[10px] font-bold text-primary/40 uppercase tracking-tight">Rounds</span>

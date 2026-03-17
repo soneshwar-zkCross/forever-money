@@ -16,12 +16,11 @@ import {
     useSubnetTVL,
     useSubnetRevenue,
     useTopEarners,
-    useJobTVL,
-    useJobRevenue,
-    useJobAPY,
+    useVaultsSummary,
     Job
 } from '@/lib/api';
-import { formatUsd, formatFeeRate } from '@/lib/format';
+import type { VaultSummaryEntry } from '@/lib/api';
+import { formatFeeRate } from '@/lib/format';
 import { useSubnetMetricsHistory } from '@/lib/metrics-hooks';
 import PerformanceChart from '@/components/charts/PerformanceChart';
 import EarningsChart from '@/components/charts/EarningsChart';
@@ -41,6 +40,21 @@ export default function DashboardPage() {
     const { data: subnetTVL } = useSubnetTVL();
     const { data: subnetRevenue } = useSubnetRevenue(30);
     const { data: topEarners } = useTopEarners(5);
+    const { data: vaultsSummary } = useVaultsSummary();
+
+    // Index vault on-chain data by job_id for quick lookup
+    const vaultByJobId = useMemo(() => {
+        const map: Record<string, VaultSummaryEntry> = {};
+        for (const v of vaultsSummary?.vaults || []) {
+            map[v.job_id] = v;
+        }
+        return map;
+    }, [vaultsSummary]);
+
+    // Use on-chain TVL if available (metrics DB may be empty)
+    const totalTVL = (vaultsSummary?.total_tvl_usd || 0) > 0
+        ? vaultsSummary!.total_tvl_usd
+        : (subnetTVL?.total_tvl_usd || 0);
 
     const [timeframe, setTimeframe] = useState('30D');
 
@@ -114,8 +128,8 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                     <MetricCard
                         label="TVL (USD)"
-                        value={`$${(subnetTVL?.total_tvl_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-                        change={`${subnetTVL?.vault_count || 0} vaults`}
+                        value={`$${totalTVL.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+                        change={`${vaultsSummary?.vaults?.length || subnetTVL?.vault_count || 0} vaults`}
                         trend="up"
                     />
                     <MetricCard
@@ -222,8 +236,8 @@ export default function DashboardPage() {
                     <Panel title="Top Pairs by Revenue" href="/admin/pairs">
                         {/* Mobile Card View */}
                         <div className="md:hidden space-y-4">
-                            {jobs?.slice(0, 5).map((job, i) => (
-                                <DashboardPairCard key={job.job_id} job={job} index={i + 1} />
+                            {jobs?.filter(j => j.is_active).map((job, i) => (
+                                <DashboardPairCard key={job.job_id} job={job} index={i + 1} vault={vaultByJobId[job.job_id]} />
                             ))}
                             {!jobs && (
                                 <div className="text-center py-10 text-primary/20 text-xs font-black uppercase tracking-widest animate-pulse">Loading pairs...</div>
@@ -238,16 +252,16 @@ export default function DashboardPage() {
                                         <th className="pb-4">#</th>
                                         <th className="pb-4">Pair</th>
                                         <th className="pb-4">TVL</th>
-                                        <th className="pb-4">Fees Collected</th>
-                                        <th className="pb-4">USD APY</th>
+                                        <th className="pb-4">Deployed</th>
+                                        <th className="pb-4">Idle</th>
                                         <th className="pb-4">Status</th>
                                         <th className="pb-4">Fee Rate</th>
                                         <th className="pb-4"></th>
                                     </tr>
                                 </thead>
                                 <tbody className="text-xs">
-                                    {jobs?.slice(0, 5).map((job, i) => (
-                                        <DashboardPairRow key={job.job_id} job={job} index={i + 1} />
+                                    {jobs?.filter(j => j.is_active).map((job, i) => (
+                                        <DashboardPairRow key={job.job_id} job={job} index={i + 1} vault={vaultByJobId[job.job_id]} />
                                     ))}
                                 </tbody>
                             </table>
@@ -345,12 +359,21 @@ export default function DashboardPage() {
     );
 }
 
-// Dashboard Pair Row - fetches per-job metrics
-function DashboardPairRow({ job, index }: { job: Job, index: number }) {
-    const { data: tvl } = useJobTVL(job.job_id);
-    const { data: revenue } = useJobRevenue(job.job_id, 30);
-    const { data: apy } = useJobAPY(job.job_id, 30);
+function pairDisplayName(job: Job, vault?: VaultSummaryEntry): string {
+    // Use token symbols from on-chain data if available
+    if (vault?.token0?.symbol && vault?.token1?.symbol) {
+        return `${vault.token0.symbol}/${vault.token1.symbol}`;
+    }
+    // Fall back to job_id formatted as pair name
+    return job.job_id.replace(/[-_]/g, '/').toUpperCase();
+}
+
+// Dashboard Pair Row - uses on-chain vault data
+function DashboardPairRow({ job, index, vault }: { job: Job, index: number, vault?: VaultSummaryEntry }) {
     const router = useRouter();
+    const tvl = vault?.total_value_usd || 0;
+    const deployed = vault?.deployed_value_usd || 0;
+    const idle = vault?.idle_value_usd || 0;
 
     return (
         <tr className="group hover:bg-cream/30 transition-colors border-b border-cream-dark/30 last:border-0 cursor-pointer"
@@ -358,12 +381,12 @@ function DashboardPairRow({ job, index }: { job: Job, index: number }) {
             <td className="py-5 font-black text-primary/20">{index}</td>
             <td className="py-5 font-black">
                 <Link href={`/admin/pairs/${job.job_id}`} className="hover:underline hover:text-blue-600 transition-all font-black" onClick={(e) => e.stopPropagation()}>
-                    {job.metadata?.pair_name || job.pair_address.slice(0, 10) + '...'}
+                    {pairDisplayName(job, vault)}
                 </Link>
             </td>
-            <td className="py-5 font-bold text-primary/60">{formatUsd(tvl?.tvl_usd)}</td>
-            <td className="py-5 font-bold text-primary/60">${(revenue?.revenue_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-            <td className="py-5 font-black text-primary">{(apy?.apy_percent || 0).toFixed(1)}%</td>
+            <td className="py-5 font-black text-primary">{tvl > 0 ? `$${tvl.toFixed(2)}` : '$0'}</td>
+            <td className="py-5 font-bold text-green-600">{deployed > 0 ? `$${deployed.toFixed(2)}` : '$0'}</td>
+            <td className="py-5 font-bold text-primary/40">{idle > 0 ? `$${idle.toFixed(2)}` : '$0'}</td>
             <td className="py-5">
                 <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest ${job.is_active ? 'bg-green-500 text-white shadow-sm shadow-green-200' : 'bg-red-500 text-white shadow-sm shadow-red-200'}`}>
                     {job.is_active ? 'Active' : 'Inactive'}
@@ -378,11 +401,11 @@ function DashboardPairRow({ job, index }: { job: Job, index: number }) {
 }
 
 // Dashboard Pair Card (mobile)
-function DashboardPairCard({ job, index }: { job: Job, index: number }) {
-    const { data: tvl } = useJobTVL(job.job_id);
-    const { data: revenue } = useJobRevenue(job.job_id, 30);
-    const { data: apy } = useJobAPY(job.job_id, 30);
+function DashboardPairCard({ job, index, vault }: { job: Job, index: number, vault?: VaultSummaryEntry }) {
     const router = useRouter();
+    const tvl = vault?.total_value_usd || 0;
+    const deployed = vault?.deployed_value_usd || 0;
+    const idle = vault?.idle_value_usd || 0;
 
     return (
         <div
@@ -397,7 +420,7 @@ function DashboardPairCard({ job, index }: { job: Job, index: number }) {
                         className="text-sm font-black text-primary hover:underline hover:text-blue-600 truncate block"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {job.metadata?.pair_name || job.pair_address.slice(0, 10) + '...'}
+                        {pairDisplayName(job, vault)}
                     </Link>
                 </div>
                 <div className="text-right">
@@ -409,18 +432,18 @@ function DashboardPairCard({ job, index }: { job: Job, index: number }) {
             <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                     <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">TVL</div>
-                    <div className="text-xs font-black text-primary">{formatUsd(tvl?.tvl_usd)}</div>
+                    <div className="text-xs font-black text-primary">{tvl > 0 ? `$${tvl.toFixed(2)}` : '$0'}</div>
                 </div>
                 <div>
-                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Fees</div>
-                    <div className="text-xs font-black text-blue-600">${(revenue?.revenue_usd || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">In Pool</div>
+                    <div className="text-xs font-black text-green-600">{deployed > 0 ? `$${deployed.toFixed(2)}` : '$0'}</div>
                 </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4 border-t border-dashed border-cream-dark/50 pt-4">
                 <div>
-                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">USD APY</div>
-                    <div className="text-xs font-black text-primary">{(apy?.apy_percent || 0).toFixed(1)}%</div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Idle</div>
+                    <div className="text-xs font-black text-primary/50">{idle > 0 ? `$${idle.toFixed(2)}` : '$0'}</div>
                 </div>
                 <div>
                     <div className="text-[9px] font-black uppercase tracking-widest text-primary/30 mb-1">Status</div>

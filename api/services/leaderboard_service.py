@@ -33,13 +33,13 @@ class LeaderboardService:
         if eligible_only:
             query = query.filter(is_eligible_for_live=True)
         
-        # Sorting
+        # Sorting — secondary sort by total rounds then last_active to break ties
         if sort_by == "evaluation":
-            query = query.order_by("-evaluation_score")
+            query = query.order_by("-evaluation_score", "-total_evaluations", "-last_active")
         elif sort_by == "live":
-            query = query.order_by("-live_score")
+            query = query.order_by("-live_score", "-total_live_rounds", "-last_active")
         else:  # combined (default)
-            query = query.order_by("-combined_score")
+            query = query.order_by("-combined_score", "-total_evaluations", "-total_live_rounds", "-last_active")
         
         # Get total count
         total_count = await query.count()
