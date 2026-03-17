@@ -55,12 +55,13 @@ router = APIRouter()
 
 @router.post("/refresh/{job_id}")
 async def refresh_vault_data(job_id: str):
-    """Expire cached on-chain data for a job and re-fetch fresh.
-    Keeps stale data as fallback in case the fresh fetch fails."""
-    _cache_expire(f"pool-state:{job_id}")
-    _cache_expire(f"vault-state:{job_id}")
-    _cache_expire("vaults-summary")
-    # Fetch fresh data now (will cache if successful, fall back to stale if not)
+    """Force-refresh on-chain data for a job.
+    Fully clears cache so fresh RPC data is fetched — no stale fallback."""
+    # Fully delete (not just expire) so get_vault_state can't return stale
+    _cache.pop(f"pool-state:{job_id}", None)
+    _cache.pop(f"vault-state:{job_id}", None)
+    _cache.pop("vaults-summary", None)
+    # Fetch fresh data now
     pool_result = await get_pool_state(job_id)
     vault_result = await get_vault_state(job_id)
     return {

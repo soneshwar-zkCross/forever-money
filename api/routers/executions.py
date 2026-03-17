@@ -45,7 +45,6 @@ async def _resolve_pending_tx(tx_hash: str, chain_id: int) -> tuple[str, Optiona
             status = "success" if receipt.get("status") == 1 else "failed"
             block_number = receipt.get("blockNumber")
             gas_used = receipt.get("gasUsed")
-            # Cache it so we never hit RPC for this tx again
             try:
                 await TxStatusCache.create(
                     tx_hash=tx_hash,
@@ -56,8 +55,28 @@ async def _resolve_pending_tx(tx_hash: str, chain_id: int) -> tuple[str, Optiona
             except Exception:
                 pass  # duplicate key is fine
             return status, block_number
+        else:
+            # Receipt is None — tx might be pruned from node but was definitely
+            # submitted (we have a hash). Try getTransaction to check if it exists.
+            try:
+                tx = await w3.web3.eth.get_transaction(tx_hash)
+                if tx is not None:
+                    # Transaction exists but no receipt — assume success
+                    # (on Base, txs confirm in ~2s; if it's in the node it succeeded)
+                    logger.info(f"Tx {tx_hash}: receipt=None but tx exists, marking success")
+                    try:
+                        await TxStatusCache.create(
+                            tx_hash=tx_hash, tx_status="success",
+                            block_number=tx.get("blockNumber"), gas_used=None,
+                        )
+                    except Exception:
+                        pass
+                    return "success", tx.get("blockNumber")
+            except Exception:
+                pass
+            logger.warning(f"Tx {tx_hash}: neither receipt nor tx found on chain")
     except Exception as e:
-        logger.debug(f"RPC check failed for {tx_hash}: {e}")
+        logger.warning(f"RPC check failed for {tx_hash}: {e}")
 
     return "pending", None
 
@@ -108,10 +127,26 @@ async def _resolve_pending_txs_batch(
                         except Exception:
                             pass
                         results[tx_hash] = (status, block_number)
+                    else:
+                        # No receipt — try getTransaction as fallback
+                        try:
+                            tx = await w3.web3.eth.get_transaction(tx_hash)
+                            if tx is not None:
+                                logger.info(f"Batch: tx {tx_hash} receipt=None but tx exists, marking success")
+                                try:
+                                    await TxStatusCache.create(
+                                        tx_hash=tx_hash, tx_status="success",
+                                        block_number=tx.get("blockNumber"), gas_used=None,
+                                    )
+                                except Exception:
+                                    pass
+                                results[tx_hash] = ("success", tx.get("blockNumber"))
+                        except Exception:
+                            pass
                 except Exception as e:
-                    logger.debug(f"RPC check failed for {tx_hash}: {e}")
+                    logger.warning(f"RPC check failed for {tx_hash}: {e}")
         except Exception as e:
-            logger.debug(f"Web3 init failed: {e}")
+            logger.warning(f"Web3 init failed for chain_id={chain_id}: {e}")
 
     return results
 
